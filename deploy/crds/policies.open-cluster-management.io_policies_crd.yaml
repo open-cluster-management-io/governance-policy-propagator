@@ -1,0 +1,94 @@
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: policies.policies.open-cluster-management.io
+spec:
+  group: policies.open-cluster-management.io
+  names:
+    kind: Policy
+    listKind: PolicyList
+    plural: policies
+    singular: policy
+  scope: Namespaced
+  subresources:
+    status: {}
+  validation:
+    openAPIV3Schema:
+      description: Policy is the Schema for the policies API
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: PolicySpec defines the desired state of Policy
+          properties:
+            disabled:
+              type: boolean
+            policy-templates:
+              items:
+                description: PolicyTemplate template for custom security policy
+                properties:
+                  objectDefinition:
+                    type: object
+                  status:
+                    description: Status shows the individual status of each template
+                      within a policy
+                    properties:
+                      Compliant:
+                        description: ComplianceState shows the state of enforcement
+                        type: string
+                      conditions:
+                        items:
+                          description: Condition is the base struct for representing
+                            resource conditions
+                          properties:
+                            lastTransitionTime:
+                              description: The last time the condition transitioned
+                                from one status to another.
+                              format: date-time
+                              type: string
+                            message:
+                              description: A human readable message indicating details
+                                about the transition.
+                              type: string
+                            reason:
+                              description: The reason for the condition's last transition.
+                              type: string
+                            status:
+                              description: Status of the condition, one of True, False,
+                                Unknown.
+                              type: string
+                            type:
+                              description: Type of condition, e.g Complete or Failed.
+                              type: string
+                          required:
+                          - type
+                          type: object
+                        type: array
+                    type: object
+                type: object
+              type: array
+            remediationAction:
+              description: RemediationAction describes weather to enforce or inform
+              type: string
+          required:
+          - disabled
+          type: object
+        status:
+          description: PolicyStatus defines the observed state of Policy
+          type: object
+      type: object
+  version: v1
+  versions:
+  - name: v1
+    served: true
+    storage: true
