@@ -6,9 +6,6 @@ import (
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
-// Kind Policy
-const Kind = "Policy"
-
 // RemediationAction describes weather to enforce or inform
 type RemediationAction string
 

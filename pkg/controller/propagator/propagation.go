@@ -2,10 +2,10 @@ package propagator
 
 import (
 	"context"
-	"strings"
 
 	appsv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/apps/v1"
 	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policies/v1"
+	"github.com/open-cluster-management/governance-policy-propagator/pkg/controller/common"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,6 +19,24 @@ func (r *ReconcilePolicy) handleRootPolicy(instance *policiesv1.Policy) error {
 	if instance.Spec.Disabled {
 		// do nothing, clean up replicated policy
 		// deleteReplicatedPolicy
+		replicatedPlcList := &policiesv1.PolicyList{}
+		err := r.client.List(context.TODO(), replicatedPlcList, client.MatchingLabels(common.LabelsForRootPolicy(instance)))
+		if err != nil {
+			// there was an error, requeue
+			return err
+		}
+		for _, plc := range replicatedPlcList.Items {
+			err = r.client.Delete(context.TODO(), &plc)
+			if err != nil {
+				return err
+			}
+		}
+		// clear status
+		instance.Status = policiesv1.PolicyStatus{}
+		err = r.client.Status().Update(context.TODO(), instance)
+		if err != nil {
+			return err
+		}
 		return nil
 	}
 	// 1. get binding
@@ -57,12 +75,12 @@ func (r *ReconcilePolicy) handleRootPolicy(instance *policiesv1.Policy) error {
 				allDecisions = append(allDecisions, decision)
 				// retrieve replicated policy in cluster namespace
 				replicatedPlc := &policiesv1.Policy{}
-				err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: decision.ClusterNamespace, Name: instance.GetNamespace() + "." + instance.GetName()}, replicatedPlc)
+				err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: decision.ClusterNamespace, Name: common.FullNameForPolicy(instance)}, replicatedPlc)
 				if err != nil {
 					if errors.IsNotFound(err) {
 						// not replicated, need to create
 						replicatedPlc = instance.DeepCopy()
-						replicatedPlc.SetName(instance.GetNamespace() + "." + instance.GetName())
+						replicatedPlc.SetName(common.FullNameForPolicy(instance))
 						replicatedPlc.SetNamespace(decision.ClusterNamespace)
 						replicatedPlc.SetResourceVersion("")
 						ownerReferences := []metav1.OwnerReference{
@@ -75,14 +93,15 @@ func (r *ReconcilePolicy) handleRootPolicy(instance *policiesv1.Policy) error {
 						replicatedPlc.SetOwnerReferences(ownerReferences)
 						labels := replicatedPlc.GetLabels()
 						if labels == nil {
-							labels = map[string]string{"cluster-name": decision.ClusterName, "cluster-namespace": decision.ClusterNamespace}
-						} else {
-							labels["cluster-name"] = decision.ClusterName
-							labels["cluster-namespace"] = decision.ClusterNamespace
+							labels = map[string]string{}
 						}
+						labels["cluster-name"] = decision.ClusterName
+						labels["cluster-namespace"] = decision.ClusterNamespace
+						labels["root-policy"] = common.FullNameForPolicy(instance)
 						replicatedPlc.SetLabels(labels)
 						err = r.client.Create(context.TODO(), replicatedPlc)
 						if err != nil {
+							// failed to create replicated object, requeue
 							return err
 						}
 					} else {
@@ -106,6 +125,46 @@ func (r *ReconcilePolicy) handleRootPolicy(instance *policiesv1.Policy) error {
 		}
 	}
 
+	// loop through all replciated policy, update status.status
+	status := []*policiesv1.CompliancePerClusterStatus{}
+	replicatedPlcList := &policiesv1.PolicyList{}
+	err = r.client.List(context.TODO(), replicatedPlcList, client.MatchingLabels(common.LabelsForRootPolicy(instance)))
+	if err != nil {
+		// there was an error, requeue
+		return err
+	}
+	for _, rPlc := range replicatedPlcList.Items {
+		if status == nil {
+			status = []*policiesv1.CompliancePerClusterStatus{
+				{
+					ComplianceState:  rPlc.Status.ComplianceState,
+					ClusterName:      rPlc.GetLabels()["cluster-name"],
+					ClusterNamespace: rPlc.GetLabels()["cluster-namespace"],
+				},
+			}
+		} else {
+			// loop through status and update
+			found := false
+			for _, compliancePerClusterStatus := range status {
+				if compliancePerClusterStatus.ClusterName == rPlc.GetLabels()["cluster-name"] {
+					// found existing entry, check if it needs updating
+					found = true
+					compliancePerClusterStatus.ClusterNamespace = rPlc.GetLabels()["cluster-namespace"]
+					compliancePerClusterStatus.ComplianceState = rPlc.Status.ComplianceState
+					break
+				}
+			}
+			// not found, it's a CompliancePerClusterStatus, add it
+			if !found {
+				status = append(status, &policiesv1.CompliancePerClusterStatus{
+					ComplianceState:  rPlc.Status.ComplianceState,
+					ClusterName:      rPlc.GetLabels()["cluster-name"],
+					ClusterNamespace: rPlc.GetLabels()["cluster-namespace"],
+				})
+			}
+		}
+	}
+	instance.Status.Status = status
 	// looped through all pb, update status.placement
 	instance.Status.Placement = placement
 	err = r.client.Status().Update(context.TODO(), instance)
@@ -135,78 +194,18 @@ func (r *ReconcilePolicy) handleRootPolicy(instance *policiesv1.Policy) error {
 					APIVersion: policiesv1.SchemeGroupVersion.Group,
 				},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      instance.GetNamespace() + "." + instance.GetName(),
+					Name:      common.FullNameForPolicy(instance),
 					Namespace: cluster.ClusterNamespace,
 				},
 			})
 			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func (r *ReconcilePolicy) handleReplicatedPolicy(instance *policiesv1.Policy) error {
-	// flow -- triggered by status of replicated policy was updated
-	// 1. check if status has change
-	// 2. aggregate status in root policy
-	nameSplit := strings.Split(instance.GetName(), ".")
-	if len(nameSplit) != 2 {
-		// skipping, this replicated policy didn't follow %{namespace}.%{name} nameing convention
-		// doing nothing, skipping
-		return nil
-	}
-	rootPlsNs := nameSplit[0]
-	rootPlsName := nameSplit[1]
-	rootPls := &policiesv1.Policy{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: rootPlsNs, Name: rootPlsName}, rootPls)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// root policy doesn't exist
-			// impossible situation
-			// skipping
-			return nil
-		}
-		// other error
-		return err
-	}
-	// rootPls found, update status
-	status := rootPls.Status.Status
-	if status == nil {
-		status = []*policiesv1.CompliancePerClusterStatus{
-			&policiesv1.CompliancePerClusterStatus{
-				ComplianceState:  instance.Status.ComplianceState,
-				ClusterName:      instance.GetLabels()["cluster-name"],
-				ClusterNamespace: instance.GetLabels()["cluster-namespace"],
-			},
-		}
-	} else {
-		// loop through status and update
-		found := false
-		for _, compliancePerClusterStatus := range status {
-			if compliancePerClusterStatus.ClusterName == instance.GetLabels()["cluster-name"] && compliancePerClusterStatus.ClusterNamespace == instance.GetLabels()["cluster-namespace"] {
-				// found existing entry, check if it needs updating
-				found = true
-				if compliancePerClusterStatus.ComplianceState != instance.Status.ComplianceState {
-					compliancePerClusterStatus.ComplianceState = instance.Status.ComplianceState
+				if errors.IsNotFound(err) {
+					// replicated policy orphan has been deleted
+				} else {
+					return err
 				}
-				break
 			}
 		}
-		// not found, it's a CompliancePerClusterStatus, add it
-		if !found {
-			status = append(status, &policiesv1.CompliancePerClusterStatus{
-				ComplianceState:  instance.Status.ComplianceState,
-				ClusterName:      instance.GetLabels()["cluster-name"],
-				ClusterNamespace: instance.GetLabels()["cluster-namespace"],
-			})
-		}
-	}
-	rootPls.Status.Status = status
-	err = r.client.Status().Update(context.TODO(), rootPls)
-	if err != nil {
-		return err
 	}
 	return nil
 }

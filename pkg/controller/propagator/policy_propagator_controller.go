@@ -3,6 +3,7 @@ package propagator
 import (
 	"context"
 
+	appsv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/apps/v1"
 	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policies/v1"
 	"github.com/open-cluster-management/governance-policy-propagator/pkg/controller/common"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -44,7 +45,25 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to primary resource Policy
-	err = c.Watch(&source.Kind{Type: &policiesv1.Policy{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(
+		&source.Kind{Type: &policiesv1.Policy{}},
+		&handler.EnqueueRequestsFromMapFunc{ToRequests: &policyMapper{mgr.GetClient()}})
+	if err != nil {
+		return err
+	}
+
+	// Watch for changes to placementbinding
+	err = c.Watch(
+		&source.Kind{Type: &policiesv1.PlacementBinding{}},
+		&handler.EnqueueRequestsFromMapFunc{ToRequests: &placementBindingMapper{mgr.GetClient()}})
+	if err != nil {
+		return err
+	}
+
+	// Watch for changes to placementrule
+	err = c.Watch(
+		&source.Kind{Type: &appsv1.PlacementRule{}},
+		&handler.EnqueueRequestsFromMapFunc{ToRequests: &placementRuleMapper{mgr.GetClient()}})
 	if err != nil {
 		return err
 	}
@@ -101,6 +120,6 @@ func (r *ReconcilePolicy) Reconcile(request reconcile.Request) (reconcile.Result
 		return reconcile.Result{}, r.handleRootPolicy(instance)
 	}
 
-	reqLogger.Info("Hanlding replicated policy....")
-	return reconcile.Result{}, r.handleReplicatedPolicy(instance)
+	reqLogger.Info("Policy was in cluster namespace with doesn't appear to be a replicated policy as it has no ownerReferences, ignoring it...")
+	return reconcile.Result{}, nil
 }
