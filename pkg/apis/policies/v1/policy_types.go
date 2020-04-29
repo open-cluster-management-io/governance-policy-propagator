@@ -57,16 +57,30 @@ const (
 
 // PolicySpec defines the desired state of Policy
 type PolicySpec struct {
+	Disabled          bool              `json:"disabled"`
 	RemediationAction RemediationAction `json:"remediationAction,omitempty"` //enforce, inform
 	PolicyTemplates   []*PolicyTemplate `json:"policy-templates,omitempty"`
-	Disabled          bool              `json:"disabled"`
+}
+
+// Placement defines the placement results
+type Placement struct {
+	PlacementBinding string `json:"placementBinding,omitempty"`
+	PlacementRule    string `json:"placementRule,omitempty"`
+}
+
+// CompliancePerClusterStatus defines compliance per cluster status
+type CompliancePerClusterStatus struct {
+	ComplianceState  ComplianceState `json:"compliant,omitempty"`
+	ClusterName      string          `json:"clustername,omitempty"`
+	ClusterNamespace string          `json:"clusternamespace,omitempty"`
 }
 
 // PolicyStatus defines the observed state of Policy
 type PolicyStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
+	Placement []*Placement                  `json:"placement,omitempty"`
+	Status    []*CompliancePerClusterStatus `json:"status,omitempty"`
+	// +kubebuilder:validation:Enum=Compliant;NonCompliant
+	ComplianceState ComplianceState `json:"compliant,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
