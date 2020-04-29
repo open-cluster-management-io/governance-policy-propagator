@@ -3,5 +3,5 @@ kind: Policy
 metadata:
   name: example-policy
 spec:
-  # Add fields here
-  size: 3
+  remediationAction: inform
+  disabled: false

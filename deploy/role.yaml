@@ -70,6 +70,19 @@ rules:
   - policies.open-cluster-management.io
   resources:
   - '*'
+  - placementbindings
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps.open-cluster-management.io
+  resources:
+  - '*'
   verbs:
   - create
   - delete
