@@ -3,6 +3,7 @@ package common
 
 import (
 	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policies/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/cluster-registry/pkg/apis/clusterregistry/v1alpha1"
 )
 
@@ -25,6 +26,13 @@ func LabelsForRootPolicy(plc *policiesv1.Policy) map[string]string {
 // full qualified name: ${namespace}.${name}
 func FullNameForPolicy(plc *policiesv1.Policy) string {
 	return plc.GetNamespace() + "." + plc.GetName()
+}
+
+// CompareSpecAndAnnotation compares annotation and spec for given policies
+// true if matches, false if doesn't match
+func CompareSpecAndAnnotation(plc1 *policiesv1.Policy, plc2 *policiesv1.Policy) bool {
+	return equality.Semantic.DeepEqual(plc1.GetAnnotations(), plc2.GetAnnotations()) &&
+		equality.Semantic.DeepEqual(plc1.Spec, plc1.Spec)
 }
 
 // // GenerateLabelsForReplicatedPolicy generates labels needed for replicated policy

@@ -6,7 +6,6 @@ import (
 	appsv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/apps/v1"
 	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policies/v1"
 	"github.com/open-cluster-management/governance-policy-propagator/pkg/controller/common"
-	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -112,7 +111,7 @@ func (r *ReconcilePolicy) handleRootPolicy(instance *policiesv1.Policy) error {
 				}
 				// replicated policy already created, need to compare and patch
 				// compare annotation
-				if !equality.Semantic.DeepEqual(instance.GetAnnotations(), replicatedPlc.GetAnnotations()) || !equality.Semantic.DeepEqual(instance.Spec, replicatedPlc.Spec) {
+				if !common.CompareSpecAndAnnotation(instance, replicatedPlc) {
 					// update needed
 					replicatedPlc.SetAnnotations(instance.GetAnnotations())
 					replicatedPlc.Spec = instance.Spec

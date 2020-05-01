@@ -1,7 +1,6 @@
 package v1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -20,32 +19,10 @@ const (
 //PolicyTemplate template for custom security policy
 type PolicyTemplate struct {
 	ObjectDefinition runtime.RawExtension `json:"objectDefinition,omitempty"`
-	//Status shows the individual status of each template within a policy
-	Status TemplateStatus `json:"status,omitempty" protobuf:"bytes,12,rep,name=status"`
-}
-
-//TemplateStatus hold the status result
-type TemplateStatus struct {
-	ComplianceState ComplianceState `json:"Compliant,omitempty"` // Compliant, NonCompliant
-	Conditions      []Condition     `json:"conditions,omitempty"`
 }
 
 // ComplianceState shows the state of enforcement
 type ComplianceState string
-
-// Condition is the base struct for representing resource conditions
-type Condition struct {
-	// Type of condition, e.g Complete or Failed.
-	Type string `json:"type"`
-	// Status of the condition, one of True, False, Unknown.
-	Status corev1.ConditionStatus `json:"status,omitempty" protobuf:"bytes,12,rep,name=status"`
-	// The last time the condition transitioned from one status to another.
-	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty" protobuf:"bytes,3,opt,name=lastTransitionTime"`
-	// The reason for the condition's last transition.
-	Reason string `json:"reason,omitempty" protobuf:"bytes,4,opt,name=reason"`
-	// A human readable message indicating details about the transition.
-	Message string `json:"message,omitempty" protobuf:"bytes,5,opt,name=message"`
-}
 
 const (
 	// Compliant is an ComplianceState
@@ -62,10 +39,17 @@ type PolicySpec struct {
 	PolicyTemplates   []*PolicyTemplate `json:"policy-templates,omitempty"`
 }
 
+// PlacementDecision defines the decision made by controller
+type PlacementDecision struct {
+	ClusterName      string `json:"clusterName,omitempty"`
+	ClusterNamespace string `json:"clusterNamespace,omitempty"`
+}
+
 // Placement defines the placement results
 type Placement struct {
-	PlacementBinding string `json:"placementBinding,omitempty"`
-	PlacementRule    string `json:"placementRule,omitempty"`
+	PlacementBinding string              `json:"placementBinding,omitempty"`
+	PlacementRule    string              `json:"placementRule,omitempty"`
+	Decisions        []PlacementDecision `json:"decisions,omitempty"`
 }
 
 // CompliancePerClusterStatus defines compliance per cluster status
@@ -75,12 +59,27 @@ type CompliancePerClusterStatus struct {
 	ClusterNamespace string          `json:"clusternamespace,omitempty"`
 }
 
+// DetailsPerTemplate defines compliance details and history
+type DetailsPerTemplate struct {
+	TemplateMeta    metav1.ObjectMeta    `json:"templateMeta,omitempty"`
+	ComplianceState ComplianceState      `json:"compliant,omitempty"`
+	History         []*ComplianceHistory `json:"history,omitempty"`
+}
+
+// ComplianceHistory defines compliance details history
+type ComplianceHistory struct {
+	LastTimestamp metav1.Time `json:"lastTimestamp,omitempty" protobuf:"bytes,7,opt,name=lastTimestamp"`
+	Message       string      `json:"message,omitempty" protobuf:"bytes,4,opt,name=message"`
+}
+
 // PolicyStatus defines the observed state of Policy
 type PolicyStatus struct {
-	Placement []*Placement                  `json:"placement,omitempty"`
-	Status    []*CompliancePerClusterStatus `json:"status,omitempty"`
+	Placement []*Placement                  `json:"placement,omitempty"` // used by root policy
+	Status    []*CompliancePerClusterStatus `json:"status,omitempty"`    // used by root policy
+
 	// +kubebuilder:validation:Enum=Compliant;NonCompliant
-	ComplianceState ComplianceState `json:"compliant,omitempty"`
+	ComplianceState ComplianceState       `json:"compliant,omitempty"` // used by replicated policy
+	Details         []*DetailsPerTemplate `json:"details,omitempty"`   // used by replicated policy
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

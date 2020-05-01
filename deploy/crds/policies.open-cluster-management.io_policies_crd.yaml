@@ -39,42 +39,6 @@ spec:
                 properties:
                   objectDefinition:
                     type: object
-                  status:
-                    description: Status shows the individual status of each template
-                      within a policy
-                    properties:
-                      Compliant:
-                        description: ComplianceState shows the state of enforcement
-                        type: string
-                      conditions:
-                        items:
-                          description: Condition is the base struct for representing
-                            resource conditions
-                          properties:
-                            lastTransitionTime:
-                              description: The last time the condition transitioned
-                                from one status to another.
-                              format: date-time
-                              type: string
-                            message:
-                              description: A human readable message indicating details
-                                about the transition.
-                              type: string
-                            reason:
-                              description: The reason for the condition's last transition.
-                              type: string
-                            status:
-                              description: Status of the condition, one of True, False,
-                                Unknown.
-                              type: string
-                            type:
-                              description: Type of condition, e.g Complete or Failed.
-                              type: string
-                          required:
-                          - type
-                          type: object
-                        type: array
-                    type: object
                 type: object
               type: array
             remediationAction:
@@ -92,10 +56,43 @@ spec:
               - Compliant
               - NonCompliant
               type: string
+            details:
+              items:
+                description: DetailsPerTemplate defines compliance details and history
+                properties:
+                  compliant:
+                    description: ComplianceState shows the state of enforcement
+                    type: string
+                  history:
+                    items:
+                      description: ComplianceHistory defines compliance details history
+                      properties:
+                        lastTimestamp:
+                          format: date-time
+                          type: string
+                        message:
+                          type: string
+                      type: object
+                    type: array
+                  templateMeta:
+                    type: object
+                type: object
+              type: array
             placement:
               items:
                 description: Placement defines the placement results
                 properties:
+                  decisions:
+                    items:
+                      description: PlacementDecision defines the decision made by
+                        controller
+                      properties:
+                        clusterName:
+                          type: string
+                        clusterNamespace:
+                          type: string
+                      type: object
+                    type: array
                   placementBinding:
                     type: string
                   placementRule:
