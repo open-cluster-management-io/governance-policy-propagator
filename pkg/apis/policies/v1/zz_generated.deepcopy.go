@@ -47,13 +47,9 @@ func (in *DetailsPerTemplate) DeepCopyInto(out *DetailsPerTemplate) {
 	in.TemplateMeta.DeepCopyInto(&out.TemplateMeta)
 	if in.History != nil {
 		in, out := &in.History, &out.History
-		*out = make([]*ComplianceHistory, len(*in))
+		*out = make([]ComplianceHistory, len(*in))
 		for i := range *in {
-			if (*in)[i] != nil {
-				in, out := &(*in)[i], &(*out)[i]
-				*out = new(ComplianceHistory)
-				(*in).DeepCopyInto(*out)
-			}
+			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
 	return
