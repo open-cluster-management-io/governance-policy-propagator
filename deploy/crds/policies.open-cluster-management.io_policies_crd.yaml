@@ -8,6 +8,8 @@ spec:
     kind: Policy
     listKind: PolicyList
     plural: policies
+    shortNames:
+    - plc
     singular: policy
   scope: Namespaced
   subresources:

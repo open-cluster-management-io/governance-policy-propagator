@@ -55,7 +55,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to placementbinding
 	err = c.Watch(
 		&source.Kind{Type: &policiesv1.PlacementBinding{}},
-		&handler.EnqueueRequestsFromMapFunc{ToRequests: &placementBindingMapper{mgr.GetClient()}})
+		&handler.EnqueueRequestsFromMapFunc{ToRequests: &placementBindingMapper{mgr.GetClient()}}, pbPredicateFuncs)
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func (r *ReconcilePolicy) Reconcile(request reconcile.Request) (reconcile.Result
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			reqLogger.Info("Policy has been deleted, reconciling completed.")
+			reqLogger.Info("Policy not found, may have been deleted, reconciliation completed.")
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
@@ -111,12 +111,11 @@ func (r *ReconcilePolicy) Reconcile(request reconcile.Request) (reconcile.Result
 	clusterList := &clusterv1alpha1.ClusterList{}
 	err = r.client.List(context.TODO(), clusterList, &client.ListOptions{})
 	if err != nil {
-		reqLogger.Info("Failed to list cluster, going to retry...")
+		reqLogger.Error(err, "Failed to list cluster, going to retry...")
 		return reconcile.Result{}, err
 	}
 
 	if !common.IsInClusterNamespace(request.Namespace, clusterList.Items) {
-		reqLogger.Info("Hanlding root policy....")
 		return reconcile.Result{}, r.handleRootPolicy(instance)
 	}
 

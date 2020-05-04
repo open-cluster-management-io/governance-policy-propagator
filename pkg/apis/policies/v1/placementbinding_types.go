@@ -13,8 +13,8 @@ type Subject struct {
 
 // PlacementBindingSpec defines the desired state of PlacementBinding
 type PlacementBindingSpec struct {
-	PlacementRef Subject `json:"placementRef,omitempty"`
-	Subject      Subject `json:"subject,omitempty"`
+	PlacementRef Subject   `json:"placementRef,omitempty"`
+	Subjects     []Subject `json:"subjects,omitempty"`
 }
 
 // PlacementBindingStatus defines the observed state of PlacementBinding
@@ -29,6 +29,7 @@ type PlacementBindingStatus struct {
 // PlacementBinding is the Schema for the placementbindings API
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=placementbindings,scope=Namespaced
+// +kubebuilder:resource:path=placementbindings,shortName=pb
 type PlacementBinding struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

@@ -8,6 +8,8 @@ spec:
     kind: PlacementBinding
     listKind: PlacementBindingList
     plural: placementbindings
+    shortNames:
+    - pb
     singular: placementbinding
   scope: Namespaced
   subresources:
@@ -41,16 +43,18 @@ spec:
                 name:
                   type: string
               type: object
-            subject:
-              description: Subject reference
-              properties:
-                apiGroup:
-                  type: string
-                kind:
-                  type: string
-                name:
-                  type: string
-              type: object
+            subjects:
+              items:
+                description: Subject reference
+                properties:
+                  apiGroup:
+                    type: string
+                  kind:
+                    type: string
+                  name:
+                    type: string
+                type: object
+              type: array
           type: object
         status:
           description: PlacementBindingStatus defines the observed state of PlacementBinding

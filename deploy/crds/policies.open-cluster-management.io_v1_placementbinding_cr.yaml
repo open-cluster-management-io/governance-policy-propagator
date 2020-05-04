@@ -7,7 +7,7 @@ spec:
     apiGroup: apps.open-cluster-management.io
     kind: PlacementRule
     name: placement-policy-trustednode
-  subject:
-    apiGroup: policies.open-cluster-management.io
+  subjects:
+  - apiGroup: policies.open-cluster-management.io
     kind: Policy
     name: example-policy

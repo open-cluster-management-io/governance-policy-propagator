@@ -87,6 +87,7 @@ type PolicyStatus struct {
 // Policy is the Schema for the policies API
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=policies,scope=Namespaced
+// +kubebuilder:resource:path=policies,shortName=plc
 type Policy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

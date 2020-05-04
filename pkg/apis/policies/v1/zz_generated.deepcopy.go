@@ -91,7 +91,7 @@ func (in *PlacementBinding) DeepCopyInto(out *PlacementBinding) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
 	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
-	out.Spec = in.Spec
+	in.Spec.DeepCopyInto(&out.Spec)
 	out.Status = in.Status
 	return
 }
@@ -151,7 +151,11 @@ func (in *PlacementBindingList) DeepCopyObject() runtime.Object {
 func (in *PlacementBindingSpec) DeepCopyInto(out *PlacementBindingSpec) {
 	*out = *in
 	out.PlacementRef = in.PlacementRef
-	out.Subject = in.Subject
+	if in.Subjects != nil {
+		in, out := &in.Subjects, &out.Subjects
+		*out = make([]Subject, len(*in))
+		copy(*out, *in)
+	}
 	return
 }
 

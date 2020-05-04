@@ -17,7 +17,7 @@ type placementRuleMapper struct {
 
 func (mapper *placementRuleMapper) Map(obj handler.MapObject) []reconcile.Request {
 	object := obj.Meta
-	log.Info("Reconcile Request for PlacementRule %s in namespace %s", object.GetName(), object.GetNamespace())
+	// log.Info("Reconcile Request for PlacementRule %s in namespace %s", object.GetName(), object.GetNamespace())
 	// list pb
 	pbList := &policiesv1.PlacementBindingList{}
 	// find pb in the same namespace of placementrule
@@ -31,11 +31,13 @@ func (mapper *placementRuleMapper) Map(obj handler.MapObject) []reconcile.Reques
 		// found matching placement rule in pb
 		if pb.Spec.PlacementRef.APIGroup == appsv1.SchemeGroupVersion.Group && pb.Spec.PlacementRef.Kind == appsv1.Kind && pb.Spec.PlacementRef.Name == object.GetName() {
 			// check if it is for policy
-			if pb.Spec.Subject.APIGroup == policiesv1.SchemeGroupVersion.Group && pb.Spec.Subject.Kind == policiesv1.Kind {
-				if result == nil {
+			subjects := pb.Spec.Subjects
+			for _, subject := range subjects {
+				if subject.APIGroup == policiesv1.SchemeGroupVersion.Group && subject.Kind == policiesv1.Kind {
+					log.Info("Found reconciliation request from placmenet rule...", "Namespace", object.GetNamespace(), "Name", object.GetName(), "Policy-Name", subject.Name)
 					// generate reconcile request for policy referenced by pb
 					request := reconcile.Request{NamespacedName: types.NamespacedName{
-						Name:      pb.Spec.Subject.Name,
+						Name:      subject.Name,
 						Namespace: object.GetNamespace(),
 					}}
 					result = append(result, request)
