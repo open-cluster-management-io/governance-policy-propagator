@@ -16,15 +16,13 @@ spec:
       containers:
         - name: governance-policy-propagator
           # Replace this with the built image name
-          image: REPLACE_IMAGE
+          image: quay.io/open-cluster-management/governance-policy-propagator:latest
           command:
           - governance-policy-propagator
           imagePullPolicy: Always
           env:
             - name: WATCH_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
+              value: ""
             - name: POD_NAME
               valueFrom:
                 fieldRef:
