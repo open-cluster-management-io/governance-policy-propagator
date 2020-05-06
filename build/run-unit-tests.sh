@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 echo "UNIT TESTS GO HERE!"
 
 echo "Install Kubebuilder components for test framework usage!"

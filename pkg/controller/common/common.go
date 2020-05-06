@@ -1,4 +1,4 @@
-// Package common contains common definitions and shared utilities for the different controllers
+// Copyright (c) 2020 Red Hat, Inc.
 package common
 
 import (

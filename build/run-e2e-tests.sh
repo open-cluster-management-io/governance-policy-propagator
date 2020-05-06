@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 echo "E2E TESTS GO HERE!"
 

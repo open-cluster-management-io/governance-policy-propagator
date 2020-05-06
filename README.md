@@ -18,3 +18,9 @@ Every reconcile does following things:
 
 1. Create/update/delete replicated policy in cluster namespace based on pb/plr results
 2. Create/update/delete policy status to show aggregated cluster compliance results
+
+## Run
+```
+export WATCH_NAMESPACE=""
+operator-sdk run --local
+```

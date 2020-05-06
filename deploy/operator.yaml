@@ -13,6 +13,8 @@ spec:
         name: governance-policy-propagator
     spec:
       serviceAccountName: governance-policy-propagator
+      imagePullSecrets:
+        - name: multiclusterhub-operator-pull-secret
       containers:
         - name: governance-policy-propagator
           # Replace this with the built image name

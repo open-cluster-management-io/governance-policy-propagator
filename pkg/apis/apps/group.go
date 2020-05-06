@@ -1,3 +1,4 @@
+// Copyright (c) 2020 Red Hat, Inc.
 // Package apps contains apps API versions.
 //
 // This file ensures Go source parsers acknowledge the apps package

@@ -9,3 +9,4 @@ build-harness/*
 build-harness-extensions/*
 vendor
 vbh
+build

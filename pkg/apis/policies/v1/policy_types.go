@@ -1,3 +1,4 @@
+// Copyright (c) 2020 Red Hat, Inc.
 package v1
 
 import (
@@ -70,6 +71,7 @@ type DetailsPerTemplate struct {
 type ComplianceHistory struct {
 	LastTimestamp metav1.Time `json:"lastTimestamp,omitempty" protobuf:"bytes,7,opt,name=lastTimestamp"`
 	Message       string      `json:"message,omitempty" protobuf:"bytes,4,opt,name=message"`
+	EventName     string      `json:"eventName,omitempty"`
 }
 
 // PolicyStatus defines the observed state of Policy

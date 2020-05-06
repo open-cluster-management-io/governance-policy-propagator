@@ -1,3 +1,4 @@
+// Copyright (c) 2020 Red Hat, Inc.
 // Package policies contains policies API versions.
 //
 // This file ensures Go source parsers acknowledge the policies package

@@ -1,3 +1,4 @@
+// Copyright (c) 2020 Red Hat, Inc.
 // NOTE: Boilerplate only.  Ignore this file.
 
 // Package v1 contains API Schema definitions for the apps v1 API group

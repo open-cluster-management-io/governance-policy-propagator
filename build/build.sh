@@ -1,4 +1,6 @@
 #!/bin/bash
+set -e
+
 echo "BUILD GOES HERE!"
 
 echo "<repo>/<component>:<tag> : $1"
