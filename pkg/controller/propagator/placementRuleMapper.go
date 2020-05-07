@@ -30,9 +30,9 @@ func (mapper *placementRuleMapper) Map(obj handler.MapObject) []reconcile.Reques
 	// loop through pb to find if current placementrule is used for policy
 	for _, pb := range pbList.Items {
 		// found matching placement rule in pb
-		if pb.Spec.PlacementRef.APIGroup == appsv1.SchemeGroupVersion.Group && pb.Spec.PlacementRef.Kind == appsv1.Kind && pb.Spec.PlacementRef.Name == object.GetName() {
+		if pb.PlacementRef.APIGroup == appsv1.SchemeGroupVersion.Group && pb.PlacementRef.Kind == appsv1.Kind && pb.PlacementRef.Name == object.GetName() {
 			// check if it is for policy
-			subjects := pb.Spec.Subjects
+			subjects := pb.Subjects
 			for _, subject := range subjects {
 				if subject.APIGroup == policiesv1.SchemeGroupVersion.Group && subject.Kind == policiesv1.Kind {
 					log.Info("Found reconciliation request from placmenet rule...", "Namespace", object.GetNamespace(), "Name", object.GetName(), "Policy-Name", subject.Name)

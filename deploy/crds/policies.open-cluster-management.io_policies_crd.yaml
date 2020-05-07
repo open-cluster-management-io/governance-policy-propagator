@@ -69,6 +69,8 @@ spec:
                     items:
                       description: ComplianceHistory defines compliance details history
                       properties:
+                        eventName:
+                          type: string
                         lastTimestamp:
                           format: date-time
                           type: string

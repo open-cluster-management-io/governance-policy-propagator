@@ -12,12 +12,6 @@ type Subject struct {
 	Name     string `json:"name,omitempty"`
 }
 
-// PlacementBindingSpec defines the desired state of PlacementBinding
-type PlacementBindingSpec struct {
-	PlacementRef Subject   `json:"placementRef,omitempty"`
-	Subjects     []Subject `json:"subjects,omitempty"`
-}
-
 // PlacementBindingStatus defines the observed state of PlacementBinding
 type PlacementBindingStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
@@ -35,8 +29,9 @@ type PlacementBinding struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   PlacementBindingSpec   `json:"spec,omitempty"`
-	Status PlacementBindingStatus `json:"status,omitempty"`
+	PlacementRef Subject                `json:"placementRef,omitempty"`
+	Subjects     []Subject              `json:"subjects,omitempty"`
+	Status       PlacementBindingStatus `json:"status,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

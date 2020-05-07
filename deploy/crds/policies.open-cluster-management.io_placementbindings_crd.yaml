@@ -30,35 +30,31 @@ spec:
           type: string
         metadata:
           type: object
-        spec:
-          description: PlacementBindingSpec defines the desired state of PlacementBinding
+        placementRef:
+          description: Subject reference
           properties:
-            placementRef:
-              description: Subject reference
-              properties:
-                apiGroup:
-                  type: string
-                kind:
-                  type: string
-                name:
-                  type: string
-              type: object
-            subjects:
-              items:
-                description: Subject reference
-                properties:
-                  apiGroup:
-                    type: string
-                  kind:
-                    type: string
-                  name:
-                    type: string
-                type: object
-              type: array
+            apiGroup:
+              type: string
+            kind:
+              type: string
+            name:
+              type: string
           type: object
         status:
           description: PlacementBindingStatus defines the observed state of PlacementBinding
           type: object
+        subjects:
+          items:
+            description: Subject reference
+            properties:
+              apiGroup:
+                type: string
+              kind:
+                type: string
+              name:
+                type: string
+            type: object
+          type: array
       type: object
   version: v1
   versions:

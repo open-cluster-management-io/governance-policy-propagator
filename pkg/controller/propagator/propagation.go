@@ -56,13 +56,13 @@ func (r *ReconcilePolicy) handleRootPolicy(instance *policiesv1.Policy) error {
 	placement := []*policiesv1.Placement{}
 	allDecisions := []appsv1.PlacementDecision{}
 	for _, pb := range pbList.Items {
-		subjects := pb.Spec.Subjects
+		subjects := pb.Subjects
 		for _, subject := range subjects {
 			if subject.APIGroup == policiesv1.SchemeGroupVersion.Group && subject.Kind == policiesv1.Kind && subject.Name == instance.GetName() {
 				plr := &appsv1.PlacementRule{}
-				err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: instance.GetNamespace(), Name: pb.Spec.PlacementRef.Name}, plr)
+				err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: instance.GetNamespace(), Name: pb.PlacementRef.Name}, plr)
 				if err != nil && !errors.IsNotFound(err) {
-					reqLogger.Error(err, "Failed to get plr...", "Namespace", instance.GetNamespace(), "Name", pb.Spec.PlacementRef.Name)
+					reqLogger.Error(err, "Failed to get plr...", "Namespace", instance.GetNamespace(), "Name", pb.PlacementRef.Name)
 					return err
 				}
 				// plr found, add current plcmnt to placement

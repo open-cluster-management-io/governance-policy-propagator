@@ -2,12 +2,11 @@ apiVersion: policies.open-cluster-management.io/v1
 kind: PlacementBinding
 metadata:
   name: example-placementbinding
-spec:
-  placementRef:
-    apiGroup: apps.open-cluster-management.io
-    kind: PlacementRule
-    name: placement-policy-trustednode
-  subjects:
-  - apiGroup: policies.open-cluster-management.io
-    kind: Policy
-    name: example-policy
+placementRef:
+  apiGroup: apps.open-cluster-management.io
+  kind: PlacementRule
+  name: placement-policy-trustednode
+subjects:
+- apiGroup: policies.open-cluster-management.io
+  kind: Policy
+  name: example-policy

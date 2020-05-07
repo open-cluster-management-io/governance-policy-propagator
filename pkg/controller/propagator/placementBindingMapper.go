@@ -16,7 +16,7 @@ type placementBindingMapper struct {
 func (mapper *placementBindingMapper) Map(obj handler.MapObject) []reconcile.Request {
 	object := obj.Object.(*policiesv1.PlacementBinding)
 	var result []reconcile.Request
-	subjects := object.Spec.Subjects
+	subjects := object.Subjects
 	for _, subject := range subjects {
 		if subject.APIGroup == policiesv1.SchemeGroupVersion.Group && subject.Kind == policiesv1.Kind {
 			log.Info("Found reconciliation request from placmenet binding...", "Namespace", object.GetNamespace(), "Name", object.GetName(), "Policy-Name", subject.Name)
