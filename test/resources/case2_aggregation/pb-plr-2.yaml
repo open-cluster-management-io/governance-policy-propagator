@@ -1,0 +1,23 @@
+apiVersion: policies.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: case2-test-policy-pb2
+placementRef:
+  apiGroup: apps.open-cluster-management.io
+  kind: PlacementRule
+  name: case2-test-policy-plr2
+subjects:
+- apiGroup: policies.open-cluster-management.io
+  kind: Policy
+  name: case2-test-policy
+---
+apiVersion: apps.open-cluster-management.io/v1
+kind: PlacementRule
+metadata:
+  name: case2-test-policy-plr2
+spec:
+  clusterConditions:
+  - type: OK
+  clusterSelector:
+    matchExpressions:
+      []

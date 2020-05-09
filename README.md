@@ -24,3 +24,14 @@ Every reconcile does following things:
 export WATCH_NAMESPACE=""
 operator-sdk run --local
 ```
+
+## Run e2e test
+Make sure you have [kind](https://github.com/kubernetes-sigs/kind) and [ginkgo](https://github.com/onsi/ginkgo) installed. 
+```
+make kind-bootstrap-cluster
+make e2e-test
+```
+To cleanup
+```
+make kind-delete-cluster
+```

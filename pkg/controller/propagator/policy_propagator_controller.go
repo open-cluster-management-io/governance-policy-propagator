@@ -120,6 +120,6 @@ func (r *ReconcilePolicy) Reconcile(request reconcile.Request) (reconcile.Result
 		return reconcile.Result{}, r.handleRootPolicy(instance)
 	}
 
-	reqLogger.Info("Policy was in cluster namespace with doesn't appear to be a replicated policy as it has no ownerReferences, ignoring it...")
+	reqLogger.Info("Policy was in cluster namespace but has no ownerReferences, ignoring it...")
 	return reconcile.Result{}, nil
 }
