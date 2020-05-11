@@ -1,5 +1,5 @@
 // Copyright (c) 2020 Red Hat, Inc.
-package e2e
+package utils
 
 import (
 	"fmt"
@@ -48,7 +48,7 @@ func ParseYaml(file string) *unstructured.Unstructured {
 	return yamlPlc
 }
 
-// getWithTimeout keeps polling to get the object for timeout seconds until wantFound is met (true for found, false for not found)
+// GetWithTimeout keeps polling to get the object for timeout seconds until wantFound is met (true for found, false for not found)
 func GetWithTimeout(
 	clientHubDynamic dynamic.Interface,
 	gvr schema.GroupVersionResource,
@@ -83,7 +83,7 @@ func GetWithTimeout(
 
 }
 
-// ListWithTimeout keeps polling to get the object for timeout seconds until wantFound is met (true for found, false for not found)
+// ListWithTimeout keeps polling to list the object for timeout seconds until wantFound is met (true for found, false for not found)
 func ListWithTimeout(
 	clientHubDynamic dynamic.Interface,
 	gvr schema.GroupVersionResource,
