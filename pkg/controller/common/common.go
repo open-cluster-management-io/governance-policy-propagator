@@ -7,6 +7,11 @@ import (
 	"k8s.io/cluster-registry/pkg/apis/clusterregistry/v1alpha1"
 )
 
+const APIGroup string = "policies.open-cluster-management.io"
+const ClusterNameLabel string = APIGroup + "/cluster-name"
+const ClusterNamespaceLabel string = APIGroup + "/cluster-namespace"
+const RootPolicyLabel string = APIGroup + "/root-policy"
+
 // IsInClusterNamespace check if policy is in cluster namespace
 func IsInClusterNamespace(ns string, allClusters []v1alpha1.Cluster) bool {
 	for _, cluster := range allClusters {
@@ -19,7 +24,7 @@ func IsInClusterNamespace(ns string, allClusters []v1alpha1.Cluster) bool {
 
 // LabelsForRootPolicy returns the labels for given policy
 func LabelsForRootPolicy(plc *policiesv1.Policy) map[string]string {
-	return map[string]string{"root-policy": FullNameForPolicy(plc)}
+	return map[string]string{RootPolicyLabel: FullNameForPolicy(plc)}
 }
 
 // FullNameForPolicy returns the fully qualified name for given policy

@@ -6,6 +6,7 @@
 package v1
 
 import (
+	appsv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/apps/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -71,7 +72,7 @@ func (in *Placement) DeepCopyInto(out *Placement) {
 	*out = *in
 	if in.Decisions != nil {
 		in, out := &in.Decisions, &out.Decisions
-		*out = make([]PlacementDecision, len(*in))
+		*out = make([]appsv1.PlacementDecision, len(*in))
 		copy(*out, *in)
 	}
 	return

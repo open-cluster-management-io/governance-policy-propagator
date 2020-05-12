@@ -2,6 +2,7 @@
 package v1
 
 import (
+	appsv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -48,9 +49,9 @@ type PlacementDecision struct {
 
 // Placement defines the placement results
 type Placement struct {
-	PlacementBinding string              `json:"placementBinding,omitempty"`
-	PlacementRule    string              `json:"placementRule,omitempty"`
-	Decisions        []PlacementDecision `json:"decisions,omitempty"`
+	PlacementBinding string                     `json:"placementBinding,omitempty"`
+	PlacementRule    string                     `json:"placementRule,omitempty"`
+	Decisions        []appsv1.PlacementDecision `json:"decisions,omitempty"`
 }
 
 // CompliancePerClusterStatus defines compliance per cluster status

@@ -42,7 +42,8 @@ func getOwnerReconcileRequest(object metav1.Object) []reconcile.Request {
 		// object name
 		if ref.Kind == policiesv1.Kind && refGV.Group == policiesv1.SchemeGroupVersion.Group {
 			// Match found - add a Request for the object referred to in the OwnerReference
-			log.Info("Found reconciliation request from replicated policy...", "Namespace", object.GetNamespace(), "Name", object.GetName())
+			log.Info("Found reconciliation request from replicated policy...", "Namespace", object.GetNamespace(),
+				"Name", object.GetName())
 			request := reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      ref.Name,
 				Namespace: strings.Split(object.GetName(), ".")[0],
@@ -51,7 +52,8 @@ func getOwnerReconcileRequest(object metav1.Object) []reconcile.Request {
 		}
 	}
 	if result == nil {
-		log.Info("Found reconciliation request from root policy...", "Namespace", object.GetNamespace(), "Name", object.GetName())
+		log.Info("Found reconciliation request from root policy...", "Namespace", object.GetNamespace(),
+			"Name", object.GetName())
 		// no owner references, should be root policy, queue it
 		request := reconcile.Request{NamespacedName: types.NamespacedName{
 			Name:      object.GetName(),
