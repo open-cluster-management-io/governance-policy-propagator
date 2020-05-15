@@ -30,6 +30,7 @@ func (r *ReconcilePolicy) handleRootPolicy(instance *policiesv1.Policy) error {
 			return err
 		}
 		for _, plc := range replicatedPlcList.Items {
+			// #nosec G601 -- no memory addresses are stored in collections
 			err := r.client.Delete(context.TODO(), &plc)
 			if err != nil && !errors.IsNotFound(err) {
 				reqLogger.Error(err, "Failed to delete replicated policy...", "Namespace", plc.GetNamespace(),
