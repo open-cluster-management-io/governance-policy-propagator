@@ -86,3 +86,5 @@ OPENSOURCE.check
 !vbh/.build-harness-vendorized
 !vbh/build-harness
 !vbh/build-harness-extensions 
+coverage.html
+report.json
