@@ -7,7 +7,7 @@ import (
 	"k8s.io/cluster-registry/pkg/apis/clusterregistry/v1alpha1"
 )
 
-const APIGroup string = "policies.open-cluster-management.io"
+const APIGroup string = "policy.open-cluster-management.io"
 const ClusterNameLabel string = APIGroup + "/cluster-name"
 const ClusterNamespaceLabel string = APIGroup + "/cluster-namespace"
 const RootPolicyLabel string = APIGroup + "/root-policy"

@@ -1,4 +1,4 @@
-apiVersion: policies.open-cluster-management.io/v1
+apiVersion: policy.open-cluster-management.io/v1
 kind: PlacementBinding
 metadata:
   name: example-placementbinding
@@ -7,6 +7,6 @@ placementRef:
   kind: PlacementRule
   name: placement-policy-trustednode
 subjects:
-- apiGroup: policies.open-cluster-management.io
+- apiGroup: policy.open-cluster-management.io
   kind: Policy
   name: example-policy

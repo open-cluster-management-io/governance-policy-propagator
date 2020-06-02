@@ -1,4 +1,4 @@
-apiVersion: policies.open-cluster-management.io/v1
+apiVersion: policy.open-cluster-management.io/v1
 kind: Policy
 metadata:
   name: case1-test-policy
@@ -23,7 +23,7 @@ spec:
           severity: low
           imageRegistry: quay.io
 ---
-apiVersion: policies.open-cluster-management.io/v1
+apiVersion: policy.open-cluster-management.io/v1
 kind: PlacementBinding
 metadata:
   name: case1-test-policy-pb
@@ -32,7 +32,7 @@ placementRef:
   kind: PlacementRule
   name: case1-test-policy-plr
 subjects:
-- apiGroup: policies.open-cluster-management.io
+- apiGroup: policy.open-cluster-management.io
   kind: Policy
   name: case1-test-policy
 ---

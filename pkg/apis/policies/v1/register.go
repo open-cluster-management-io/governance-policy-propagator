@@ -3,7 +3,7 @@
 
 // Package v1 contains API Schema definitions for the policies v1 API group
 // +k8s:deepcopy-gen=package,register
-// +groupName=policies.open-cluster-management.io
+// +groupName=policy.open-cluster-management.io
 package v1
 
 import (
@@ -13,7 +13,7 @@ import (
 
 var (
 	// SchemeGroupVersion is group version used to register these objects
-	SchemeGroupVersion = schema.GroupVersion{Group: "policies.open-cluster-management.io", Version: "v1"}
+	SchemeGroupVersion = schema.GroupVersion{Group: "policy.open-cluster-management.io", Version: "v1"}
 
 	// SchemeBuilder is used to add go types to the GroupVersionKind scheme
 	SchemeBuilder = &scheme.Builder{GroupVersion: SchemeGroupVersion}

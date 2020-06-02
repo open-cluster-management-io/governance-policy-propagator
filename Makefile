@@ -183,8 +183,8 @@ kind-delete-cluster:
 install-crds:
 	@echo installing crds
 	kubectl apply -f deploy/crds/apps.open-cluster-management.io_placementrules_crd.yaml
-	kubectl apply -f deploy/crds/policies.open-cluster-management.io_placementbindings_crd.yaml
-	kubectl apply -f deploy/crds/policies.open-cluster-management.io_policies_crd.yaml
+	kubectl apply -f deploy/crds/policy.open-cluster-management.io_placementbindings_crd.yaml
+	kubectl apply -f deploy/crds/policy.open-cluster-management.io_policies_crd.yaml
 	kubectl apply -f test/resources/cluster-registry-crd.yaml
 
 install-resources:
