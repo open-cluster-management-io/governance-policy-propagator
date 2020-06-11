@@ -1,10 +1,11 @@
 // Copyright (c) 2020 Red Hat, Inc.
+
 package common
 
 import (
+	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policies/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
-	"k8s.io/cluster-registry/pkg/apis/clusterregistry/v1alpha1"
 )
 
 const APIGroup string = "policy.open-cluster-management.io"
@@ -13,9 +14,9 @@ const ClusterNamespaceLabel string = APIGroup + "/cluster-namespace"
 const RootPolicyLabel string = APIGroup + "/root-policy"
 
 // IsInClusterNamespace check if policy is in cluster namespace
-func IsInClusterNamespace(ns string, allClusters []v1alpha1.Cluster) bool {
+func IsInClusterNamespace(ns string, allClusters []clusterv1.ManagedCluster) bool {
 	for _, cluster := range allClusters {
-		if ns == cluster.GetNamespace() {
+		if ns == cluster.GetName() {
 			return true
 		}
 	}

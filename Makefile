@@ -185,7 +185,7 @@ install-crds:
 	kubectl apply -f deploy/crds/apps.open-cluster-management.io_placementrules_crd.yaml
 	kubectl apply -f deploy/crds/policy.open-cluster-management.io_placementbindings_crd.yaml
 	kubectl apply -f deploy/crds/policy.open-cluster-management.io_policies_crd.yaml
-	kubectl apply -f test/resources/cluster-registry-crd.yaml
+	kubectl apply -f test/resources/cluster.open-cluster-management.io_managedclusters.yaml
 
 install-resources:
 	@echo creating namespaces

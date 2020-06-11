@@ -3,6 +3,8 @@
 package e2e
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policies/v1"
@@ -25,7 +27,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 		By("Patching test-policy-plr with decision of cluster managed1 and managed2")
 		plr := utils.GetWithTimeout(clientHubDynamic, gvrPlacementRule, case3PolicyName+"-plr", testNamespace, true, defaultTimeoutSeconds)
 		plr.Object["status"] = utils.GeneratePlrStatus("managed1", "managed2")
-		plr, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(plr, metav1.UpdateOptions{})
+		plr, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(context.TODO(), plr, metav1.UpdateOptions{})
 		Expect(err).To(BeNil())
 		opt := metav1.ListOptions{LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case3PolicyName}
 		By("Patching both replicated policy status to compliant")
@@ -34,7 +36,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 			replicatedPlc.Object["status"] = &policiesv1.PolicyStatus{
 				ComplianceState: policiesv1.Compliant,
 			}
-			_, err = clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(&replicatedPlc, metav1.UpdateOptions{})
+			_, err = clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(context.TODO(), &replicatedPlc, metav1.UpdateOptions{})
 			Expect(err).To(BeNil())
 		}
 		By("Checking the status of root policy")
@@ -64,7 +66,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 		plc := utils.GetWithTimeout(clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds)
 		Expect(plc).ToNot(BeNil())
 		plc.Object["spec"].(map[string]interface{})["disabled"] = true
-		plc, err := clientHubDynamic.Resource(gvrPolicy).Namespace("managed2").Update(plc, metav1.UpdateOptions{})
+		plc, err := clientHubDynamic.Resource(gvrPolicy).Namespace("managed2").Update(context.TODO(), plc, metav1.UpdateOptions{})
 		Expect(err).To(BeNil())
 		Expect(plc.Object["spec"].(map[string]interface{})["disabled"]).To(Equal(true))
 		By("Get policy in cluster ns managed2 again")
@@ -78,7 +80,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 		plc := utils.GetWithTimeout(clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds)
 		Expect(plc).ToNot(BeNil())
 		plc.Object["spec"].(map[string]interface{})["remediationAction"] = "enforce"
-		plc, err := clientHubDynamic.Resource(gvrPolicy).Namespace("managed2").Update(plc, metav1.UpdateOptions{})
+		plc, err := clientHubDynamic.Resource(gvrPolicy).Namespace("managed2").Update(context.TODO(), plc, metav1.UpdateOptions{})
 		Expect(err).To(BeNil())
 		Expect(plc.Object["spec"].(map[string]interface{})["remediationAction"]).To(Equal("enforce"))
 		By("Getting policy in cluster ns managed2 again")
@@ -92,7 +94,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 		plc := utils.GetWithTimeout(clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds)
 		Expect(plc).ToNot(BeNil())
 		plc.Object["spec"].(map[string]interface{})["policy-templates"] = []*policiesv1.PolicyTemplate{}
-		plc, err := clientHubDynamic.Resource(gvrPolicy).Namespace("managed2").Update(plc, metav1.UpdateOptions{})
+		plc, err := clientHubDynamic.Resource(gvrPolicy).Namespace("managed2").Update(context.TODO(), plc, metav1.UpdateOptions{})
 		Expect(err).To(BeNil())
 		By("Getting policy in cluster ns managed2 again")
 		rootPlc := utils.GetWithTimeout(clientHubDynamic, gvrPolicy, case3PolicyName, testNamespace, true, defaultTimeoutSeconds)
@@ -106,7 +108,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 		rootPlc := utils.GetWithTimeout(clientHubDynamic, gvrPolicy, case3PolicyName, testNamespace, true, defaultTimeoutSeconds)
 		Expect(rootPlc).ToNot(BeNil())
 		rootPlc.Object["status"] = policiesv1.PolicyStatus{}
-		rootPlc, err := clientHubDynamic.Resource(gvrPolicy).Namespace(testNamespace).UpdateStatus(rootPlc, metav1.UpdateOptions{})
+		rootPlc, err := clientHubDynamic.Resource(gvrPolicy).Namespace(testNamespace).UpdateStatus(context.TODO(), rootPlc, metav1.UpdateOptions{})
 		Expect(err).To(BeNil())
 		By("Getting root policy again")
 		yamlPlc := utils.ParseYaml("../resources/case3_mutation_recovery/managed-both-status-compliant.yaml")

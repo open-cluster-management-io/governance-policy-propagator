@@ -17,7 +17,8 @@ metadata:
   name: case2-test-policy-plr2
 spec:
   clusterConditions:
-  - type: OK
+  - status: "True"
+    type: ManagedClusterConditionAvailable
   clusterSelector:
     matchExpressions:
       []

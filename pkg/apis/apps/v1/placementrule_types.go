@@ -5,7 +5,6 @@ package v1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	clusterv1alpha1 "k8s.io/cluster-registry/pkg/apis/clusterregistry/v1alpha1"
 )
 
 const (
@@ -13,9 +12,16 @@ const (
 	SchedulerNameDefault = "default"
 	// SchedulerNameMCM tells using mcm as scheduler
 	SchedulerNameMCM = "mcm"
+
+	// UserIdentityAnnotation is user identity annotation
+	UserIdentityAnnotation = "mcm.ibm.com/user-identity"
+
+	// UserGroupAnnotation is user group annotation
+	UserGroupAnnotation = "mcm.ibm.com/user-group"
 )
 
 // +k8s:deepcopy-gen:nonpointer-interfaces=true
+
 // Placement field to be referenced in specs, align with Fedv2, add placementref
 type Placement struct {
 	GenericPlacementFields `json:",inline"`
@@ -26,9 +32,9 @@ type Placement struct {
 // ClusterConditionFilter defines filter to filter cluster condition
 type ClusterConditionFilter struct {
 	// +optional
-	Type clusterv1alpha1.ClusterConditionType `json:"type,omitempty"`
+	Type string `json:"type,omitempty"`
 	// +optional
-	Status corev1.ConditionStatus `json:"status,omitempty"`
+	Status metav1.ConditionStatus `json:"status,omitempty"`
 }
 
 // ResourceType defines types can be sorted

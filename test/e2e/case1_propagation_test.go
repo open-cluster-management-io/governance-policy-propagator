@@ -3,6 +3,8 @@
 package e2e
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	appsv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/apps/v1"
@@ -29,7 +31,7 @@ var _ = Describe("Test policy propagation", func() {
 			By("Patching test-policy-plr with decision of cluster managed1")
 			plr := utils.GetWithTimeout(clientHubDynamic, gvrPlacementRule, case1PolicyName+"-plr", testNamespace, true, defaultTimeoutSeconds)
 			plr.Object["status"] = utils.GeneratePlrStatus("managed1")
-			plr, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(plr, metav1.UpdateOptions{})
+			plr, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(context.TODO(), plr, metav1.UpdateOptions{})
 			Expect(err).To(BeNil())
 			plc := utils.GetWithTimeout(clientHubDynamic, gvrPolicy, testNamespace+"."+case1PolicyName, "managed1", true, defaultTimeoutSeconds)
 			Expect(plc).ToNot(BeNil())
@@ -40,7 +42,7 @@ var _ = Describe("Test policy propagation", func() {
 			By("Patching test-policy-plr with decision of cluster managed2")
 			plr := utils.GetWithTimeout(clientHubDynamic, gvrPlacementRule, case1PolicyName+"-plr", testNamespace, true, defaultTimeoutSeconds)
 			plr.Object["status"] = utils.GeneratePlrStatus("managed2")
-			plr, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(plr, metav1.UpdateOptions{})
+			plr, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(context.TODO(), plr, metav1.UpdateOptions{})
 			Expect(err).To(BeNil())
 			plc := utils.GetWithTimeout(clientHubDynamic, gvrPolicy, testNamespace+"."+case1PolicyName, "managed2", true, defaultTimeoutSeconds)
 			Expect(plc).ToNot(BeNil())
@@ -51,7 +53,7 @@ var _ = Describe("Test policy propagation", func() {
 			By("Patching test-policy-plr with decision of both managed1 and managed2")
 			plr := utils.GetWithTimeout(clientHubDynamic, gvrPlacementRule, case1PolicyName+"-plr", testNamespace, true, defaultTimeoutSeconds)
 			plr.Object["status"] = utils.GeneratePlrStatus("managed1", "managed2")
-			plr, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(plr, metav1.UpdateOptions{})
+			plr, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(context.TODO(), plr, metav1.UpdateOptions{})
 			Expect(err).To(BeNil())
 			opt := metav1.ListOptions{LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case1PolicyName}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
@@ -64,7 +66,7 @@ var _ = Describe("Test policy propagation", func() {
 				Kind:     "PlacementRule",
 				Name:     case1PolicyName + "-plc-nonexists",
 			}
-			pb, err := clientHubDynamic.Resource(gvrPlacementBinding).Namespace(testNamespace).Update(pb, metav1.UpdateOptions{})
+			pb, err := clientHubDynamic.Resource(gvrPlacementBinding).Namespace(testNamespace).Update(context.TODO(), pb, metav1.UpdateOptions{})
 			Expect(err).To(BeNil())
 			opt := metav1.ListOptions{LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case1PolicyName}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
@@ -77,7 +79,7 @@ var _ = Describe("Test policy propagation", func() {
 				Kind:     "PlacementRule",
 				Name:     case1PolicyName + "-plc",
 			}
-			pb, err := clientHubDynamic.Resource(gvrPlacementBinding).Namespace(testNamespace).Update(pb, metav1.UpdateOptions{})
+			pb, err := clientHubDynamic.Resource(gvrPlacementBinding).Namespace(testNamespace).Update(context.TODO(), pb, metav1.UpdateOptions{})
 			Expect(err).To(BeNil())
 			opt := metav1.ListOptions{LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case1PolicyName}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
@@ -90,7 +92,7 @@ var _ = Describe("Test policy propagation", func() {
 				Kind:     "PlacementRule",
 				Name:     case1PolicyName + "-plc-nonexists",
 			}
-			pb, err := clientHubDynamic.Resource(gvrPlacementBinding).Namespace(testNamespace).Update(pb, metav1.UpdateOptions{})
+			pb, err := clientHubDynamic.Resource(gvrPlacementBinding).Namespace(testNamespace).Update(context.TODO(), pb, metav1.UpdateOptions{})
 			Expect(err).To(BeNil())
 			opt := metav1.ListOptions{LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case1PolicyName}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
@@ -103,7 +105,7 @@ var _ = Describe("Test policy propagation", func() {
 				Kind:     "PlacementRule",
 				Name:     case1PolicyName + "-plc",
 			}
-			pb, err := clientHubDynamic.Resource(gvrPlacementBinding).Namespace(testNamespace).Update(pb, metav1.UpdateOptions{})
+			pb, err := clientHubDynamic.Resource(gvrPlacementBinding).Namespace(testNamespace).Update(context.TODO(), pb, metav1.UpdateOptions{})
 			Expect(err).To(BeNil())
 			opt := metav1.ListOptions{LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case1PolicyName}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
@@ -116,7 +118,7 @@ var _ = Describe("Test policy propagation", func() {
 				Kind:     "PlacementRule1",
 				Name:     case1PolicyName + "-plc-nonexists",
 			}
-			pb, err := clientHubDynamic.Resource(gvrPlacementBinding).Namespace(testNamespace).Update(pb, metav1.UpdateOptions{})
+			pb, err := clientHubDynamic.Resource(gvrPlacementBinding).Namespace(testNamespace).Update(context.TODO(), pb, metav1.UpdateOptions{})
 			Expect(err).To(BeNil())
 			opt := metav1.ListOptions{LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case1PolicyName}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
@@ -129,7 +131,7 @@ var _ = Describe("Test policy propagation", func() {
 				Kind:     "PlacementRule",
 				Name:     case1PolicyName + "-plc",
 			}
-			pb, err := clientHubDynamic.Resource(gvrPlacementBinding).Namespace(testNamespace).Update(pb, metav1.UpdateOptions{})
+			pb, err := clientHubDynamic.Resource(gvrPlacementBinding).Namespace(testNamespace).Update(context.TODO(), pb, metav1.UpdateOptions{})
 			Expect(err).To(BeNil())
 			opt := metav1.ListOptions{LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case1PolicyName}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
@@ -138,7 +140,7 @@ var _ = Describe("Test policy propagation", func() {
 			By("Patching test-policy-plr with no decision")
 			plr := utils.GetWithTimeout(clientHubDynamic, gvrPlacementRule, case1PolicyName+"-plr", testNamespace, true, defaultTimeoutSeconds)
 			plr.Object["status"] = &appsv1.PlacementRuleStatus{}
-			plr, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(plr, metav1.UpdateOptions{})
+			plr, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(context.TODO(), plr, metav1.UpdateOptions{})
 			Expect(err).To(BeNil())
 			opt := metav1.ListOptions{LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case1PolicyName}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
@@ -165,7 +167,7 @@ var _ = Describe("Test policy propagation", func() {
 			By("Patching test-policy-plr with decision of cluster managed1")
 			plr := utils.GetWithTimeout(clientHubDynamic, gvrPlacementRule, case1PolicyName+"-plr", testNamespace, true, defaultTimeoutSeconds)
 			plr.Object["status"] = utils.GeneratePlrStatus("managed1")
-			plr, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(plr, metav1.UpdateOptions{})
+			plr, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(context.TODO(), plr, metav1.UpdateOptions{})
 			Expect(err).To(BeNil())
 			plc := utils.GetWithTimeout(clientHubDynamic, gvrPolicy, testNamespace+"."+case1PolicyName, "managed1", true, defaultTimeoutSeconds)
 			Expect(plc).ToNot(BeNil())
@@ -178,7 +180,7 @@ var _ = Describe("Test policy propagation", func() {
 			Expect(rootPlc).NotTo(BeNil())
 			Expect(rootPlc.Object["spec"].(map[string]interface{})["remediationAction"]).To(Equal("inform"))
 			rootPlc.Object["spec"].(map[string]interface{})["remediationAction"] = "enforce"
-			rootPlc, err := clientHubDynamic.Resource(gvrPolicy).Namespace(testNamespace).Update(rootPlc, metav1.UpdateOptions{})
+			rootPlc, err := clientHubDynamic.Resource(gvrPolicy).Namespace(testNamespace).Update(context.TODO(), rootPlc, metav1.UpdateOptions{})
 			Expect(err).To(BeNil())
 			Eventually(func() interface{} {
 				replicatedPlc := utils.GetWithTimeout(clientHubDynamic, gvrPolicy, testNamespace+"."+case1PolicyName, "managed1", true, defaultTimeoutSeconds)
@@ -191,7 +193,7 @@ var _ = Describe("Test policy propagation", func() {
 			Expect(rootPlc).NotTo(BeNil())
 			Expect(rootPlc.Object["spec"].(map[string]interface{})["disabled"]).To(Equal(false))
 			rootPlc.Object["spec"].(map[string]interface{})["disabled"] = true
-			rootPlc, err := clientHubDynamic.Resource(gvrPolicy).Namespace(testNamespace).Update(rootPlc, metav1.UpdateOptions{})
+			rootPlc, err := clientHubDynamic.Resource(gvrPolicy).Namespace(testNamespace).Update(context.TODO(), rootPlc, metav1.UpdateOptions{})
 			Expect(err).To(BeNil())
 			Expect(rootPlc.Object["spec"].(map[string]interface{})["disabled"]).To(Equal(true))
 			opt := metav1.ListOptions{LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case1PolicyName}
@@ -209,7 +211,7 @@ var _ = Describe("Test policy propagation", func() {
 			By("Patching test-policy-plr with decision of cluster managed1")
 			plr := utils.GetWithTimeout(clientHubDynamic, gvrPlacementRule, case1PolicyName+"-plr", testNamespace, true, defaultTimeoutSeconds)
 			plr.Object["status"] = utils.GeneratePlrStatus("managed1")
-			plr, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(plr, metav1.UpdateOptions{})
+			plr, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(context.TODO(), plr, metav1.UpdateOptions{})
 			Expect(err).To(BeNil())
 			plc := utils.GetWithTimeout(clientHubDynamic, gvrPolicy, testNamespace+"."+case1PolicyName, "managed1", true, defaultTimeoutSeconds)
 			Expect(plc).ToNot(BeNil())
