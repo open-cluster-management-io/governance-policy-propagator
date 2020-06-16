@@ -1,4 +1,5 @@
 // Copyright (c) 2020 Red Hat, Inc.
+
 package propagator
 
 import (
@@ -19,7 +20,7 @@ func (mapper *placementBindingMapper) Map(obj handler.MapObject) []reconcile.Req
 	subjects := object.Subjects
 	for _, subject := range subjects {
 		if subject.APIGroup == policiesv1.SchemeGroupVersion.Group && subject.Kind == policiesv1.Kind {
-			log.Info("Found reconciliation request from placmenet binding...",
+			log.Info("Found reconciliation request from placement binding...",
 				"Namespace", object.GetNamespace(), "Name", object.GetName(), "Policy-Name", subject.Name)
 			request := reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      subject.Name,
