@@ -29,7 +29,12 @@ cat $manifest_filename | jq -rc '.[]' | while IFS='' read item;do
   repository=$(echo $item | jq -r '.["image-remote"]' | awk -F"/" '{ print $2 }')
   tag=$(echo $item | jq -r '.["image-tag"]')
   image_key=$(jq -r --arg image_name $name '.[] | select (.["image-name"]==$image_name) | .["image-key"]' $dictionary_filename )
-  # echo image name: [$name] remote: [$remote] repostory: [$repository] tag: [$tag] image_key: [$image_key]
+  if [[ "" = "$image_key" ]]
+  then
+    echo Oh no, can\'t retrieve image key for $name
+    exit 1
+  fi
+  echo image name: [$name] remote: [$remote] repostory: [$repository] tag: [$tag] image_key: [$image_key]
   url="https://quay.io/api/v1/repository/$repository/$name/tag/?onlyActiveTags=true&specificTag=$tag"
   # echo $url
   curl_command="curl -s -X GET -H \"Authorization: Bearer $QUAY_TOKEN\" \"$url\""
