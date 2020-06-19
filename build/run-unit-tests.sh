@@ -37,4 +37,3 @@ make build-instrumented
 make kind-bootstrap-cluster-dev
 make run-instrumented
 make e2e-test
-make stop-instrumented

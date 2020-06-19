@@ -87,7 +87,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 		Eventually(func() interface{} {
 			plc = utils.GetWithTimeout(clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds)
 			return plc.Object["spec"].(map[string]interface{})["remediationAction"]
-		}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual("enforce"))
+		}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual("inform"))
 	})
 	It("Should recover replicated policy when modified field policy-templates", func() {
 		By("Modifiying policy in cluster ns managed2")
