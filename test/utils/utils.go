@@ -118,6 +118,41 @@ func ListWithTimeout(
 
 }
 
+// ListWithTimeoutByNamespace keeps polling to list the object for timeout seconds until wantFound is met (true for found, false for not found)
+func ListWithTimeoutByNamespace(
+	clientHubDynamic dynamic.Interface,
+	gvr schema.GroupVersionResource,
+	opts metav1.ListOptions,
+	ns string,
+	size int,
+	wantFound bool,
+	timeout int,
+) *unstructured.UnstructuredList {
+	if timeout < 1 {
+		timeout = 1
+	}
+	var list *unstructured.UnstructuredList
+
+	Eventually(func() error {
+		var err error
+		list, err = clientHubDynamic.Resource(gvr).Namespace(ns).List(context.TODO(), opts)
+		if err != nil {
+			return err
+		} else {
+			if len(list.Items) != size {
+				return fmt.Errorf("list size doesn't match, expected %d actual %d", size, len(list.Items))
+			} else {
+				return nil
+			}
+		}
+	}, timeout, 1).Should(BeNil())
+	if wantFound {
+		return list
+	}
+	return nil
+
+}
+
 func Kubectl(args ...string) {
 	cmd := exec.Command("kubectl", args...)
 	err := cmd.Start()
