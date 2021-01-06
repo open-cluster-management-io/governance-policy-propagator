@@ -28,8 +28,6 @@ shift
 
 set -e
 
-BUILD_GOOS=${GOOS:-linux}
-BUILD_GOARCH=${GOARCH:-amd64}
 GOBINARY=${GOBINARY:-go}
 BUILDINFO=${BUILDINFO:-""}
 STATIC=${STATIC:-1}
@@ -45,7 +43,7 @@ if [[ "${STATIC}" !=  "1" ]];then
     LDFLAGS=""
 fi
 
-time GOOS=${BUILD_GOOS} GOARCH=${BUILD_GOARCH} ${GOBINARY} build \
+time ${GOBINARY} build \
         ${V} "${GOBUILDFLAGS_ARRAY[@]}" ${GCFLAGS:+-gcflags "${GCFLAGS}"} \
         -o "${OUT}" \
         -ldflags "${LDFLAGS}" "${@}"
