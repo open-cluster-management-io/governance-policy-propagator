@@ -1,4 +1,5 @@
-// Copyright (c) 2020 Red Hat, Inc.
+// Copyright (c) 2021 Red Hat, Inc.
+
 package propagator
 
 import (
@@ -9,6 +10,7 @@ import (
 	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policies/v1"
 	"github.com/open-cluster-management/governance-policy-propagator/pkg/controller/common"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -103,9 +105,37 @@ func (r *ReconcilePolicy) Reconcile(request reconcile.Request) (reconcile.Result
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
-			// Return and don't requeue
-			reqLogger.Info("Policy not found, may have been deleted, reconciliation completed.")
+			// Owned objects are automatically garbage collected.
+			reqLogger.Info("Policy not found, may have been deleted, deleting replicated policies...")
+			replicatedPlcList := &policiesv1.PolicyList{}
+			err := r.client.List(context.TODO(), replicatedPlcList,
+				client.MatchingLabels(common.LabelsForRootPolicy(&policiesv1.Policy{
+					TypeMeta: metav1.TypeMeta{
+						Kind:       policiesv1.Kind,
+						APIVersion: policiesv1.SchemeGroupVersion.Group,
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      request.Name,
+						Namespace: request.Namespace,
+					},
+				})))
+			if err != nil {
+				// there was an error, requeue
+				reqLogger.Error(err, "Failed to list replicated policy...")
+				return reconcile.Result{}, err
+			}
+			for _, plc := range replicatedPlcList.Items {
+				reqLogger.Info("Deleting replicated policies...", "Namespace", plc.GetNamespace(),
+					"Name", plc.GetName())
+				// #nosec G601 -- no memory addresses are stored in collections
+				err := r.client.Delete(context.TODO(), &plc)
+				if err != nil && !errors.IsNotFound(err) {
+					reqLogger.Error(err, "Failed to delete replicated policy...", "Namespace", plc.GetNamespace(),
+						"Name", plc.GetName())
+					return reconcile.Result{}, err
+				}
+			}
+			reqLogger.Info("Policy clean up complete, reconciliation completed.")
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
@@ -123,6 +153,13 @@ func (r *ReconcilePolicy) Reconcile(request reconcile.Request) (reconcile.Result
 		return reconcile.Result{}, r.handleRootPolicy(instance)
 	}
 
-	reqLogger.Info("Policy was in cluster namespace but has no ownerReferences, ignoring it...")
+	reqLogger.Info("Policy was found in cluster namespace but doesn't belong to any root policy, deleting it...",
+		instance.GetNamespace(), "Name", instance.GetName())
+	err = r.client.Delete(context.TODO(), instance)
+	if err != nil && !errors.IsNotFound(err) {
+		reqLogger.Error(err, "Failed to delete policy...", "Namespace", instance.GetNamespace(),
+			"Name", instance.GetName())
+		return reconcile.Result{}, err
+	}
 	return reconcile.Result{}, nil
 }

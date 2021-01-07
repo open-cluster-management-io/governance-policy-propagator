@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Red Hat, Inc.
+// Copyright (c) 2021 Red Hat, Inc.
 package utils
 
 import (
@@ -47,6 +47,40 @@ func ParseYaml(file string) *unstructured.Unstructured {
 	err = yaml.Unmarshal(yamlFile, yamlPlc)
 	Expect(err).To(BeNil())
 	return yamlPlc
+}
+
+// GetClusterLevelWithTimeout keeps polling to get the object for timeout seconds until wantFound is met (true for found, false for not found)
+func GetClusterLevelWithTimeout(
+	clientHubDynamic dynamic.Interface,
+	gvr schema.GroupVersionResource,
+	name string,
+	wantFound bool,
+	timeout int,
+) *unstructured.Unstructured {
+	if timeout < 1 {
+		timeout = 1
+	}
+	var obj *unstructured.Unstructured
+
+	Eventually(func() error {
+		var err error
+		namespace := clientHubDynamic.Resource(gvr)
+		obj, err = namespace.Get(context.TODO(), name, metav1.GetOptions{})
+		if wantFound && err != nil {
+			return err
+		}
+		if !wantFound && err == nil {
+			return fmt.Errorf("expected to return IsNotFound error")
+		}
+		if !wantFound && err != nil && !errors.IsNotFound(err) {
+			return err
+		}
+		return nil
+	}, timeout, 1).Should(BeNil())
+	if wantFound {
+		return obj
+	}
+	return nil
 }
 
 // GetWithTimeout keeps polling to get the object for timeout seconds until wantFound is met (true for found, false for not found)
@@ -153,10 +187,17 @@ func ListWithTimeoutByNamespace(
 
 }
 
+// Kubectl execute kubectl cli
 func Kubectl(args ...string) {
 	cmd := exec.Command("kubectl", args...)
 	err := cmd.Start()
 	if err != nil {
 		Fail(fmt.Sprintf("Error: %v", err))
 	}
+}
+
+// KubectlWithOutput execute kubectl cli and return output and error
+func KubectlWithOutput(args ...string) (string, error) {
+	output, err := exec.Command("kubectl", args...).CombinedOutput()
+	return string(output), err
 }

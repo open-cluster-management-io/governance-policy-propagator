@@ -117,12 +117,4 @@ var _ = Describe("Test unexpected policy mutation", func() {
 			return rootPlc.Object["status"]
 		}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
 	})
-	It("Should ignore root policy created in cluster ns", func() {
-		By("Creating a policy in cluster ns managed1")
-		utils.Kubectl("apply", "-f", case3PolicyYaml, "-n", "managed1")
-		utils.Pause(2)
-		opt := metav1.ListOptions{}
-		utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 4, true, defaultTimeoutSeconds)
-		utils.Kubectl("delete", "-f", case3PolicyYaml, "-n", "managed1")
-	})
 })
