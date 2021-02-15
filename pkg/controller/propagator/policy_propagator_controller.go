@@ -54,7 +54,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to primary resource Policy
 	err = c.Watch(
 		&source.Kind{Type: &policiesv1.Policy{}},
-		&handler.EnqueueRequestsFromMapFunc{ToRequests: &policyMapper{mgr.GetClient()}})
+		&common.EnqueueRequestsFromMapFunc{ToRequests: &policyMapper{mgr.GetClient()}})
 	if err != nil {
 		return err
 	}
