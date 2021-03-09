@@ -1,4 +1,6 @@
 # Stage 1: Use image builder to build the target binaries
+# Copyright Contributors to the Open Cluster Management project
+
 FROM golang:1.14 AS builder
 
 ENV COMPONENT=governance-policy-propagator

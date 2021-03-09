@@ -1,3 +1,5 @@
+[comment]: # ( Copyright Contributors to the Open Cluster Management project )
+
 # Governance Policy Propagator
 Red Hat Advance Cluster Management Governance - Policy Propagator
 
