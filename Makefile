@@ -22,6 +22,7 @@ TRAVIS_BUILD ?= 1
 # Use your own docker registry and image name for dev/test by overridding the IMG and REGISTRY environment variable.
 IMG ?= $(shell cat COMPONENT_NAME 2> /dev/null)
 REGISTRY ?= quay.io/open-cluster-management
+TAG ?= latest
 
 # Github host to use for checking the source tree;
 # Override this variable ue with your own value if you're working on forked repo.
@@ -35,12 +36,22 @@ GOPATH_DEFAULT := $(PWD)/.go
 export GOPATH ?= $(GOPATH_DEFAULT)
 GOBIN_DEFAULT := $(GOPATH)/bin
 export GOBIN ?= $(GOBIN_DEFAULT)
+GOARCH = $(shell go env GOARCH)
+GOOS = $(shell go env GOOS)
 TESTARGS_DEFAULT := "-v"
 export TESTARGS ?= $(TESTARGS_DEFAULT)
 DEST ?= $(GOPATH)/src/$(GIT_HOST)/$(BASE_DIR)
 VERSION ?= $(shell cat COMPONENT_VERSION 2> /dev/null)
 IMAGE_NAME_AND_VERSION ?= $(REGISTRY)/$(IMG)
-
+# Handle KinD configuration
+KIND_NAME ?= test-hub
+KIND_NAMESPACE ?= governance
+KIND_VERSION ?= latest
+ifneq ($(KIND_VERSION), latest)
+	KIND_ARGS = --image kindest/node:$(KIND_VERSION)
+else
+	KIND_ARGS =
+endif
 
 LOCAL_OS := $(shell uname)
 ifeq ($(LOCAL_OS),Linux)
@@ -86,7 +97,8 @@ work: $(GOBIN)
 # All available format: format-go format-protos format-python
 # Default value will run all formats, override these make target with your requirements:
 #    eg: fmt: format-go format-protos
-fmt: format-go format-protos format-python
+fmt: # format-go format-protos format-python
+	go fmt ./...
 
 ############################################################
 # check section
@@ -105,6 +117,11 @@ lint: lint-all
 
 test:
 	go test ${TESTARGS} `go list ./... | grep -v test/e2e`
+
+test-dependencies:
+	curl -L https://go.kubebuilder.io/dl/2.3.0/$(GOOS)/$(GOARCH) | tar -xz -C /tmp/
+	sudo mv /tmp/kubebuilder_2.3.0_$(GOOS)_$(GOARCH) /usr/local/kubebuilder
+	export PATH=$PATH:/usr/local/kubebuilder/bin
 
 ############################################################
 # coverage section
@@ -129,7 +146,7 @@ local:
 
 build-images:
 	@docker build -t ${IMAGE_NAME_AND_VERSION} -f build/Dockerfile .
-	@docker tag ${IMAGE_NAME_AND_VERSION} $(REGISTRY)/$(IMG):latest
+	@docker tag ${IMAGE_NAME_AND_VERSION} $(REGISTRY)/$(IMG):$(TAG)
 
 ############################################################
 # clean section
@@ -167,12 +184,24 @@ kind-deploy-controller: check-env
 	kubectl create secret -n governance docker-registry multiclusterhub-operator-pull-secret --docker-server=quay.io --docker-username=${DOCKER_USER} --docker-password=${DOCKER_PASS}
 	kubectl apply -f deploy/ -n governance
 
+kind-deploy-controller-dev:
+	@echo Pushing image to KinD cluster
+	kind load docker-image $(REGISTRY)/$(IMG):$(TAG) --name $(KIND_NAME)
+	@echo Installing $(IMG)
+	kubectl create ns $(KIND_NAMESPACE)
+	kubectl apply -f deploy/ -n $(KIND_NAMESPACE)
+	@echo "Patch deployment image"
+	kubectl patch deployment $(IMG) -n $(KIND_NAMESPACE) -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"$(IMG)\",\"imagePullPolicy\":\"Never\"}]}}}}"
+	kubectl patch deployment $(IMG) -n $(KIND_NAMESPACE) -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"$(IMG)\",\"image\":\"$(REGISTRY)/$(IMG):$(TAG)\"}]}}}}"
+	kubectl rollout status -n $(KIND_NAMESPACE) deployment $(IMG) --timeout=180s
+
+# Specify KIND_VERSION to indicate the version tag of the KinD image
 kind-create-cluster:
 	@echo "creating cluster"
-	kind create cluster --name test-hub
+	kind create cluster --name $(KIND_NAME) $(KIND_ARGS)
 
 kind-delete-cluster:
-	kind delete cluster --name test-hub
+	kind delete cluster --name $(KIND_NAME)
 
 install-crds:
 	@echo installing crds
@@ -192,6 +221,16 @@ install-resources:
 
 e2e-test:
 	ginkgo -v --slowSpecThreshold=10 test/e2e
+
+e2e-dependencies:
+	go get github.com/onsi/ginkgo/ginkgo
+	go get github.com/onsi/gomega/...
+
+e2e-debug:
+	kubectl get all -n $(KIND_NAMESPACE)
+	kubectl get Policy.policy.open-cluster-management.io --all-namespaces
+	kubectl describe pods -n $(KIND_NAMESPACE)
+	kubectl logs $(kubectl get pods -n $(KIND_NAMESPACE) -o name | grep $(IMG)) -n $(KIND_NAMESPACE)
 
 ############################################################
 # e2e test coverage
