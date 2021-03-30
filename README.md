@@ -1,6 +1,6 @@
 [comment]: # ( Copyright Contributors to the Open Cluster Management project )
 
-# Governance Policy Propagator
+# Governance Policy Propagator [![KinD tests](https://github.com/open-cluster-management/governance-policy-propagator/actions/workflows/kind.yml/badge.svg?branch=main&event=push)](https://github.com/open-cluster-management/governance-policy-propagator/actions/workflows/kind.yml)
 Red Hat Advance Cluster Management Governance - Policy Propagator
 
 ## How it works
