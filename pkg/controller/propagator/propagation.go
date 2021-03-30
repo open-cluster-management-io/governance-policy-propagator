@@ -40,17 +40,8 @@ func (r *ReconcilePolicy) handleRootPolicy(instance *policiesv1.Policy) error {
 				return err
 			}
 		}
-		// clear status
-		instance.Status = policiesv1.PolicyStatus{}
-		err = r.client.Status().Update(context.TODO(), instance)
-		if err != nil && !errors.IsNotFound(err) {
-			reqLogger.Error(err, "Failed to clean up policy status...")
-			return err
-		}
 		r.recorder.Event(instance, "Normal", "PolicyPropagation",
 			fmt.Sprintf("Policy %s/%s was disabled", instance.GetNamespace(), instance.GetName()))
-		reqLogger.Info("Policy was disabled. Reconciliation complete.")
-		return nil
 	}
 	// get binding
 	pbList := &policiesv1.PlacementBindingList{}
@@ -81,15 +72,17 @@ func (r *ReconcilePolicy) handleRootPolicy(instance *policiesv1.Policy) error {
 					PlacementRule:    plr.GetName(),
 					// Decisions:        plr.Status.Decisions,
 				})
-				// plr found, checking decision
-				decisions := plr.Status.Decisions
-
-				for _, decision := range decisions {
-					allDecisions = append(allDecisions, decision)
-					// create/update replicated policy for each decision
-					err := r.handleDecision(instance, decision)
-					if err != nil {
-						return err
+				// only handle replicate policy when policy is not disabled
+				if !instance.Spec.Disabled {
+					// plr found, checking decision
+					decisions := plr.Status.Decisions
+					for _, decision := range decisions {
+						allDecisions = append(allDecisions, decision)
+						// create/update replicated policy for each decision
+						err := r.handleDecision(instance, decision)
+						if err != nil {
+							return err
+						}
 					}
 				}
 				// only handle first match in pb.spec.subjects
@@ -97,52 +90,54 @@ func (r *ReconcilePolicy) handleRootPolicy(instance *policiesv1.Policy) error {
 			}
 		}
 	}
-
-	// loop through all replciated policy, update status.status
 	status := []*policiesv1.CompliancePerClusterStatus{}
-	replicatedPlcList := &policiesv1.PolicyList{}
-	err = r.client.List(context.TODO(), replicatedPlcList,
-		client.MatchingLabels(common.LabelsForRootPolicy(instance)))
-	if err != nil {
-		// there was an error, requeue
-		reqLogger.Error(err, "Failed to list replicated policy...",
-			"MatchingLables", common.LabelsForRootPolicy(instance))
-		return err
-	}
-	for _, rPlc := range replicatedPlcList.Items {
-		if status == nil {
-			status = []*policiesv1.CompliancePerClusterStatus{
-				{
-					ComplianceState:  rPlc.Status.ComplianceState,
-					ClusterName:      rPlc.GetLabels()[common.ClusterNameLabel],
-					ClusterNamespace: rPlc.GetLabels()[common.ClusterNamespaceLabel],
-				},
-			}
-		} else {
-			// loop through status and update
-			found := false
-			for _, compliancePerClusterStatus := range status {
-				if compliancePerClusterStatus.ClusterName == rPlc.GetLabels()[common.ClusterNameLabel] {
-					// found existing entry, check if it needs updating
-					found = true
-					compliancePerClusterStatus.ClusterNamespace = rPlc.GetLabels()[common.ClusterNamespaceLabel]
-					compliancePerClusterStatus.ComplianceState = rPlc.Status.ComplianceState
-					break
+	if !instance.Spec.Disabled {
+		// loop through all replciated policy, update status.status
+		replicatedPlcList := &policiesv1.PolicyList{}
+		err = r.client.List(context.TODO(), replicatedPlcList,
+			client.MatchingLabels(common.LabelsForRootPolicy(instance)))
+		if err != nil {
+			// there was an error, requeue
+			reqLogger.Error(err, "Failed to list replicated policy...",
+				"MatchingLables", common.LabelsForRootPolicy(instance))
+			return err
+		}
+		for _, rPlc := range replicatedPlcList.Items {
+			if status == nil {
+				status = []*policiesv1.CompliancePerClusterStatus{
+					{
+						ComplianceState:  rPlc.Status.ComplianceState,
+						ClusterName:      rPlc.GetLabels()[common.ClusterNameLabel],
+						ClusterNamespace: rPlc.GetLabels()[common.ClusterNamespaceLabel],
+					},
+				}
+			} else {
+				// loop through status and update
+				found := false
+				for _, compliancePerClusterStatus := range status {
+					if compliancePerClusterStatus.ClusterName == rPlc.GetLabels()[common.ClusterNameLabel] {
+						// found existing entry, check if it needs updating
+						found = true
+						compliancePerClusterStatus.ClusterNamespace = rPlc.GetLabels()[common.ClusterNamespaceLabel]
+						compliancePerClusterStatus.ComplianceState = rPlc.Status.ComplianceState
+						break
+					}
+				}
+				// not found, it's a CompliancePerClusterStatus, add it
+				if !found {
+					status = append(status, &policiesv1.CompliancePerClusterStatus{
+						ComplianceState:  rPlc.Status.ComplianceState,
+						ClusterName:      rPlc.GetLabels()[common.ClusterNameLabel],
+						ClusterNamespace: rPlc.GetLabels()[common.ClusterNamespaceLabel],
+					})
 				}
 			}
-			// not found, it's a CompliancePerClusterStatus, add it
-			if !found {
-				status = append(status, &policiesv1.CompliancePerClusterStatus{
-					ComplianceState:  rPlc.Status.ComplianceState,
-					ClusterName:      rPlc.GetLabels()[common.ClusterNameLabel],
-					ClusterNamespace: rPlc.GetLabels()[common.ClusterNamespaceLabel],
-				})
-			}
 		}
+		sort.Slice(status, func(i, j int) bool {
+			return status[i].ClusterName < status[j].ClusterName
+		})
 	}
-	sort.Slice(status, func(i, j int) bool {
-		return status[i].ClusterName < status[j].ClusterName
-	})
+
 	instance.Status.Status = status
 	// looped through all pb, update status.placement
 	sort.Slice(placement, func(i, j int) bool {
