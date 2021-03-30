@@ -19,6 +19,7 @@ spec:
           remediationAction: inform
           imageRegistry: quay.io
 status:
+  compliant: Compliant 
   placement:
   - placementBinding: case2-test-policy-pb
     placementRule: case2-test-policy-plr

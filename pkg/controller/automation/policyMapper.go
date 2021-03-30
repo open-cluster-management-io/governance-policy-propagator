@@ -32,7 +32,6 @@ func (mapper *policyMapper) Map(obj handler.MapObject) []reconcile.Request {
 			found = true
 			policyAutomation = policyAutomationTemp
 			break
-
 		}
 	}
 	if found {
