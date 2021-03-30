@@ -75,7 +75,7 @@ tags
 .vscode/*
 .history
 # End of https://www.gitignore.io/api/go,vim,emacs,visualstudiocode
-cmd/manager/__debug_bin
+cmd/**/__debug_bin
 
 /build-harness
 /build-harness-extensions

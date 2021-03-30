@@ -1,0 +1,45 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: case5-test-policy
+spec:
+  remediationAction: inform
+  disabled: false
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policies.ibm.com/v1alpha1
+        kind: TrustedContainerPolicy
+        metadata:
+          name: case5-test-policy-trustedcontainerpolicy
+        spec:
+          severity: low
+          namespaceSelector:
+            include: ["default"]
+            exclude: ["kube-system"]
+          remediationAction: inform
+          imageRegistry: quay.io
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: case5-test-policy-pb
+placementRef:
+  apiGroup: apps.open-cluster-management.io
+  kind: PlacementRule
+  name: case5-test-policy-plr
+subjects:
+- apiGroup: policy.open-cluster-management.io
+  kind: Policy
+  name: case5-test-policy
+---
+apiVersion: apps.open-cluster-management.io/v1
+kind: PlacementRule
+metadata:
+  name: case5-test-policy-plr
+spec:
+  clusterConditions:
+  - status: "True"
+    type: ManagedClusterConditionAvailable
+  clusterSelector:
+    matchExpressions:
+      []

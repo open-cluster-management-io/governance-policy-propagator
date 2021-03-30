@@ -22,6 +22,7 @@ const (
 
 //PolicyTemplate template for custom security policy
 type PolicyTemplate struct {
+	// +kubebuilder:pruning:PreserveUnknownFields
 	ObjectDefinition runtime.RawExtension `json:"objectDefinition,omitempty"`
 }
 

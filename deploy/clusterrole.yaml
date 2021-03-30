@@ -5,9 +5,23 @@ metadata:
   name: governance-policy-propagator
 rules:
 - apiGroups:
+  - tower.ansible.com
+  resources:
+  - ansiblejobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - ""
   resources:
   - events
+  - configmaps
+  - configmaps/finalizers
   verbs:
   - create
   - delete

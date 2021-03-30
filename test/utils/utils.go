@@ -201,5 +201,6 @@ func Kubectl(args ...string) {
 // KubectlWithOutput execute kubectl cli and return output and error
 func KubectlWithOutput(args ...string) (string, error) {
 	output, err := exec.Command("kubectl", args...).CombinedOutput()
+	fmt.Println(string(output))
 	return string(output), err
 }

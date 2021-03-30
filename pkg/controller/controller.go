@@ -1,11 +1,8 @@
-// Copyright (c) 2020 Red Hat, Inc.
 // Copyright Contributors to the Open Cluster Management project
 
 package controller
 
-import (
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-)
+import "sigs.k8s.io/controller-runtime/pkg/manager"
 
 // AddToManagerFuncs is a list of functions to add all Controllers to the Manager
 var AddToManagerFuncs []func(manager.Manager) error

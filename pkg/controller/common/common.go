@@ -5,7 +5,7 @@ package common
 
 import (
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
-	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policies/v1"
+	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policy/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 )
 
@@ -54,4 +54,15 @@ func IsPbForPoicy(pb *policiesv1.PlacementBinding) bool {
 		}
 	}
 	return found
+}
+
+// FindNonCompliantClustersForPolicy returns cluster in noncompliant status with given policy
+func FindNonCompliantClustersForPolicy(plc *policiesv1.Policy) []string {
+	clusterList := []string{}
+	for _, clusterStatus := range plc.Status.Status {
+		if clusterStatus.ComplianceState == policiesv1.NonCompliant {
+			clusterList = append(clusterList, clusterStatus.ClusterName)
+		}
+	}
+	return clusterList
 }
