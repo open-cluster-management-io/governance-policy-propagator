@@ -66,6 +66,7 @@ type CompliancePerClusterStatus struct {
 
 // DetailsPerTemplate defines compliance details and history
 type DetailsPerTemplate struct {
+	// +kubebuilder:pruning:PreserveUnknownFields
 	TemplateMeta    metav1.ObjectMeta   `json:"templateMeta,omitempty"`
 	ComplianceState ComplianceState     `json:"compliant,omitempty"`
 	History         []ComplianceHistory `json:"history,omitempty"`
