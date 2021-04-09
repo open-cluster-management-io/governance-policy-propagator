@@ -45,7 +45,7 @@ VERSION ?= $(shell cat COMPONENT_VERSION 2> /dev/null)
 IMAGE_NAME_AND_VERSION ?= $(REGISTRY)/$(IMG)
 # Handle KinD configuration
 KIND_NAME ?= test-hub
-KIND_NAMESPACE ?= governance
+KIND_NAMESPACE ?= open-cluster-management
 KIND_VERSION ?= latest
 ifneq ($(KIND_VERSION), latest)
 	KIND_ARGS = --image kindest/node:$(KIND_VERSION)
@@ -180,8 +180,8 @@ endif
 
 kind-deploy-controller: check-env
 	@echo installing policy-propagator
-	kubectl create ns governance
-	kubectl apply -f deploy/ -n governance
+	kubectl create ns $(KIND_NAME)
+	kubectl apply -f deploy/ -n $(KIND_NAME)
 
 kind-deploy-controller-dev:
 	@echo Pushing image to KinD cluster
