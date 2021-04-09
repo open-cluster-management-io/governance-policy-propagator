@@ -40,8 +40,7 @@ var (
 	kubeconfig            string
 	defaultTimeoutSeconds int
 
-	defaultImageRegistry       string
-	defaultImagePullSecretName string
+	defaultImageRegistry string
 )
 
 func TestE2e(t *testing.T) {
@@ -73,7 +72,6 @@ var _ = BeforeSuite(func() {
 	clientHub = NewKubeClient("", "", "")
 	clientHubDynamic = NewKubeClientDynamic("", "", "")
 	defaultImageRegistry = "quay.io/open-cluster-management"
-	defaultImagePullSecretName = "multiclusterhub-operator-pull-secret"
 	testNamespace = "policy-propagator-test"
 	defaultTimeoutSeconds = 30
 	By("Create Namesapce if needed")

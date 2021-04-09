@@ -181,7 +181,6 @@ endif
 kind-deploy-controller: check-env
 	@echo installing policy-propagator
 	kubectl create ns governance
-	kubectl create secret -n governance docker-registry multiclusterhub-operator-pull-secret --docker-server=quay.io --docker-username=${DOCKER_USER} --docker-password=${DOCKER_PASS}
 	kubectl apply -f deploy/ -n governance
 
 kind-deploy-controller-dev:
