@@ -1,7 +1,7 @@
 [comment]: # ( Copyright Contributors to the Open Cluster Management project )
 
 # Governance Policy Propagator [![KinD tests](https://github.com/open-cluster-management/governance-policy-propagator/actions/workflows/kind.yml/badge.svg?branch=main&event=push)](https://github.com/open-cluster-management/governance-policy-propagator/actions/workflows/kind.yml)
-Red Hat Advance Cluster Management Governance - Policy Propagator
+Red Hat Advanced Cluster Management Governance - Policy Propagator
 
 ## How it works
 
@@ -39,5 +39,5 @@ make kind-delete-cluster
 ```
 
 <!---
-Date: Nov/10/2020
+Date: Apr/19/2021
 -->
