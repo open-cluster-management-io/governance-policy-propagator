@@ -38,7 +38,7 @@ func (mapper *placementRuleMapper) Map(obj handler.MapObject) []reconcile.Reques
 			subjects := pb.Subjects
 			for _, subject := range subjects {
 				if subject.APIGroup == policiesv1.SchemeGroupVersion.Group && subject.Kind == policiesv1.Kind {
-					log.Info("Found reconciliation request from placmenet rule...", "Namespace", object.GetNamespace(),
+					log.Info("Found reconciliation request from placement rule...", "Namespace", object.GetNamespace(),
 						"Name", object.GetName(), "Policy-Name", subject.Name)
 					// generate reconcile request for policy referenced by pb
 					request := reconcile.Request{NamespacedName: types.NamespacedName{
