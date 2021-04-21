@@ -95,6 +95,9 @@ type PolicyStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=policies,scope=Namespaced
 // +kubebuilder:resource:path=policies,shortName=plc
+// +kubebuilder:printcolumn:name="Remediation action",type="string",JSONPath=".spec.remediationAction"
+// +kubebuilder:printcolumn:name="Compliance state",type="string",JSONPath=".status.compliant"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type Policy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
