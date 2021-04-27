@@ -8,7 +8,7 @@ spec:
   eventHook: noncompliant
   mode: disabled
   rescanAfter: 60s
-  automation: 
+  automationDef: 
     type: AnsibleJob
     name: Demo Job Template
     secret: toweraccess
