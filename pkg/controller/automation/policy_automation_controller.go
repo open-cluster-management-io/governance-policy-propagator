@@ -8,7 +8,7 @@ import (
 	"time"
 
 	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policy/v1"
-	policyv1alpha1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policy/v1alpha1"
+	policyv1beta1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policy/v1beta1"
 	"github.com/open-cluster-management/governance-policy-propagator/pkg/controller/common"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -60,7 +60,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to resource PolicyAutomation
-	err = c.Watch(&source.Kind{Type: &policyv1alpha1.PolicyAutomation{}},
+	err = c.Watch(&source.Kind{Type: &policyv1beta1.PolicyAutomation{}},
 		&common.EnqueueRequestsFromMapFunc{ToRequests: &policyAutomationMapper{mgr.GetClient()}},
 		configMapPredicateFuncs)
 	if err != nil {
@@ -93,7 +93,7 @@ func (r *ReconcilePolicy) Reconcile(request reconcile.Request) (reconcile.Result
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 
 	// Fetch the ConfigMap instance
-	policyAutomation := &policyv1alpha1.PolicyAutomation{}
+	policyAutomation := &policyv1beta1.PolicyAutomation{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, policyAutomation)
 	if err != nil {
 		if errors.IsNotFound(err) {

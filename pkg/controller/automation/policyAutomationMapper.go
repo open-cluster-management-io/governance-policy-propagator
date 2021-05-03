@@ -6,7 +6,7 @@ import (
 	"context"
 
 	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policy/v1"
-	policyv1alpha1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policy/v1alpha1"
+	policyv1beta1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policy/v1beta1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -18,7 +18,7 @@ type policyAutomationMapper struct {
 }
 
 func (mapper *policyAutomationMapper) Map(obj handler.MapObject) []reconcile.Request {
-	policyAutomation := obj.Object.(*policyv1alpha1.PolicyAutomation)
+	policyAutomation := obj.Object.(*policyv1beta1.PolicyAutomation)
 	var result []reconcile.Request
 	policyRef := policyAutomation.Spec.PolicyRef
 	if policyRef != "" {

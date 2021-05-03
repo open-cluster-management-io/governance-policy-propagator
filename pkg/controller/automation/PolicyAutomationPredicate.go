@@ -3,7 +3,7 @@
 package automation
 
 import (
-	policyv1alpha1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policy/v1alpha1"
+	policyv1beta1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policy/v1beta1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -12,8 +12,8 @@ import (
 // we only want to watch for pb contains policy as subjects
 var configMapPredicateFuncs = predicate.Funcs{
 	UpdateFunc: func(e event.UpdateEvent) bool {
-		policyAutomationNew := e.ObjectNew.(*policyv1alpha1.PolicyAutomation)
-		policyAutomationOld := e.ObjectOld.(*policyv1alpha1.PolicyAutomation)
+		policyAutomationNew := e.ObjectNew.(*policyv1beta1.PolicyAutomation)
+		policyAutomationOld := e.ObjectOld.(*policyv1beta1.PolicyAutomation)
 		if policyAutomationNew.Spec.PolicyRef == "" {
 			return false
 		}
@@ -23,7 +23,7 @@ var configMapPredicateFuncs = predicate.Funcs{
 		return !equality.Semantic.DeepEqual(policyAutomationNew.Spec, policyAutomationOld.Spec)
 	},
 	CreateFunc: func(e event.CreateEvent) bool {
-		policyAutomationNew := e.Object.(*policyv1alpha1.PolicyAutomation)
+		policyAutomationNew := e.Object.(*policyv1beta1.PolicyAutomation)
 		return policyAutomationNew.Spec.PolicyRef != ""
 	},
 	DeleteFunc: func(e event.DeleteEvent) bool {

@@ -6,7 +6,7 @@ import (
 	"context"
 	"encoding/json"
 
-	policyv1alpha1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policy/v1alpha1"
+	policyv1beta1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -15,7 +15,7 @@ import (
 )
 
 // CreateAnsibleJob creates ansiblejob with given PolicyAutomation
-func CreateAnsibleJob(policyAutomation *policyv1alpha1.PolicyAutomation,
+func CreateAnsibleJob(policyAutomation *policyv1beta1.PolicyAutomation,
 	dyamicClient dynamic.Interface, mode string, targetCluster []string) error {
 	ansibleJob := &unstructured.Unstructured{
 		Object: map[string]interface{}{
