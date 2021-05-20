@@ -163,18 +163,10 @@ kind-bootstrap-cluster: kind-create-cluster install-crds kind-deploy-controller 
 .PHONY: kind-bootstrap-cluster-dev
 kind-bootstrap-cluster-dev: kind-create-cluster install-crds install-resources
 
-check-env:
-ifndef DOCKER_USER
-	$(error DOCKER_USER is undefined)
-endif
-ifndef DOCKER_PASS
-	$(error DOCKER_PASS is undefined)
-endif
-
-kind-deploy-controller: check-env
+kind-deploy-controller:
 	@echo installing policy-propagator
-	kubectl create ns $(KIND_NAME)
-	kubectl apply -f deploy/ -n $(KIND_NAME)
+	kubectl create ns $(KIND_NAMESPACE)
+	kubectl apply -f deploy/ -n $(KIND_NAMESPACE)
 
 kind-deploy-controller-dev:
 	@echo Pushing image to KinD cluster

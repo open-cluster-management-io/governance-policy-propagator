@@ -1,43 +1,52 @@
 [comment]: # ( Copyright Contributors to the Open Cluster Management project )
 
 # Governance Policy Propagator [![KinD tests](https://github.com/open-cluster-management/governance-policy-propagator/actions/workflows/kind.yml/badge.svg?branch=main&event=push)](https://github.com/open-cluster-management/governance-policy-propagator/actions/workflows/kind.yml)
-Red Hat Advanced Cluster Management Governance - Policy Propagator
 
-## How it works
+## Description
 
-This operator watches for following changes to trigger reconcile
+The governance policy propagator is a controller that watches `Policies`, `PlacementBindings`, and `PlacementRules`. It manages replicated Policies in cluster namespaces based on the PlacementBindings and PlacementRules, and it updates the status on Policies to show aggregated cluster compliance results. This controller is a part of the [governance-policy-framework](https://github.com/open-cluster-management/governance-policy-framework).
+
+The operator watches for changes to trigger a reconcile:
+
+1. Changes to Policies in non-cluster namespaces trigger a self reconcile.
+2. Changes to Policies in cluster namespaces trigger a root Policy reconcile.
+2. Changes to PlacementBindings trigger reconciles on the subject Policies. 
+3. Changes to PlacementRules trigger reconciles on subject Policies.
+
+Every reconcile does the following:
+
+1. Creates/updates/deletes replicated policies in cluster namespaces based on PlacementBinding/PlacementRule results.
+2. Creates/updates/deletes the policy status to show aggregated cluster compliance results.
 
 
-1. policies changes in non-cluster namespaces
+Go to the [Contributing guide](CONTRIBUTING.md) to learn how to get involved.
 
-    a. policies in non-cluster namespaces triggers self reconcile
+## Geting started 
 
-    b. policies in cluster namespaces triggers root policy reconcile
-2. placementbinding changes
-3. placementrule changes
+Check the [Security guide](SECURITY.md) if you need to report a security issue.
 
-Every reconcile does following things:
+### Build and deploy locally
+You will need [kind](https://kind.sigs.k8s.io/docs/user/quick-start/) installed.
 
-1. Create/update/delete replicated policy in cluster namespace based on pb/plr results
-2. Create/update/delete policy status to show aggregated cluster compliance results
-
-## Run
+```bash
+make kind-bootstrap-cluster-dev
+make build-images
+make kind-deploy-controller-dev
 ```
-export WATCH_NAMESPACE=""
-operator-sdk run --local
+### Running tests
 ```
+make test-dependencies
+make test
 
-## Run e2e test
-Make sure you have [kind](https://github.com/kubernetes-sigs/kind) and [ginkgo](https://github.com/onsi/ginkgo) installed. 
-```
-make kind-bootstrap-cluster
+make e2e-dependencies
 make e2e-test
 ```
-To cleanup
+
+### Clean up
 ```
 make kind-delete-cluster
 ```
 
-<!---
-Date: Apr/19/2021
--->
+## References
+
+- The `governance-policy-propagator` is part of the `open-cluster-management` community. For more information, visit: [open-cluster-management.io](https://open-cluster-management.io).
