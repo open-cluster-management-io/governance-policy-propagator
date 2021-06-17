@@ -25,7 +25,6 @@ func (mapper *policyMapper) Map(obj handler.MapObject) []reconcile.Request {
 // getOwnerReconcileRequest looks at object and returns a slice of reconcile.Request to reconcile
 // owners of object from label: policy.open-cluster-management.io/root-policy
 func getOwnerReconcileRequest(object metav1.Object) []reconcile.Request {
-	var result []reconcile.Request
 	rootPlcName := object.GetLabels()[common.RootPolicyLabel]
 	var name string
 	var namespace string
@@ -46,6 +45,5 @@ func getOwnerReconcileRequest(object metav1.Object) []reconcile.Request {
 		Name:      name,
 		Namespace: namespace,
 	}}
-	result = append(result, request)
-	return result
+	return []reconcile.Request{request}
 }

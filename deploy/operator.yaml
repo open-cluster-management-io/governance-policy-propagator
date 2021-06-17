@@ -19,6 +19,8 @@ spec:
           image: quay.io/open-cluster-management/governance-policy-propagator:latest-dev
           command:
           - governance-policy-propagator
+          ports:
+          - containerPort: 8383
           imagePullPolicy: Always
           env:
             - name: WATCH_NAMESPACE
