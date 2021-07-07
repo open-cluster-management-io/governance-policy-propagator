@@ -165,14 +165,14 @@ kind-bootstrap-cluster-dev: kind-create-cluster install-crds install-resources
 
 kind-deploy-controller:
 	@echo installing policy-propagator
-	kubectl create ns $(KIND_NAMESPACE)
+	kubectl get ns $(KIND_NAMESPACE) ; if [ $$? -ne 0 ] ; then kubectl create ns $(KIND_NAMESPACE) ; fi
 	kubectl apply -f deploy/ -n $(KIND_NAMESPACE)
 
 kind-deploy-controller-dev:
 	@echo Pushing image to KinD cluster
 	kind load docker-image $(REGISTRY)/$(IMG):$(TAG) --name $(KIND_NAME)
 	@echo Installing $(IMG)
-	kubectl create ns $(KIND_NAMESPACE)
+	kubectl get ns $(KIND_NAMESPACE) ; if [ $$? -ne 0 ] ; then kubectl create ns $(KIND_NAMESPACE) ; fi
 	kubectl apply -f deploy/ -n $(KIND_NAMESPACE)
 	@echo "Patch deployment image"
 	kubectl patch deployment $(IMG) -n $(KIND_NAMESPACE) -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"$(IMG)\",\"imagePullPolicy\":\"Never\"}]}}}}"
