@@ -1,10 +1,10 @@
 [comment]: # ( Copyright Contributors to the Open Cluster Management project )
 
-# Governance Policy Propagator [![KinD tests](https://github.com/open-cluster-management/governance-policy-propagator/actions/workflows/kind.yml/badge.svg?branch=main&event=push)](https://github.com/open-cluster-management/governance-policy-propagator/actions/workflows/kind.yml)
+# Governance Policy Propagator [![KinD tests](https://github.com/open-cluster-management-io/governance-policy-propagator/actions/workflows/kind.yml/badge.svg?branch=main&event=push)](https://github.com/open-cluster-management-io/governance-policy-propagator/actions/workflows/kind.yml)
 
 ## Description
 
-The governance policy propagator is a controller that watches `Policies`, `PlacementBindings`, and `PlacementRules`. It manages replicated Policies in cluster namespaces based on the PlacementBindings and PlacementRules, and it updates the status on Policies to show aggregated cluster compliance results. This controller is a part of the [governance-policy-framework](https://github.com/open-cluster-management/governance-policy-framework).
+The governance policy propagator is a controller that watches `Policies`, `PlacementBindings`, and `PlacementRules`. It manages replicated Policies in cluster namespaces based on the PlacementBindings and PlacementRules, and it updates the status on Policies to show aggregated cluster compliance results. This controller is a part of the [governance-policy-framework](https://github.com/open-cluster-management-io/governance-policy-framework).
 
 The operator watches for changes to trigger a reconcile:
 
