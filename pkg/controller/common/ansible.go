@@ -16,7 +16,7 @@ import (
 
 // CreateAnsibleJob creates ansiblejob with given PolicyAutomation
 func CreateAnsibleJob(policyAutomation *policyv1beta1.PolicyAutomation,
-	dyamicClient dynamic.Interface, mode string, targetCluster []string) error {
+	dyamicClient dynamic.Interface, mode string, targetClusters []string) error {
 	ansibleJob := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "tower.ansible.com/v1alpha1",
@@ -38,8 +38,8 @@ func CreateAnsibleJob(policyAutomation *policyv1beta1.PolicyAutomation,
 		}
 		ansibleJob.Object["spec"].(map[string]interface{})["extra_vars"] = mapExtraVars
 	}
-	if targetCluster != nil {
-		ansibleJob.Object["spec"].(map[string]interface{})["extra_vars"].(map[string]interface{})["target_clusters"] = targetCluster
+	if targetClusters != nil {
+		ansibleJob.Object["spec"].(map[string]interface{})["extra_vars"].(map[string]interface{})["target_clusters"] = targetClusters
 	}
 
 	ansibleJobRes := schema.GroupVersionResource{Group: "tower.ansible.com", Version: "v1alpha1",
