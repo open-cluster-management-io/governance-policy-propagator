@@ -223,6 +223,7 @@ func (r *ReconcilePolicy) handleDecision(instance *policiesv1.Policy, decision a
 			replicatedPlc.SetName(common.FullNameForPolicy(instance))
 			replicatedPlc.SetNamespace(decision.ClusterNamespace)
 			replicatedPlc.SetResourceVersion("")
+			replicatedPlc.SetFinalizers(nil)
 			labels := replicatedPlc.GetLabels()
 			if labels == nil {
 				labels = map[string]string{}
