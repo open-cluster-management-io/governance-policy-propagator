@@ -91,14 +91,14 @@ func (r *MetricReconciler) Reconcile(request reconcile.Request) (reconcile.Resul
 		}
 		promLabels = prometheus.Labels{
 			"type":              "propagated",
-			"name":              splitName[1],
+			"policy":            splitName[1],
 			"policy_namespace":  splitName[0],
 			"cluster_namespace": request.Namespace,
 		}
 	} else {
 		promLabels = prometheus.Labels{
 			"type":              "root",
-			"name":              request.Name,
+			"policy":            request.Name,
 			"policy_namespace":  request.Namespace,
 			"cluster_namespace": "<null>", // this is basically a sentinel value
 		}
