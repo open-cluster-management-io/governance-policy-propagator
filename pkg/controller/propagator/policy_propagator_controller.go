@@ -8,6 +8,7 @@ import (
 
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	appsv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/apps/v1"
+	clusterv1alpha1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/cluster/v1alpha1"
 	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policy/v1"
 	"github.com/open-cluster-management/governance-policy-propagator/pkg/controller/common"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -73,6 +74,14 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	err = c.Watch(
 		&source.Kind{Type: &appsv1.PlacementRule{}},
 		&handler.EnqueueRequestsFromMapFunc{ToRequests: &placementRuleMapper{mgr.GetClient()}})
+	if err != nil {
+		return err
+	}
+
+	// Watch for changes to placementdecision
+	err = c.Watch(
+		&source.Kind{Type: &clusterv1alpha1.PlacementDecision{}},
+		&handler.EnqueueRequestsFromMapFunc{ToRequests: &placementDecisionMapper{mgr.GetClient()}})
 	if err != nil {
 		return err
 	}

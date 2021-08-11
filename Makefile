@@ -194,6 +194,8 @@ install-crds:
 	kubectl apply -f deploy/crds/policy.open-cluster-management.io_policies_crd.yaml
 	kubectl apply -f deploy/crds/policy.open-cluster-management.io_policyautomations_crd.yaml
 	kubectl apply -f test/crds/cluster.open-cluster-management.io_managedclusters.yaml
+	kubectl apply -f test/crds/cluster.open-cluster-management.io_placementdecisions_crd.yaml
+	kubectl apply -f test/crds/cluster.open-cluster-management.io_placements_crd.yaml
 	kubectl apply -f test/crds/tower.ansible.com_joblaunch_crd.yaml
 
 install-resources:

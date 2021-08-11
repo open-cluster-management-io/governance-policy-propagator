@@ -14,6 +14,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	appsv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/apps/v1"
+	clusterv1alpha1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/cluster/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -31,6 +32,18 @@ func GeneratePlrStatus(clusters ...string) *appsv1.PlacementRuleStatus {
 		})
 	}
 	return &appsv1.PlacementRuleStatus{Decisions: plrDecision}
+}
+
+// GeneratePldStatus generate pld status with given clusters
+func GeneratePdStatus(placementName string, placementNamespace string, clusters ...string) *clusterv1alpha1.PlacementDecisionStatus {
+	plrDecision := []clusterv1alpha1.Decision{}
+	for _, cluster := range clusters {
+		plrDecision = append(plrDecision, clusterv1alpha1.Decision{
+			ClusterName: cluster,
+			Reason:      "test",
+		})
+	}
+	return &clusterv1alpha1.PlacementDecisionStatus{Decisions: plrDecision}
 }
 
 // Pause sleep for given seconds

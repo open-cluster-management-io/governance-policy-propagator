@@ -103,6 +103,8 @@ rules:
   - cluster.open-cluster-management.io
   resources:
   - managedclusters
+  - placements
+  - placementdecisions
   verbs:
   - get
   - list

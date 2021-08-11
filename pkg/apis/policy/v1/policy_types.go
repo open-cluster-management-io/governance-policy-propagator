@@ -54,6 +54,7 @@ type PlacementDecision struct {
 type Placement struct {
 	PlacementBinding string                     `json:"placementBinding,omitempty"`
 	PlacementRule    string                     `json:"placementRule,omitempty"`
+	Placement        string                     `json:"placement,omitempty"`
 	Decisions        []appsv1.PlacementDecision `json:"decisions,omitempty"`
 }
 
