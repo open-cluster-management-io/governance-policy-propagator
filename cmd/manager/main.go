@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/open-cluster-management/governance-policy-propagator/pkg/apis"
@@ -65,8 +66,25 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Some default tuned values here, but can be overriden via env vars
 	cfg.QPS = 200.0
 	cfg.Burst = 400
+	qpsOverride, found := os.LookupEnv("CONTROLLER_CONFIG_QPS")
+	if found {
+		qpsVal, err := strconv.ParseFloat(qpsOverride, 32)
+		if err == nil {
+			cfg.QPS = float32(qpsVal)
+			log.Info(fmt.Sprintf("Using QPS override: %v", cfg.QPS))
+		}
+	}
+	burstOverride, found := os.LookupEnv("CONTROLLER_CONFIG_BURST")
+	if found {
+		burstVal, err := strconv.Atoi(burstOverride)
+		if err == nil {
+			cfg.Burst = burstVal
+			log.Info(fmt.Sprintf("Using Burst override: %v", cfg.Burst))
+		}
+	}
 
 	ctx := context.TODO()
 	// Become the leader before proceeding
