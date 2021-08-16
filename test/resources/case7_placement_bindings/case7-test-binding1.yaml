@@ -1,0 +1,29 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: case7-test-policy-pb1
+placementRef:
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+  name: case7-test-policy-plr1
+subjects:
+- apiGroup: policy.open-cluster-management.io
+  kind: Policy
+  name: case7-test-policy
+---
+apiVersion: cluster.open-cluster-management.io/v1alpha1
+kind: Placement
+metadata:
+  name: case7-test-policy-plr1
+spec:
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions: []
+---
+apiVersion: cluster.open-cluster-management.io/v1alpha1
+kind: PlacementDecision
+metadata:
+  name: case7-test-policy-plr-1
+  labels:
+    cluster.open-cluster-management.io/placement: case7-test-policy-plr1

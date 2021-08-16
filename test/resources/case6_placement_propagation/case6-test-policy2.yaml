@@ -1,0 +1,55 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: case6-test-policy
+spec:
+  remediationAction: inform
+  disabled: false
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policies.ibm.com/v1alpha1
+        kind: TrustedContainerPolicy
+        metadata:
+          name: xxxxx
+        spec:
+          xxxxx: 5
+          namespaceSelector:
+            exclude:
+              - kube-system
+              - openshift-*
+            include:
+              - default
+          remediationAction: enforce
+          severity: low
+          imageRegistry: quay.io
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: case6-test-policy-pb
+placementRef:
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+  name: case6-test-policy-plr
+subjects:
+- apiGroup: policy.open-cluster-management.io
+  kind: Policy
+  name: case6-test-policy
+---
+apiVersion: cluster.open-cluster-management.io/v1alpha1
+kind: Placement
+metadata:
+  name: case6-test-policy-plr
+spec:
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions:
+          []
+---
+apiVersion: cluster.open-cluster-management.io/v1alpha1
+kind: PlacementDecision
+metadata:
+  name: case6-test-policy-plr-1
+  labels:
+    cluster.open-cluster-management.io/placement: case6-test-policy-plr
