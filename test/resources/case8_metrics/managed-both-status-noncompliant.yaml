@@ -1,7 +1,7 @@
 apiVersion: policy.open-cluster-management.io/v1
 kind: Policy
 metadata:
-  name: case6-test-policy
+  name: case8-test-policy
 spec:
   remediationAction: inform
   disabled: false
@@ -10,7 +10,7 @@ spec:
         apiVersion: policies.ibm.com/v1alpha1
         kind: TrustedContainerPolicy
         metadata:
-          name: case6-test-policy-trustedcontainerpolicy
+          name: case8-test-policy-trustedcontainerpolicy
         spec:
           severity: low
           namespaceSelector:
@@ -19,14 +19,14 @@ spec:
           remediationAction: inform
           imageRegistry: quay.io
 status:
-  compliant: Compliant 
+  compliant: NonCompliant
   placement:
-  - placementBinding: case6-test-policy-pb
-    placementRule: case6-test-policy-plr
+  - placementBinding: case8-test-policy-pb
+    placementRule: case8-test-policy-plr
   status:
   - clustername: managed1
     clusternamespace: managed1
-    compliant: Compliant
+    compliant: NonCompliant
   - clustername: managed2
     clusternamespace: managed2
-    compliant: Compliant
+    compliant: NonCompliant

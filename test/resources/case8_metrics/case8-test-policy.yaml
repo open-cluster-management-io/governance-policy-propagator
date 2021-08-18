@@ -1,7 +1,7 @@
 apiVersion: policy.open-cluster-management.io/v1
 kind: Policy
 metadata:
-  name: case6-test-policy
+  name: case8-test-policy
 spec:
   remediationAction: inform
   disabled: false
@@ -10,7 +10,7 @@ spec:
         apiVersion: policies.ibm.com/v1alpha1
         kind: TrustedContainerPolicy
         metadata:
-          name: case6-test-policy-trustedcontainerpolicy
+          name: case8-test-policy-trustedcontainerpolicy
         spec:
           severity: low
           namespaceSelector:
@@ -22,20 +22,20 @@ spec:
 apiVersion: policy.open-cluster-management.io/v1
 kind: PlacementBinding
 metadata:
-  name: case6-test-policy-pb
+  name: case8-test-policy-pb
 placementRef:
   apiGroup: apps.open-cluster-management.io
   kind: PlacementRule
-  name: case6-test-policy-plr
+  name: case8-test-policy-plr
 subjects:
 - apiGroup: policy.open-cluster-management.io
   kind: Policy
-  name: case6-test-policy
+  name: case8-test-policy
 ---
 apiVersion: apps.open-cluster-management.io/v1
 kind: PlacementRule
 metadata:
-  name: case6-test-policy-plr
+  name: case8-test-policy-plr
 spec:
   clusterConditions:
   - status: "True"
