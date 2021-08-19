@@ -52,5 +52,5 @@ make kind-delete-cluster
 - The `governance-policy-propagator` is part of the `open-cluster-management` community. For more information, visit: [open-cluster-management.io](https://open-cluster-management.io).
 
 <!---
-Date: August/11/2021
+Date: 8/18/2021
 -->
