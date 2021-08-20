@@ -24,13 +24,16 @@ func (mapper *placementDecisionMapper) Map(obj handler.MapObject) []reconcile.Re
 
 	// get the placement name from the placementdecision
 	placementName := object.GetLabels()["cluster.open-cluster-management.io/placement"]
-	if len(placementName) == 0 {
+	if placementName == "" {
 		return nil
 	}
 
 	pbList := &policiesv1.PlacementBindingList{}
 	// find pb in the same namespace of placementrule
-	err := mapper.List(context.TODO(), pbList, &client.ListOptions{Namespace: object.GetNamespace()})
+	lopts := &client.ListOptions{Namespace: object.GetNamespace()}
+	opts := client.MatchingFields{"placementRef.name": placementName}
+	opts.ApplyToList(lopts)
+	err := mapper.List(context.TODO(), pbList, lopts)
 	if err != nil {
 		return nil
 	}
@@ -38,23 +41,24 @@ func (mapper *placementDecisionMapper) Map(obj handler.MapObject) []reconcile.Re
 	var result []reconcile.Request
 	// loop through pb to find if current placement is used for policy
 	for _, pb := range pbList.Items {
-		// found matching placement rule in pb
-		if pb.PlacementRef.APIGroup == clusterv1alpha1.SchemeGroupVersion.Group &&
-			pb.PlacementRef.Kind == clusterv1alpha1.Kind && pb.PlacementRef.Name == placementName {
-			// check if it is for policy
-			subjects := pb.Subjects
-			for _, subject := range subjects {
-				if subject.APIGroup == policiesv1.SchemeGroupVersion.Group && subject.Kind == policiesv1.Kind {
-					log.Info("Found reconciliation request from placement rule...", "Namespace", object.GetNamespace(),
-						"Name", object.GetName(), "Policy-Name", subject.Name)
-					// generate reconcile request for policy referenced by pb
-					request := reconcile.Request{NamespacedName: types.NamespacedName{
-						Name:      subject.Name,
-						Namespace: object.GetNamespace(),
-					}}
-					result = append(result, request)
-				}
+		if pb.PlacementRef.APIGroup != clusterv1alpha1.SchemeGroupVersion.Group ||
+			pb.PlacementRef.Kind != clusterv1alpha1.Kind || pb.PlacementRef.Name != placementName {
+			continue
+		}
+		// found matching placement rule in pb -- check if it is for policy
+		subjects := pb.Subjects
+		for _, subject := range subjects {
+			if subject.APIGroup != policiesv1.SchemeGroupVersion.Group || subject.Kind != policiesv1.Kind {
+				continue
 			}
+			log.Info("Found reconciliation request from placement decision...", "Namespace", object.GetNamespace(),
+				"Name", object.GetName(), "Policy-Name", subject.Name)
+			// generate reconcile request for policy referenced by pb
+			request := reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      subject.Name,
+				Namespace: object.GetNamespace(),
+			}}
+			result = append(result, request)
 		}
 	}
 	return result

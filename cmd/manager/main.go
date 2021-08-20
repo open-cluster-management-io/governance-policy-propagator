@@ -12,12 +12,14 @@ import (
 	"strings"
 
 	"github.com/open-cluster-management/governance-policy-propagator/pkg/apis"
+	v1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policy/v1"
 	"github.com/open-cluster-management/governance-policy-propagator/pkg/controller"
 	"github.com/open-cluster-management/governance-policy-propagator/version"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"github.com/operator-framework/operator-sdk/pkg/leader"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 	"github.com/spf13/pflag"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -110,6 +112,16 @@ func main() {
 	if err := controller.AddToManager(mgr); err != nil {
 		log.Error(err, "")
 		os.Exit(1)
+	}
+
+	cache := mgr.GetCache()
+
+	indexFunc := func(obj k8sruntime.Object) []string {
+		return []string{obj.(*v1.PlacementBinding).PlacementRef.Name}
+	}
+
+	if err := cache.IndexField(ctx, &v1.PlacementBinding{}, "placementRef.name", indexFunc); err != nil {
+		panic(err)
 	}
 
 	log.Info("Starting the Cmd.")
