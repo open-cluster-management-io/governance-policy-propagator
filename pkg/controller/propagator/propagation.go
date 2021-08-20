@@ -207,8 +207,8 @@ func getApplicationPlacementDecisions(c client.Client, pb policiesv1.PlacementBi
 	plr := &appsv1.PlacementRule{}
 	err := c.Get(context.TODO(), types.NamespacedName{Namespace: instance.GetNamespace(),
 		Name: pb.PlacementRef.Name}, plr)
-	if err != nil && !errors.IsNotFound(err) {
-		log.Error(err, "Failed to get plr...", "Namespace", instance.GetNamespace(), "Name",
+	if err != nil {
+		log.Error(err, "Failed to get PlacementRule...", "Namespace", instance.GetNamespace(), "Name",
 			pb.PlacementRef.Name)
 		return nil, nil, err
 	}
@@ -216,7 +216,6 @@ func getApplicationPlacementDecisions(c client.Client, pb policiesv1.PlacementBi
 	placement := &policiesv1.Placement{
 		PlacementBinding: pb.GetName(),
 		PlacementRule:    plr.GetName(),
-		// Decisions:        plr.Status.Decisions,
 	}
 	return plr.Status.Decisions, placement, nil
 }
@@ -224,33 +223,32 @@ func getApplicationPlacementDecisions(c client.Client, pb policiesv1.PlacementBi
 // getClusterPlacementDecisions return the placement decisions from cluster
 // placement decisions
 func getClusterPlacementDecisions(c client.Client, pb policiesv1.PlacementBinding, instance *policiesv1.Policy) ([]appsv1.PlacementDecision, *policiesv1.Placement, error) {
-	plr := &clusterv1alpha1.Placement{}
+	pl := &clusterv1alpha1.Placement{}
 	err := c.Get(context.TODO(), types.NamespacedName{Namespace: instance.GetNamespace(),
-		Name: pb.PlacementRef.Name}, plr)
-	if err != nil && !errors.IsNotFound(err) {
-		log.Error(err, "Failed to get plr...", "Namespace", instance.GetNamespace(), "Name",
+		Name: pb.PlacementRef.Name}, pl)
+	if err != nil {
+		log.Error(err, "Failed to get Placement...", "Namespace", instance.GetNamespace(), "Name",
 			pb.PlacementRef.Name)
 		return nil, nil, err
 	}
-	// plr found, add current plcmnt to placement
+	// placement found, add current plcmnt to placement
 	placement := &policiesv1.Placement{
 		PlacementBinding: pb.GetName(),
-		Placement:        plr.GetName(),
-		// Decisions:        plr.Status.Decisions,
+		Placement:        pl.GetName(),
 	}
 	list := &clusterv1alpha1.PlacementDecisionList{}
 	lopts := &client.ListOptions{Namespace: instance.GetNamespace()}
 
-	opts := client.MatchingLabels{"cluster.open-cluster-management.io/placement": plr.GetName()}
+	opts := client.MatchingLabels{"cluster.open-cluster-management.io/placement": pl.GetName()}
 	opts.ApplyToList(lopts)
 	err = c.List(context.TODO(), list, lopts)
-	if err != nil && !errors.IsNotFound(err) {
-		log.Error(err, "Failed to get plr...", "Namespace", instance.GetNamespace(), "Name",
+	if err != nil {
+		log.Error(err, "Failed to get PlacementDecisions...", "Namespace", instance.GetNamespace(), "Name",
 			pb.PlacementRef.Name)
 		return nil, nil, err
 	}
 	var decisions []appsv1.PlacementDecision
-	decisions = make([]appsv1.PlacementDecision, 0, 100)
+	decisions = make([]appsv1.PlacementDecision, len(list.Items))
 	for _, item := range list.Items {
 		for _, cluster := range item.Status.Decisions {
 			decided := &appsv1.PlacementDecision{
