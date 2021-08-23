@@ -43,6 +43,7 @@ TESTARGS_DEFAULT := "-v"
 export TESTARGS ?= $(TESTARGS_DEFAULT)
 DEST ?= $(GOPATH)/src/$(GIT_HOST)/$(BASE_DIR)
 VERSION ?= $(shell cat COMPONENT_VERSION 2> /dev/null)
+KBVERSION := 2.3.0
 IMAGE_NAME_AND_VERSION ?= $(REGISTRY)/$(IMG)
 # Handle KinD configuration
 KIND_NAME ?= test-hub
@@ -122,8 +123,8 @@ test:
 	go test ${TESTARGS} `go list ./... | grep -v test/e2e`
 
 test-dependencies:
-	curl -L https://go.kubebuilder.io/dl/2.3.0/$(GOOS)/$(GOARCH) | tar -xz -C /tmp/
-	sudo mv -n /tmp/kubebuilder_2.3.0_$(GOOS)_$(GOARCH) /usr/local/kubebuilder
+	curl -L https://github.com/kubernetes-sigs/kubebuilder/releases/download/v$(KBVERSION)/kubebuilder_$(KBVERSION)_$(GOOS)_$(GOARCH).tar.gz | tar -xz -C /tmp/
+	sudo mv -n /tmp/kubebuilder_$(KBVERSION)_$(GOOS)_$(GOARCH) /usr/local/kubebuilder
 	export PATH=$PATH:/usr/local/kubebuilder/bin
 
 ############################################################
@@ -197,6 +198,8 @@ install-crds:
 	kubectl apply -f deploy/crds/policy.open-cluster-management.io_policies_crd.yaml
 	kubectl apply -f deploy/crds/policy.open-cluster-management.io_policyautomations_crd.yaml
 	kubectl apply -f test/crds/cluster.open-cluster-management.io_managedclusters.yaml
+	kubectl apply -f test/crds/cluster.open-cluster-management.io_placementdecisions_crd.yaml
+	kubectl apply -f test/crds/cluster.open-cluster-management.io_placements_crd.yaml
 	kubectl apply -f test/crds/tower.ansible.com_joblaunch_crd.yaml
 
 install-resources:

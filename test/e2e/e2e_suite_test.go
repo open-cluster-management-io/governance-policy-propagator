@@ -32,6 +32,8 @@ var (
 	gvrPolicyAutomation   schema.GroupVersionResource
 	gvrPlacementBinding   schema.GroupVersionResource
 	gvrPlacementRule      schema.GroupVersionResource
+	gvrPlacement          schema.GroupVersionResource
+	gvrPlacementDecision  schema.GroupVersionResource
 	gvrAnsibleJob         schema.GroupVersionResource
 	optionsFile           string
 	baseDomain            string
@@ -67,6 +69,8 @@ var _ = BeforeSuite(func() {
 	gvrPolicy = schema.GroupVersionResource{Group: "policy.open-cluster-management.io", Version: "v1", Resource: "policies"}
 	gvrPlacementBinding = schema.GroupVersionResource{Group: "policy.open-cluster-management.io", Version: "v1", Resource: "placementbindings"}
 	gvrPlacementRule = schema.GroupVersionResource{Group: "apps.open-cluster-management.io", Version: "v1", Resource: "placementrules"}
+	gvrPlacement = schema.GroupVersionResource{Group: "cluster.open-cluster-management.io", Version: "v1alpha1", Resource: "placements"}
+	gvrPlacementDecision = schema.GroupVersionResource{Group: "cluster.open-cluster-management.io", Version: "v1alpha1", Resource: "placementdecisions"}
 	gvrPolicyAutomation = schema.GroupVersionResource{Group: "policy.open-cluster-management.io", Version: "v1beta1", Resource: "policyautomations"}
 	gvrAnsibleJob = schema.GroupVersionResource{Group: "tower.ansible.com", Version: "v1alpha1", Resource: "ansiblejobs"}
 	clientHub = NewKubeClient("", "", "")
