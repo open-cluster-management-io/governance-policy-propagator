@@ -207,12 +207,13 @@ func getApplicationPlacementDecisions(c client.Client, pb policiesv1.PlacementBi
 	plr := &appsv1.PlacementRule{}
 	err := c.Get(context.TODO(), types.NamespacedName{Namespace: instance.GetNamespace(),
 		Name: pb.PlacementRef.Name}, plr)
-	if err != nil {
+	// no error when not found
+	if err != nil && !errors.IsNotFound(err) {
 		log.Error(err, "Failed to get PlacementRule...", "Namespace", instance.GetNamespace(), "Name",
 			pb.PlacementRef.Name)
 		return nil, nil, err
 	}
-	// plr found, add current plcmnt to placement
+	// add the PlacementRule to placement, if not found there are no decisions
 	placement := &policiesv1.Placement{
 		PlacementBinding: pb.GetName(),
 		PlacementRule:    plr.GetName(),
@@ -226,12 +227,13 @@ func getClusterPlacementDecisions(c client.Client, pb policiesv1.PlacementBindin
 	pl := &clusterv1alpha1.Placement{}
 	err := c.Get(context.TODO(), types.NamespacedName{Namespace: instance.GetNamespace(),
 		Name: pb.PlacementRef.Name}, pl)
-	if err != nil {
+	// no error when not found
+	if err != nil && !errors.IsNotFound(err) {
 		log.Error(err, "Failed to get Placement...", "Namespace", instance.GetNamespace(), "Name",
 			pb.PlacementRef.Name)
 		return nil, nil, err
 	}
-	// placement found, add current plcmnt to placement
+	// add current Placement to placement, if not found no decisions will be found
 	placement := &policiesv1.Placement{
 		PlacementBinding: pb.GetName(),
 		Placement:        pl.GetName(),
@@ -242,7 +244,8 @@ func getClusterPlacementDecisions(c client.Client, pb policiesv1.PlacementBindin
 	opts := client.MatchingLabels{"cluster.open-cluster-management.io/placement": pl.GetName()}
 	opts.ApplyToList(lopts)
 	err = c.List(context.TODO(), list, lopts)
-	if err != nil {
+	// do not error out if not found
+	if err != nil && !errors.IsNotFound(err) {
 		log.Error(err, "Failed to get PlacementDecisions...", "Namespace", instance.GetNamespace(), "Name",
 			pb.PlacementRef.Name)
 		return nil, nil, err
