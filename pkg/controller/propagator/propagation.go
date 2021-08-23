@@ -248,7 +248,7 @@ func getClusterPlacementDecisions(c client.Client, pb policiesv1.PlacementBindin
 		return nil, nil, err
 	}
 	var decisions []appsv1.PlacementDecision
-	decisions = make([]appsv1.PlacementDecision, len(list.Items))
+	decisions = make([]appsv1.PlacementDecision, 0, len(list.Items))
 	for _, item := range list.Items {
 		for _, cluster := range item.Status.Decisions {
 			decided := &appsv1.PlacementDecision{
