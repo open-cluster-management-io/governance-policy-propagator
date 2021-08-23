@@ -14,6 +14,8 @@ import (
 
 	"github.com/open-cluster-management/governance-policy-propagator/pkg/apis"
 	"github.com/open-cluster-management/governance-policy-propagator/pkg/controller"
+	"github.com/open-cluster-management/governance-policy-propagator/pkg/controller/propagator"
+
 	"github.com/open-cluster-management/governance-policy-propagator/version"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"github.com/operator-framework/operator-sdk/pkg/leader"
@@ -21,6 +23,7 @@ import (
 	"github.com/spf13/pflag"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
+	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -129,6 +132,10 @@ func main() {
 		log.Error(err, "")
 		os.Exit(1)
 	}
+
+	// Setup config and client for propagator to talk to the apiserver
+	var generatedClient kubernetes.Interface = kubernetes.NewForConfigOrDie(mgr.GetConfig())
+	propagator.Initialize(cfg, &generatedClient)
 
 	log.Info("Starting the Cmd.")
 

@@ -76,6 +76,7 @@ tags
 .history
 # End of https://www.gitignore.io/api/go,vim,emacs,visualstudiocode
 cmd/**/__debug_bin
+.go/*
 
 /build-harness
 /build-harness-extensions
@@ -85,6 +86,6 @@ OPENSOURCE.check
 # override build harness vendoring
 !vbh/.build-harness-vendorized
 !vbh/build-harness
-!vbh/build-harness-extensions 
+!vbh/build-harness-extensions
 coverage.html
 report.json
