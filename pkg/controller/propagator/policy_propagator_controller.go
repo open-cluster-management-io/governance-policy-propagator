@@ -164,6 +164,8 @@ func (r *ReconcilePolicy) Reconcile(request reconcile.Request) (reconcile.Result
 	if !common.IsInClusterNamespace(request.Namespace, clusterList.Items) {
 		// handleRootPolicy handles all retries and it will give up as appropriate. In that case
 		// don't requeue even if there is an error.
+		// #nosec G104 -- all retries and logging are handled in the method. No further action can
+		// be taken.
 		r.handleRootPolicy(instance)
 		return reconcile.Result{}, nil
 	}
