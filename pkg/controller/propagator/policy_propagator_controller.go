@@ -162,7 +162,10 @@ func (r *ReconcilePolicy) Reconcile(request reconcile.Request) (reconcile.Result
 	}
 
 	if !common.IsInClusterNamespace(request.Namespace, clusterList.Items) {
-		return reconcile.Result{}, r.handleRootPolicy(instance)
+		// handleRootPolicy handles all retries and it will give up as appropriate. In that case
+		// don't requeue even if there is an error.
+		r.handleRootPolicy(instance)
+		return reconcile.Result{}, nil
 	}
 
 	reqLogger.Info("Policy was found in cluster namespace but doesn't belong to any root policy, deleting it...",

@@ -89,3 +89,5 @@ OPENSOURCE.check
 !vbh/build-harness-extensions
 coverage.html
 report.json
+
+.go
