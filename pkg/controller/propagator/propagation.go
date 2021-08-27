@@ -579,9 +579,7 @@ func (r *ReconcilePolicy) handleDecision(instance *policiesv1.Policy, decision a
 	if policyHasTemplates(instance) {
 		//template delimis detected, build a temp holder policy with templates resolved
 		//before doing a compare with the replicated policy in the cluster namespaces
-		tempResolvedPlc := &policiesv1.Policy{}
-		tempResolvedPlc.SetAnnotations(instance.GetAnnotations())
-		tempResolvedPlc.Spec = instance.Spec
+		tempResolvedPlc := instance.DeepCopy()
 		tmplErr := r.processTemplates(tempResolvedPlc, decision, instance)
 		if tmplErr != nil {
 			return tmplErr
