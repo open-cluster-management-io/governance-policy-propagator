@@ -36,7 +36,7 @@ func GeneratePlrStatus(clusters ...string) *appsv1.PlacementRuleStatus {
 }
 
 // GeneratePldStatus generate pld status with given clusters
-func GeneratePdStatus(placementName string, placementNamespace string, clusters ...string) *clusterv1alpha1.PlacementDecisionStatus {
+func GeneratePldStatus(placementName string, placementNamespace string, clusters ...string) *clusterv1alpha1.PlacementDecisionStatus {
 	plrDecision := []clusterv1alpha1.Decision{}
 	for _, cluster := range clusters {
 		plrDecision = append(plrDecision, clusterv1alpha1.Decision{

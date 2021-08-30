@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/open-cluster-management/governance-policy-propagator/pkg/apis"
+	v1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policy/v1"
 	"github.com/open-cluster-management/governance-policy-propagator/pkg/controller"
 	"github.com/open-cluster-management/governance-policy-propagator/pkg/controller/propagator"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/operator-framework/operator-sdk/pkg/leader"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 	"github.com/spf13/pflag"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	"k8s.io/client-go/kubernetes"
@@ -129,13 +131,25 @@ func main() {
 
 	// Setup all Controllers
 	if err := controller.AddToManager(mgr); err != nil {
-		log.Error(err, "")
+		log.Error(err, "AddToManager returned an error")
 		os.Exit(1)
 	}
 
 	// Setup config and client for propagator to talk to the apiserver
 	var generatedClient kubernetes.Interface = kubernetes.NewForConfigOrDie(mgr.GetConfig())
 	propagator.Initialize(cfg, &generatedClient)
+
+	cache := mgr.GetCache()
+
+	// The following index for the PlacementRef Name is being added to the
+	// client cache to improve the performance of querying PlacementBindings
+	indexFunc := func(obj k8sruntime.Object) []string {
+		return []string{obj.(*v1.PlacementBinding).PlacementRef.Name}
+	}
+
+	if err := cache.IndexField(ctx, &v1.PlacementBinding{}, "placementRef.name", indexFunc); err != nil {
+		panic(err)
+	}
 
 	log.Info("Starting the Cmd.")
 
