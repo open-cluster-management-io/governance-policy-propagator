@@ -32,7 +32,13 @@ import (
 const attemptsDefault = 3
 const attemptsEnvName = "CONTROLLER_CONFIG_RETRY_ATTEMPTS"
 
+// The configuration in minutes to requeue after if something failed after several
+// retries.
+const requeueErrorDelayEnvName = "CONTROLLER_CONFIG_REQUEUE_ERROR_DELAY"
+const requeueErrorDelayDefault = 5
+
 var attempts int
+var requeueErrorDelay int
 var kubeConfig *rest.Config
 var kubeClient *kubernetes.Interface
 var templateCfg templates.Config
@@ -42,22 +48,27 @@ func Initialize(kubeconfig *rest.Config, kubeclient *kubernetes.Interface) {
 	kubeClient = kubeclient
 	templateCfg = templates.Config{StartDelim: "{{hub", StopDelim: "hub}}"}
 
-	var attemptsStr = os.Getenv(attemptsEnvName)
-	if attemptsStr != "" {
-		attemptsInt, err := strconv.Atoi(attemptsStr)
-		if err == nil && attemptsInt > 0 {
-			attempts = attemptsInt
-		} else {
-			log.Info(
-				fmt.Sprintf(
-					"The %s environment variable is invalid. Using default.", attemptsEnvName,
-				),
-			)
-			attempts = attemptsDefault
-		}
-	} else {
-		attempts = attemptsDefault
+	attempts = getEnvVarPosInt(attemptsEnvName, attemptsDefault)
+	requeueErrorDelay = getEnvVarPosInt(requeueErrorDelayEnvName, requeueErrorDelayDefault)
+}
+
+func getEnvVarPosInt(name string, defaultValue int) int {
+	var envValue = os.Getenv(name)
+	if envValue == "" {
+		return defaultValue
 	}
+
+	envInt, err := strconv.Atoi(envValue)
+	if err == nil && envInt > 0 {
+		return envInt
+	}
+
+	log.Info(
+		fmt.Sprintf(
+			"The %s environment variable is invalid. Using default.", name,
+		),
+	)
+	return defaultValue
 }
 
 // The options to call retry.Do with
@@ -102,7 +113,7 @@ func (r *ReconcilePolicy) cleanUpPolicy(instance *policiesv1.Policy) error {
 	return nil
 }
 
-// getDecisions will get all the placement decisions based on the input policy and placement
+// handleDecisions will get all the placement decisions based on the input policy and placement
 // binding list and propagate the policy. It returns the following:
 // * placements - a slice of all the placement decisions discovered
 // * allDecisions - a set of all the placement decisions encountered in the format of

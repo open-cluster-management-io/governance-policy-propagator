@@ -5,6 +5,8 @@ package propagator
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	appsv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/apps/v1"
@@ -163,10 +165,19 @@ func (r *ReconcilePolicy) Reconcile(request reconcile.Request) (reconcile.Result
 
 	if !common.IsInClusterNamespace(request.Namespace, clusterList.Items) {
 		// handleRootPolicy handles all retries and it will give up as appropriate. In that case
-		// don't requeue even if there is an error.
-		// #nosec G104 -- all retries and logging are handled in the method. No further action can
-		// be taken.
-		r.handleRootPolicy(instance)
+		// requeue it to be reprocessed later.
+		err := r.handleRootPolicy(instance)
+		if err != nil {
+			r.recordWarning(
+				instance,
+				fmt.Sprintf("Retrying the request in %d minutes", requeueErrorDelay),
+			)
+			duration := time.Duration(requeueErrorDelay) * time.Minute
+			// An error must not be returned for RequeueAfter to take effect. See:
+			// https://github.com/kubernetes-sigs/controller-runtime/blob/5de246bfbfd1a75f966b5662edcb9c7235244160/pkg/internal/controller/controller.go#L319-L322
+			return reconcile.Result{RequeueAfter: duration}, nil
+		}
+
 		return reconcile.Result{}, nil
 	}
 
