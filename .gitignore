@@ -91,3 +91,6 @@ coverage.html
 report.json
 
 .go
+
+bin
+testbin/*

@@ -13,6 +13,7 @@
 # limitations under the License.
 # Copyright Contributors to the Open Cluster Management project
 
+PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 
 # This repo is build in Travis-ci by default;
 # Override this variable in local env.
@@ -117,7 +118,7 @@ lint: lint-all
 # test section
 ############################################################
 
-test:
+test: manifests generate fmt
 	go test ${TESTARGS} `go list ./... | grep -v test/e2e`
 
 test-dependencies:
@@ -129,10 +130,10 @@ test-dependencies:
 # build section
 ############################################################
 
-build:
+build: generate fmt
 	@build/common/scripts/gobuild.sh build/_output/bin/$(IMG) ./cmd/manager
 
-local:
+local: generate fmt
 	@GOOS=darwin build/common/scripts/gobuild.sh build/_output/bin/$(IMG) ./cmd/manager
 
 ############################################################
@@ -165,12 +166,12 @@ kind-bootstrap-cluster: kind-create-cluster install-crds kind-deploy-controller 
 .PHONY: kind-bootstrap-cluster-dev
 kind-bootstrap-cluster-dev: kind-create-cluster install-crds install-resources
 
-kind-deploy-controller:
+kind-deploy-controller: manifests kustomize
 	@echo installing policy-propagator
 	kubectl create ns $(KIND_NAMESPACE)
 	kubectl apply -f deploy/ -n $(KIND_NAMESPACE)
 
-kind-deploy-controller-dev:
+kind-deploy-controller-dev: manifests kustomize
 	@echo Pushing image to KinD cluster
 	kind load docker-image $(REGISTRY)/$(IMG):$(TAG) --name $(KIND_NAME)
 	@echo Installing $(IMG)
@@ -189,7 +190,7 @@ kind-create-cluster:
 kind-delete-cluster:
 	kind delete cluster --name $(KIND_NAME)
 
-install-crds:
+install-crds: manifests kustomize
 	@echo installing crds
 	kubectl apply -f deploy/crds/apps.open-cluster-management.io_placementrules_crd.yaml
 	kubectl apply -f deploy/crds/policy.open-cluster-management.io_placementbindings_crd.yaml
@@ -213,8 +214,8 @@ e2e-test:
 	ginkgo -v --slowSpecThreshold=10 test/e2e
 
 e2e-dependencies:
-	go get github.com/onsi/ginkgo/ginkgo@v1.14.1
-	go get github.com/onsi/gomega/...@v1.10.1
+	go get github.com/onsi/ginkgo/ginkgo@v1.16.4
+	go get github.com/onsi/gomega/...@v1.13.0
 
 e2e-debug:
 	kubectl get all -n $(KIND_NAMESPACE)
@@ -233,3 +234,35 @@ run-instrumented:
 
 stop-instrumented:
 	ps -ef | grep 'govern' | grep -v grep | awk '{print $$2}' | xargs kill
+
+# Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
+CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
+
+.PHONY: manifests
+manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+
+.PHONY: generate
+generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+
+CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
+controller-gen: ## Download controller-gen locally if necessary.
+	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.6.1)
+
+KUSTOMIZE = $(shell pwd)/bin/kustomize
+kustomize: ## Download kustomize locally if necessary.
+	$(call go-get-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v3@v3.8.7)
+
+# go-get-tool will 'go get' any package $2 and install it to $1.
+define go-get-tool
+@[ -f $(1) ] || { \
+set -e ;\
+TMP_DIR=$$(mktemp -d) ;\
+cd $$TMP_DIR ;\
+go mod init tmp ;\
+echo "Downloading $(2)" ;\
+GOBIN=$(PROJECT_DIR)/bin go get $(2) ;\
+rm -rf $$TMP_DIR ;\
+}
+endef
