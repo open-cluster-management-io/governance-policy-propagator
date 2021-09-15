@@ -8,99 +8,63 @@ import (
 	"fmt"
 	"time"
 
-	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
-	appsv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/apps/v1"
-	clusterv1alpha1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/cluster/v1alpha1"
-	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policy/v1"
-	"github.com/open-cluster-management/governance-policy-propagator/pkg/controller/common"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
+	clusterv1alpha1 "github.com/open-cluster-management/api/cluster/v1alpha1"
+	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/api/v1"
+	"github.com/open-cluster-management/governance-policy-propagator/controllers/common"
+	appsv1 "github.com/open-cluster-management/multicloud-operators-placementrule/pkg/apis/apps/v1"
 )
 
-const controllerName string = "policy-propagator"
+const ControllerName string = "policy-propagator"
 
-var log = logf.Log.WithName(controllerName)
+var log = logf.Log.WithName(ControllerName)
 
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
+//+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies/finalizers,verbs=update
+//+kubebuilder:rbac:groups=cluster.open-cluster-management.io,resources=managedclusters;placementdecisions;placements,verbs=get;list;watch
+//+kubebuilder:rbac:groups=apps.open-cluster-management.io,resources=placementrules,verbs=get;list;watch
 
-// Add creates a new Policy Controller and adds it to the Manager. The Manager will set fields on the Controller
-// and Start it when the Manager is Started.
-func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
-}
-
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcilePolicy{client: mgr.GetClient(), scheme: mgr.GetScheme(),
-		recorder: mgr.GetEventRecorderFor(controllerName)}
-}
-
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	// Create a new controller
-	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return err
-	}
-
-	// Watch for changes to primary resource Policy
-	err = c.Watch(
-		&source.Kind{Type: &policiesv1.Policy{}},
-		&common.EnqueueRequestsFromMapFunc{ToRequests: &policyMapper{mgr.GetClient()}})
-	if err != nil {
-		return err
-	}
-
-	// Watch for changes to placementbinding
-	err = c.Watch(
-		&source.Kind{Type: &policiesv1.PlacementBinding{}},
-		&handler.EnqueueRequestsFromMapFunc{ToRequests: &placementBindingMapper{mgr.GetClient()}}, pbPredicateFuncs)
-	if err != nil {
-		return err
-	}
-
-	// Watch for changes to placementrule
-	err = c.Watch(
-		&source.Kind{Type: &appsv1.PlacementRule{}},
-		&handler.EnqueueRequestsFromMapFunc{ToRequests: &placementRuleMapper{mgr.GetClient()}})
-	if err != nil {
-		return err
-	}
-
-	// Watch for changes to placementdecision
-	err = c.Watch(
-		&source.Kind{Type: &clusterv1alpha1.PlacementDecision{}},
-		&handler.EnqueueRequestsFromMapFunc{ToRequests: &placementDecisionMapper{mgr.GetClient()}})
-	if err != nil {
-		return err
-	}
-
-	return nil
+// SetupWithManager sets up the controller with the Manager.
+func (r *PolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		Named(ControllerName).
+		Watches(
+			&source.Kind{Type: &policiesv1.Policy{}},
+			&common.EnqueueRequestsFromMapFunc{ToRequests: policyMapper(mgr.GetClient())}).
+		Watches(
+			&source.Kind{Type: &policiesv1.PlacementBinding{}},
+			handler.EnqueueRequestsFromMapFunc(placementBindingMapper(mgr.GetClient())),
+			builder.WithPredicates(pbPredicateFuncs)).
+		Watches(
+			&source.Kind{Type: &appsv1.PlacementRule{}},
+			handler.EnqueueRequestsFromMapFunc(placementRuleMapper(mgr.GetClient()))).
+		Watches(
+			&source.Kind{Type: &clusterv1alpha1.PlacementDecision{}},
+			handler.EnqueueRequestsFromMapFunc(placementDecisionMapper(mgr.GetClient()))).
+		Complete(r)
 }
 
 // blank assignment to verify that ReconcilePolicy implements reconcile.Reconciler
-var _ reconcile.Reconciler = &ReconcilePolicy{}
+var _ reconcile.Reconciler = &PolicyReconciler{}
 
-// ReconcilePolicy reconciles a Policy object
-type ReconcilePolicy struct {
-	// This client, initialized using mgr.Client() above, is a split client
-	// that reads objects from the cache and writes to the apiserver
-	client   client.Client
-	scheme   *runtime.Scheme
-	recorder record.EventRecorder
+// PolicyReconciler reconciles a Policy object
+type PolicyReconciler struct {
+	client.Client
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // Reconcile reads that state of the cluster for a Policy object and makes changes based on the state read
@@ -108,21 +72,21 @@ type ReconcilePolicy struct {
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcilePolicy) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 
 	reqLogger.Info("Reconciling Policy...")
 
 	// Fetch the Policy instance
 	instance := &policiesv1.Policy{}
-	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
+	err := r.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected.
 			reqLogger.Info("Policy not found, may have been deleted, deleting replicated policies...")
 			replicatedPlcList := &policiesv1.PolicyList{}
-			err := r.client.List(context.TODO(), replicatedPlcList,
+			err := r.List(context.TODO(), replicatedPlcList,
 				client.MatchingLabels(common.LabelsForRootPolicy(&policiesv1.Policy{
 					TypeMeta: metav1.TypeMeta{
 						Kind:       policiesv1.Kind,
@@ -142,7 +106,7 @@ func (r *ReconcilePolicy) Reconcile(request reconcile.Request) (reconcile.Result
 				reqLogger.Info("Deleting replicated policies...", "Namespace", plc.GetNamespace(),
 					"Name", plc.GetName())
 				// #nosec G601 -- no memory addresses are stored in collections
-				err := r.client.Delete(context.TODO(), &plc)
+				err := r.Delete(context.TODO(), &plc)
 				if err != nil && !errors.IsNotFound(err) {
 					reqLogger.Error(err, "Failed to delete replicated policy...", "Namespace", plc.GetNamespace(),
 						"Name", plc.GetName())
@@ -157,7 +121,7 @@ func (r *ReconcilePolicy) Reconcile(request reconcile.Request) (reconcile.Result
 	}
 
 	clusterList := &clusterv1.ManagedClusterList{}
-	err = r.client.List(context.TODO(), clusterList, &client.ListOptions{})
+	err = r.List(context.TODO(), clusterList, &client.ListOptions{})
 	if err != nil {
 		reqLogger.Error(err, "Failed to list cluster, going to retry...")
 		return reconcile.Result{}, err
@@ -183,7 +147,7 @@ func (r *ReconcilePolicy) Reconcile(request reconcile.Request) (reconcile.Result
 
 	reqLogger.Info("Policy was found in cluster namespace but doesn't belong to any root policy, deleting it...",
 		instance.GetNamespace(), "Name", instance.GetName())
-	err = r.client.Delete(context.TODO(), instance)
+	err = r.Delete(context.TODO(), instance)
 	if err != nil && !errors.IsNotFound(err) {
 		reqLogger.Error(err, "Failed to delete policy...", "Namespace", instance.GetNamespace(),
 			"Name", instance.GetName())

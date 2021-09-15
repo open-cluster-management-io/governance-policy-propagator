@@ -4,8 +4,8 @@
 package propagator
 
 import (
-	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policy/v1"
-	"github.com/open-cluster-management/governance-policy-propagator/pkg/controller/common"
+	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/api/v1"
+	"github.com/open-cluster-management/governance-policy-propagator/controllers/common"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )

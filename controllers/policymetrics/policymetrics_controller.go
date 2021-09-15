@@ -8,51 +8,28 @@ import (
 	"strings"
 
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
-	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policy/v1"
-	"github.com/open-cluster-management/governance-policy-propagator/pkg/controller/common"
+	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/api/v1"
+	"github.com/open-cluster-management/governance-policy-propagator/controllers/common"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-const controllerName string = "policy-metrics"
+const ControllerName string = "policy-metrics"
 
-var log = logf.Log.WithName(controllerName)
+var log = logf.Log.WithName(ControllerName)
 
-// Add creates a new Policy Metrics Controller and adds it to the Manager. The Manager will set fields on the Controller
-// and Start it when the Manager is Started.
-func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
-}
-
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &MetricReconciler{client: mgr.GetClient(), Scheme: mgr.GetScheme()}
-}
-
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return err
-	}
-
-	err = c.Watch(
-		&source.Kind{Type: &policiesv1.Policy{}},
-		&handler.EnqueueRequestForObject{})
-	if err != nil {
-		return err
-	}
-
-	return nil
+// SetupWithManager sets up the controller with the Manager.
+func (r *MetricReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		Named(ControllerName).
+		For(&policiesv1.Policy{}).
+		Complete(r)
 }
 
 // blank assignment to verify that ReconcilePolicy implements reconcile.Reconciler
@@ -60,20 +37,24 @@ var _ reconcile.Reconciler = &MetricReconciler{}
 
 // MetricReconciler reconciles the metrics for the Policy
 type MetricReconciler struct {
-	client client.Client
+	client.Client
 	Scheme *runtime.Scheme
 }
 
+//+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies/finalizers,verbs=update
+
 // Reconcile reads the state of the cluster for the Policy object and ensures that the exported
 // policy metrics are accurate, updating them as necessary.
-func (r *MetricReconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *MetricReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling metric for Policy...")
 
 	// Need to know if the policy is a root policy to create the correct prometheus labels
 	// Can't try to use a label on the policy, because the policy might have been deleted.
 	clusterList := &clusterv1.ManagedClusterList{}
-	err := r.client.List(context.TODO(), clusterList, &client.ListOptions{})
+	err := r.List(context.TODO(), clusterList, &client.ListOptions{})
 	if err != nil {
 		reqLogger.Error(err, "Failed to list clusters, going to retry...")
 		return reconcile.Result{}, err
@@ -105,7 +86,7 @@ func (r *MetricReconciler) Reconcile(request reconcile.Request) (reconcile.Resul
 	}
 
 	pol := &policiesv1.Policy{}
-	err = r.client.Get(context.TODO(), request.NamespacedName, pol)
+	err = r.Get(context.TODO(), request.NamespacedName, pol)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Try to delete the gauge, but don't get hung up on errors. Log whether it was deleted.

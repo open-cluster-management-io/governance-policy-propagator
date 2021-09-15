@@ -15,11 +15,11 @@ import (
 
 	retry "github.com/avast/retry-go/v3"
 	"github.com/go-logr/logr"
+	clusterv1alpha1 "github.com/open-cluster-management/api/cluster/v1alpha1"
 	templates "github.com/open-cluster-management/go-template-utils/pkg/templates"
-	appsv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/apps/v1"
-	clusterv1alpha1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/cluster/v1alpha1"
-	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policy/v1"
-	"github.com/open-cluster-management/governance-policy-propagator/pkg/controller/common"
+	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/api/v1"
+	"github.com/open-cluster-management/governance-policy-propagator/controllers/common"
+	appsv1 "github.com/open-cluster-management/multicloud-operators-placementrule/pkg/apis/apps/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -86,12 +86,12 @@ func getRetryOptions(logger logr.Logger, retryMsg string) []retry.Option {
 }
 
 // cleanUpPolicy will delete all replicated policies associated with provided policy.
-func (r *ReconcilePolicy) cleanUpPolicy(instance *policiesv1.Policy) error {
+func (r *PolicyReconciler) cleanUpPolicy(instance *policiesv1.Policy) error {
 	reqLogger := log.WithValues("Policy-Namespace", instance.GetNamespace(), "Policy-Name", instance.GetName())
 	successful := true
 	replicatedPlcList := &policiesv1.PolicyList{}
 
-	err := r.client.List(
+	err := r.List(
 		context.TODO(), replicatedPlcList, client.MatchingLabels(common.LabelsForRootPolicy(instance)),
 	)
 	if err != nil {
@@ -101,7 +101,7 @@ func (r *ReconcilePolicy) cleanUpPolicy(instance *policiesv1.Policy) error {
 
 	for _, plc := range replicatedPlcList.Items {
 		// #nosec G601 -- no memory addresses are stored in collections
-		err := r.client.Delete(context.TODO(), &plc)
+		err := r.Delete(context.TODO(), &plc)
 		if err != nil && !k8serrors.IsNotFound(err) {
 			reqLogger.Error(err, "Failed to delete replicated policy...", "Namespace", plc.GetNamespace(),
 				"Name", plc.GetName())
@@ -124,7 +124,7 @@ func (r *ReconcilePolicy) cleanUpPolicy(instance *policiesv1.Policy) error {
 // * failedClusters - a set of all the clusters that encountered an error during propagation in the
 //   format of <namespace>/<name>
 // * allFailed - a bool that determines if all clusters encountered an error during propagation
-func (r *ReconcilePolicy) handleDecisions(
+func (r *PolicyReconciler) handleDecisions(
 	instance *policiesv1.Policy, pbList *policiesv1.PlacementBindingList,
 ) (
 	placements []*policiesv1.Placement, allDecisions map[string]bool, failedClusters map[string]bool, allFailed bool,
@@ -148,7 +148,7 @@ func (r *ReconcilePolicy) handleDecisions(
 			err := retry.Do(
 				func() error {
 					var err error
-					decisions, p, err = getPlacementDecisions(r.client, pb, instance)
+					decisions, p, err = getPlacementDecisions(r.Client, pb, instance)
 					return err
 				},
 				getRetryOptions(reqLogger, "Retrying to get the placement decisions...")...,
@@ -200,7 +200,7 @@ func (r *ReconcilePolicy) handleDecisions(
 // cleanUpOrphanedRplPolicies compares the status of the input policy against the input placement
 // decisions. If the cluster exists in the status but doesn't exist in the input placement
 // decisions, then it's considered stale and will be removed.
-func (r *ReconcilePolicy) cleanUpOrphanedRplPolicies(instance *policiesv1.Policy, allDecisions map[string]bool) error {
+func (r *PolicyReconciler) cleanUpOrphanedRplPolicies(instance *policiesv1.Policy, allDecisions map[string]bool) error {
 	reqLogger := log.WithValues("Policy-Namespace", instance.GetNamespace(), "Policy-Name", instance.GetName())
 	successful := true
 	for _, cluster := range instance.Status.Status {
@@ -219,7 +219,7 @@ func (r *ReconcilePolicy) cleanUpOrphanedRplPolicies(instance *policiesv1.Policy
 		)
 		err := retry.Do(
 			func() error {
-				err := r.client.Delete(context.TODO(), &policiesv1.Policy{
+				err := r.Delete(context.TODO(), &policiesv1.Policy{
 					TypeMeta: metav1.TypeMeta{
 						Kind:       policiesv1.Kind,
 						APIVersion: policiesv1.SchemeGroupVersion.Group,
@@ -259,14 +259,14 @@ func (r *ReconcilePolicy) cleanUpOrphanedRplPolicies(instance *policiesv1.Policy
 	return nil
 }
 
-func (r *ReconcilePolicy) recordWarning(instance *policiesv1.Policy, msgPrefix string) {
+func (r *PolicyReconciler) recordWarning(instance *policiesv1.Policy, msgPrefix string) {
 	msg := fmt.Sprintf(
 		"%s for the policy %s/%s",
 		msgPrefix,
 		instance.GetNamespace(),
 		instance.GetName(),
 	)
-	r.recorder.Event(instance, "Warning", "PolicyPropagation", msg)
+	r.Recorder.Event(instance, "Warning", "PolicyPropagation", msg)
 }
 
 // handleRootPolicy will properly replicate or clean up when a root policy is updated.
@@ -277,7 +277,7 @@ func (r *ReconcilePolicy) recordWarning(instance *policiesv1.Policy, msgPrefix s
 // There are several retries within handleRootPolicy. This approach is taken over retrying the whole
 // method because it makes the retries more targeted and prevents race conditions, such as a
 // placement binding getting updated, from causing inconsistencies.
-func (r *ReconcilePolicy) handleRootPolicy(instance *policiesv1.Policy) error {
+func (r *PolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) error {
 	entry_ts := time.Now()
 	defer func() {
 		now := time.Now()
@@ -302,7 +302,7 @@ func (r *ReconcilePolicy) handleRootPolicy(instance *policiesv1.Policy) error {
 			return err
 		}
 
-		r.recorder.Event(instance, "Normal", "PolicyPropagation",
+		r.Recorder.Event(instance, "Normal", "PolicyPropagation",
 			fmt.Sprintf("Policy %s/%s was disabled", instance.GetNamespace(), instance.GetName()))
 	}
 
@@ -310,7 +310,7 @@ func (r *ReconcilePolicy) handleRootPolicy(instance *policiesv1.Policy) error {
 	pbList := &policiesv1.PlacementBindingList{}
 	err := retry.Do(
 		func() error {
-			return r.client.List(
+			return r.List(
 				context.TODO(), pbList, &client.ListOptions{Namespace: instance.GetNamespace()},
 			)
 		},
@@ -339,7 +339,7 @@ func (r *ReconcilePolicy) handleRootPolicy(instance *policiesv1.Policy) error {
 		replicatedPlcList := &policiesv1.PolicyList{}
 		err := retry.Do(
 			func() error {
-				return r.client.List(
+				return r.List(
 					context.TODO(),
 					replicatedPlcList,
 					client.MatchingLabels(common.LabelsForRootPolicy(instance)),
@@ -424,7 +424,7 @@ func (r *ReconcilePolicy) handleRootPolicy(instance *policiesv1.Policy) error {
 
 	err = retry.Do(
 		func() error {
-			return r.client.Status().Patch(
+			return r.Status().Patch(
 				context.TODO(), instance, client.MergeFrom(originalInstance),
 			)
 		},
@@ -516,14 +516,14 @@ func getClusterPlacementDecisions(c client.Client, pb policiesv1.PlacementBindin
 func getPlacementDecisions(c client.Client, pb policiesv1.PlacementBinding,
 	instance *policiesv1.Policy) ([]appsv1.PlacementDecision, *policiesv1.Placement, error) {
 	if pb.PlacementRef.APIGroup == appsv1.SchemeGroupVersion.Group &&
-		pb.PlacementRef.Kind == appsv1.Kind {
+		pb.PlacementRef.Kind == "PlacementRule" {
 		d, placement, err := getApplicationPlacementDecisions(c, pb, instance)
 		if err != nil {
 			return nil, nil, err
 		}
 		return d, placement, nil
 	} else if pb.PlacementRef.APIGroup == clusterv1alpha1.SchemeGroupVersion.Group &&
-		pb.PlacementRef.Kind == clusterv1alpha1.Kind {
+		pb.PlacementRef.Kind == "Placement" {
 		d, placement, err := getClusterPlacementDecisions(c, pb, instance)
 		if err != nil {
 			return nil, nil, err
@@ -533,11 +533,11 @@ func getPlacementDecisions(c client.Client, pb policiesv1.PlacementBinding,
 	return nil, nil, fmt.Errorf("Placement binding %s/%s reference is not valid", pb.Name, pb.Namespace)
 }
 
-func (r *ReconcilePolicy) handleDecision(instance *policiesv1.Policy, decision appsv1.PlacementDecision) error {
+func (r *PolicyReconciler) handleDecision(instance *policiesv1.Policy, decision appsv1.PlacementDecision) error {
 	reqLogger := log.WithValues("Policy-Namespace", instance.GetNamespace(), "Policy-Name", instance.GetName())
 	// retrieve replicated policy in cluster namespace
 	replicatedPlc := &policiesv1.Policy{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: decision.ClusterNamespace,
+	err := r.Get(context.TODO(), types.NamespacedName{Namespace: decision.ClusterNamespace,
 		Name: common.FullNameForPolicy(instance)}, replicatedPlc)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -571,13 +571,13 @@ func (r *ReconcilePolicy) handleDecision(instance *policiesv1.Policy, decision a
 
 			reqLogger.Info("Creating replicated policy...", "Namespace", decision.ClusterNamespace,
 				"Name", common.FullNameForPolicy(instance))
-			err = r.client.Create(context.TODO(), replicatedPlc)
+			err = r.Create(context.TODO(), replicatedPlc)
 			if err != nil {
 				reqLogger.Error(err, "Failed to create replicated policy...", "Namespace", decision.ClusterNamespace,
 					"Name", common.FullNameForPolicy(instance))
 				return err
 			}
-			r.recorder.Event(instance, "Normal", "PolicyPropagation",
+			r.Recorder.Event(instance, "Normal", "PolicyPropagation",
 				fmt.Sprintf("Policy %s/%s was propagated to cluster %s/%s", instance.GetNamespace(),
 					instance.GetName(), decision.ClusterNamespace, decision.ClusterName))
 			//exit after handling the create path, shouldnt be going to through the update path
@@ -611,13 +611,13 @@ func (r *ReconcilePolicy) handleDecision(instance *policiesv1.Policy, decision a
 			"Namespace", replicatedPlc.GetNamespace(), "Name", replicatedPlc.GetName())
 		replicatedPlc.SetAnnotations(comparePlc.GetAnnotations())
 		replicatedPlc.Spec = comparePlc.Spec
-		err = r.client.Update(context.TODO(), replicatedPlc)
+		err = r.Update(context.TODO(), replicatedPlc)
 		if err != nil {
 			reqLogger.Error(err, "Failed to update replicated policy...",
 				"Namespace", replicatedPlc.GetNamespace(), "Name", replicatedPlc.GetName())
 			return err
 		}
-		r.recorder.Event(instance, "Normal", "PolicyPropagation",
+		r.Recorder.Event(instance, "Normal", "PolicyPropagation",
 			fmt.Sprintf("Policy %s/%s was updated for cluster %s/%s", instance.GetNamespace(),
 				instance.GetName(), decision.ClusterNamespace, decision.ClusterName))
 	}
@@ -639,7 +639,7 @@ func policyHasTemplates(instance *policiesv1.Policy) bool {
 // templates and ensuring that the replicated-policies in cluster is updated only if there is a change.
 // this annotation is deleted from the replicated policies and not propagated to the cluster namespaces.
 
-func (r *ReconcilePolicy) processTemplates(replicatedPlc *policiesv1.Policy, decision appsv1.PlacementDecision, rootPlc *policiesv1.Policy) error {
+func (r *PolicyReconciler) processTemplates(replicatedPlc *policiesv1.Policy, decision appsv1.PlacementDecision, rootPlc *policiesv1.Policy) error {
 
 	reqLogger := log.WithValues("Policy-Namespace", rootPlc.GetNamespace(), "Policy-Name", rootPlc.GetName(), "Managed-Cluster", decision.ClusterName)
 	reqLogger.Info("Processing Templates..")
@@ -671,7 +671,7 @@ func (r *ReconcilePolicy) processTemplates(replicatedPlc *policiesv1.Policy, dec
 			err = k8serrors.NewBadRequest("Templates are restricted to only Configuration Policies")
 			log.Error(err, "Not a Configuration Policy")
 
-			r.recorder.Event(rootPlc, "Warning", "PolicyPropagation",
+			r.Recorder.Event(rootPlc, "Warning", "PolicyPropagation",
 				fmt.Sprintf("Policy %s/%s has templates but it is not a ConfigurationPolicy.", rootPlc.GetName(), rootPlc.GetNamespace()))
 
 			return err
@@ -688,7 +688,7 @@ func (r *ReconcilePolicy) processTemplates(replicatedPlc *policiesv1.Policy, dec
 		if tplErr != nil {
 			reqLogger.Error(tplErr, "Failed to resolve templates")
 
-			r.recorder.Event(rootPlc, "Warning", "PolicyPropagation",
+			r.Recorder.Event(rootPlc, "Warning", "PolicyPropagation",
 				fmt.Sprintf("Failed to resolve templates for cluster %s/%s: %s", decision.ClusterNamespace, decision.ClusterName, tplErr.Error()))
 			//Set an annotation on the policyTemplate(e.g. ConfigurationPolicy)  to the template processing error msg
 			//managed clusters will use this when creating a violation

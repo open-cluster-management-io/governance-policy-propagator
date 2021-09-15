@@ -3,14 +3,14 @@
 package automation
 
 import (
-	policyv1beta1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policy/v1beta1"
+	policyv1beta1 "github.com/open-cluster-management/governance-policy-propagator/api/v1beta1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 // we only want to watch for pb contains policy as subjects
-var configMapPredicateFuncs = predicate.Funcs{
+var policyAuomtationPredicateFuncs = predicate.Funcs{
 	UpdateFunc: func(e event.UpdateEvent) bool {
 		policyAutomationNew := e.ObjectNew.(*policyv1beta1.PolicyAutomation)
 		policyAutomationOld := e.ObjectOld.(*policyv1beta1.PolicyAutomation)

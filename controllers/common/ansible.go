@@ -6,12 +6,13 @@ import (
 	"context"
 	"encoding/json"
 
-	policyv1beta1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+
+	policyv1beta1 "github.com/open-cluster-management/governance-policy-propagator/api/v1beta1"
 )
 
 // CreateAnsibleJob creates ansiblejob with given PolicyAutomation
