@@ -4,7 +4,7 @@
 package v1
 
 import (
-	appsv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/apps/v1"
+	appsv1 "github.com/open-cluster-management/multicloud-operators-placementrule/pkg/apis/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -40,7 +40,7 @@ const (
 // PolicySpec defines the desired state of Policy
 type PolicySpec struct {
 	Disabled          bool              `json:"disabled"`
-	RemediationAction RemediationAction `json:"remediationAction,omitempty"` //enforce, inform
+	RemediationAction RemediationAction `json:"remediationAction,omitempty"` // Enforce, Inform
 	PolicyTemplates   []*PolicyTemplate `json:"policy-templates,omitempty"`
 }
 
@@ -90,7 +90,7 @@ type PolicyStatus struct {
 	Details         []*DetailsPerTemplate `json:"details,omitempty"`   // used by replicated policy
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+//+kubebuilder:object:root=true
 
 // Policy is the Schema for the policies API
 // +kubebuilder:subresource:status
@@ -107,7 +107,7 @@ type Policy struct {
 	Status PolicyStatus `json:"status,omitempty"`
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+//+kubebuilder:object:root=true
 
 // PolicyList contains a list of Policy
 type PolicyList struct {

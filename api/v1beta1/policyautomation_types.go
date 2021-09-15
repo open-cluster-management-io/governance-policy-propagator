@@ -1,3 +1,6 @@
+// Copyright (c) 2021 Red Hat, Inc.
+// Copyright Contributors to the Open Cluster Management project
+
 package v1beta1
 
 import (
@@ -44,7 +47,7 @@ type PolicyAutomationStatus struct {
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+//+kubebuilder:object:root=true
 
 // PolicyAutomation is the Schema for the policyautomations API
 // +kubebuilder:subresource:status
@@ -58,7 +61,7 @@ type PolicyAutomation struct {
 	Status PolicyAutomationStatus `json:"status,omitempty"`
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+//+kubebuilder:object:root=true
 
 // PolicyAutomationList contains a list of PolicyAutomation
 type PolicyAutomationList struct {

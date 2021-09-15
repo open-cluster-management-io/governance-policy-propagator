@@ -21,7 +21,7 @@ type PlacementBindingStatus struct {
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+//+kubebuilder:object:root=true
 
 // PlacementBinding is the Schema for the placementbindings API
 // +kubebuilder:subresource:status
@@ -36,7 +36,7 @@ type PlacementBinding struct {
 	Status       PlacementBindingStatus `json:"status,omitempty"`
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+//+kubebuilder:object:root=true
 
 // PlacementBindingList contains a list of PlacementBinding
 type PlacementBindingList struct {
