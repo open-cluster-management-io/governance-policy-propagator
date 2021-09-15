@@ -14,8 +14,8 @@ import (
 	"github.com/ghodss/yaml"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	appsv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/apps/v1"
-	clusterv1alpha1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/cluster/v1alpha1"
+	clusterv1alpha1 "github.com/open-cluster-management/api/cluster/v1alpha1"
+	appsv1 "github.com/open-cluster-management/multicloud-operators-placementrule/pkg/apis/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -37,9 +37,9 @@ func GeneratePlrStatus(clusters ...string) *appsv1.PlacementRuleStatus {
 
 // GeneratePldStatus generate pld status with given clusters
 func GeneratePldStatus(placementName string, placementNamespace string, clusters ...string) *clusterv1alpha1.PlacementDecisionStatus {
-	plrDecision := []clusterv1alpha1.Decision{}
+	plrDecision := []clusterv1alpha1.ClusterDecision{}
 	for _, cluster := range clusters {
-		plrDecision = append(plrDecision, clusterv1alpha1.Decision{
+		plrDecision = append(plrDecision, clusterv1alpha1.ClusterDecision{
 			ClusterName: cluster,
 			Reason:      "test",
 		})
