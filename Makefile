@@ -166,17 +166,17 @@ kind-bootstrap-cluster: kind-create-cluster install-crds kind-deploy-controller 
 .PHONY: kind-bootstrap-cluster-dev
 kind-bootstrap-cluster-dev: kind-create-cluster install-crds install-resources
 
-kind-deploy-controller: manifests kustomize
+kind-deploy-controller: manifests
 	@echo installing policy-propagator
 	kubectl create ns $(KIND_NAMESPACE)
-	kubectl apply -f deploy/ -n $(KIND_NAMESPACE)
+	kubectl apply -f deploy/operator.yaml -n $(KIND_NAMESPACE)
 
-kind-deploy-controller-dev: manifests kustomize
+kind-deploy-controller-dev: manifests
 	@echo Pushing image to KinD cluster
 	kind load docker-image $(REGISTRY)/$(IMG):$(TAG) --name $(KIND_NAME)
 	@echo Installing $(IMG)
 	kubectl create ns $(KIND_NAMESPACE)
-	kubectl apply -f deploy/ -n $(KIND_NAMESPACE)
+	kubectl apply -f deploy/operator.yaml -n $(KIND_NAMESPACE)
 	@echo "Patch deployment image"
 	kubectl patch deployment $(IMG) -n $(KIND_NAMESPACE) -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"$(IMG)\",\"imagePullPolicy\":\"Never\"}]}}}}"
 	kubectl patch deployment $(IMG) -n $(KIND_NAMESPACE) -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"$(IMG)\",\"image\":\"$(REGISTRY)/$(IMG):$(TAG)\"}]}}}}"
@@ -190,16 +190,16 @@ kind-create-cluster:
 kind-delete-cluster:
 	kind delete cluster --name $(KIND_NAME)
 
-install-crds: manifests kustomize
+install-crds: manifests
 	@echo installing crds
-	kubectl apply -f deploy/crds/apps.open-cluster-management.io_placementrules_crd.yaml
-	kubectl apply -f deploy/crds/policy.open-cluster-management.io_placementbindings_crd.yaml
-	kubectl apply -f deploy/crds/policy.open-cluster-management.io_policies_crd.yaml
-	kubectl apply -f deploy/crds/policy.open-cluster-management.io_policyautomations_crd.yaml
-	kubectl apply -f test/crds/cluster.open-cluster-management.io_managedclusters.yaml
-	kubectl apply -f test/crds/cluster.open-cluster-management.io_placementdecisions_crd.yaml
-	kubectl apply -f test/crds/cluster.open-cluster-management.io_placements_crd.yaml
-	kubectl apply -f test/crds/tower.ansible.com_joblaunch_crd.yaml
+	kubectl apply -f deploy/crds/policy.open-cluster-management.io_placementbindings.yaml
+	kubectl apply -f deploy/crds/policy.open-cluster-management.io_policies.yaml
+	kubectl apply -f deploy/crds/policy.open-cluster-management.io_policyautomations.yaml
+	kubectl apply -f https://raw.githubusercontent.com/open-cluster-management/multicloud-operators-placementrule/main/deploy/crds/apps.open-cluster-management.io_placementrules_crd.yaml
+	kubectl apply -f https://raw.githubusercontent.com/open-cluster-management/api/main/cluster/v1/0000_00_clusters.open-cluster-management.io_managedclusters.crd.yaml
+	kubectl apply -f https://raw.githubusercontent.com/open-cluster-management/api/main/cluster/v1alpha1/0000_03_clusters.open-cluster-management.io_placements.crd.yaml
+	kubectl apply -f https://raw.githubusercontent.com/open-cluster-management/api/main/cluster/v1alpha1/0000_04_clusters.open-cluster-management.io_placementdecisions.crd.yaml
+	kubectl apply -f deploy/crds/external/tower.ansible.com_joblaunch_crd.yaml
 
 install-resources:
 	@echo creating namespaces
@@ -240,11 +240,15 @@ CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=governance-policy-propagator paths="./..." output:crd:artifacts:config=deploy/crds output:rbac:artifacts:config=deploy/rbac
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+
+.PHONY: generate-operator-yaml
+generate-operator-yaml: kustomize manifests
+	$(KUSTOMIZE) build deploy/manager > deploy/operator.yaml
 
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
 controller-gen: ## Download controller-gen locally if necessary.
