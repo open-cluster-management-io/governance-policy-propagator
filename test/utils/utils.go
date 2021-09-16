@@ -231,8 +231,8 @@ func GetMetrics(metricPatterns ...string) []string {
 	propPodName := strings.Split(propPodInfo, " ")[0]
 
 	metricFilter := " | grep " + strings.Join(metricPatterns, " | grep ")
-	cmd := exec.Command("kubectl", "exec", "-n=open-cluster-management", propPodName,
-		"--", "bash", "-c", `curl localhost:8383/metrics`+metricFilter)
+	cmd := exec.Command("kubectl", "exec", "-n=open-cluster-management", propPodName, "-c",
+		"governance-policy-propagator", "--", "bash", "-c", `curl localhost:8383/metrics`+metricFilter)
 	matchingMetricsRaw, err := cmd.Output()
 	if err != nil {
 		if err.Error() == "exit status 1" {

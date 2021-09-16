@@ -156,7 +156,7 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 	}
 
 	reqLogger.Info("Policy was found in cluster namespace but doesn't belong to any root policy, deleting it...",
-		instance.GetNamespace(), "Name", instance.GetName())
+		"Namespace", instance.GetNamespace(), "Name", instance.GetName())
 	err = r.Delete(context.TODO(), instance)
 	if err != nil && !errors.IsNotFound(err) {
 		reqLogger.Error(err, "Failed to delete policy...", "Namespace", instance.GetNamespace(),
