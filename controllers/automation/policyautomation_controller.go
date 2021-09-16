@@ -68,9 +68,9 @@ type PolicyAutomationReconciler struct {
 func (r *PolicyAutomationReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 
-	// Fetch the ConfigMap instance
+	// Fetch the PolicyAutomation instance
 	policyAutomation := &policyv1beta1.PolicyAutomation{}
-	err := r.Get(context.TODO(), request.NamespacedName, policyAutomation)
+	err := r.Get(ctx, request.NamespacedName, policyAutomation)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Info("Automation was deleted, doing nothing...")
@@ -99,7 +99,7 @@ func (r *PolicyAutomationReconciler) Reconcile(ctx context.Context, request ctrl
 		}
 		// manual run suceeded, remove annotation
 		delete(policyAutomation.Annotations, "policy.open-cluster-management.io/rerun")
-		err = r.Update(context.TODO(), policyAutomation, &client.UpdateOptions{})
+		err = r.Update(ctx, policyAutomation, &client.UpdateOptions{})
 		if err != nil {
 			reqLogger.Error(err, "Failed to remove annotation `policy.open-cluster-management.io/rerun`...")
 			return reconcile.Result{}, err
@@ -111,7 +111,7 @@ func (r *PolicyAutomationReconciler) Reconcile(ctx context.Context, request ctrl
 		return reconcile.Result{}, nil
 	} else {
 		policy := &policyv1.Policy{}
-		err := r.Get(context.TODO(), types.NamespacedName{
+		err := r.Get(ctx, types.NamespacedName{
 			Name:      policyAutomation.Spec.PolicyRef,
 			Namespace: policyAutomation.GetNamespace(),
 		}, policy)
@@ -161,7 +161,7 @@ func (r *PolicyAutomationReconciler) Reconcile(ctx context.Context, request ctrl
 					return reconcile.Result{}, err
 				}
 				policyAutomation.Spec.Mode = "disabled"
-				err = r.Update(context.TODO(), policyAutomation, &client.UpdateOptions{})
+				err = r.Update(ctx, policyAutomation, &client.UpdateOptions{})
 				if err != nil {
 					reqLogger.Error(err, "Failed to update mode to disabled...")
 					return reconcile.Result{}, err

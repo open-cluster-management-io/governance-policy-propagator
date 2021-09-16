@@ -54,7 +54,7 @@ func (r *MetricReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 	// Need to know if the policy is a root policy to create the correct prometheus labels
 	// Can't try to use a label on the policy, because the policy might have been deleted.
 	clusterList := &clusterv1.ManagedClusterList{}
-	err := r.List(context.TODO(), clusterList, &client.ListOptions{})
+	err := r.List(ctx, clusterList, &client.ListOptions{})
 	if err != nil {
 		reqLogger.Error(err, "Failed to list clusters, going to retry...")
 		return reconcile.Result{}, err
@@ -86,7 +86,7 @@ func (r *MetricReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 	}
 
 	pol := &policiesv1.Policy{}
-	err = r.Get(context.TODO(), request.NamespacedName, pol)
+	err = r.Get(ctx, request.NamespacedName, pol)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Try to delete the gauge, but don't get hung up on errors. Log whether it was deleted.

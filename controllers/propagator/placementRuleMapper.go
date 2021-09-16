@@ -16,7 +16,7 @@ import (
 
 func placementRuleMapper(c client.Client) handler.MapFunc {
 	return func(object client.Object) []reconcile.Request {
-		// log.Info("Reconcile Request for PlacementRule %s in namespace %s", object.GetName(), object.GetNamespace())
+		log.Info("Reconcile Request for PlacementRule", "Name", object.GetName(), "Namespace", object.GetNamespace())
 		// list pb
 		pbList := &policiesv1.PlacementBindingList{}
 		// find pb in the same namespace of placementrule

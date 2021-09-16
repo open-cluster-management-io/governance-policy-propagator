@@ -89,14 +89,14 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 
 	// Fetch the Policy instance
 	instance := &policiesv1.Policy{}
-	err := r.Get(context.TODO(), request.NamespacedName, instance)
+	err := r.Get(ctx, request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected.
 			reqLogger.Info("Policy not found, may have been deleted, deleting replicated policies...")
 			replicatedPlcList := &policiesv1.PolicyList{}
-			err := r.List(context.TODO(), replicatedPlcList,
+			err := r.List(ctx, replicatedPlcList,
 				client.MatchingLabels(common.LabelsForRootPolicy(&policiesv1.Policy{
 					TypeMeta: metav1.TypeMeta{
 						Kind:       policiesv1.Kind,
@@ -116,7 +116,7 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 				reqLogger.Info("Deleting replicated policies...", "Namespace", plc.GetNamespace(),
 					"Name", plc.GetName())
 				// #nosec G601 -- no memory addresses are stored in collections
-				err := r.Delete(context.TODO(), &plc)
+				err := r.Delete(ctx, &plc)
 				if err != nil && !errors.IsNotFound(err) {
 					reqLogger.Error(err, "Failed to delete replicated policy...", "Namespace", plc.GetNamespace(),
 						"Name", plc.GetName())
@@ -131,7 +131,7 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 	}
 
 	clusterList := &clusterv1.ManagedClusterList{}
-	err = r.List(context.TODO(), clusterList, &client.ListOptions{})
+	err = r.List(ctx, clusterList, &client.ListOptions{})
 	if err != nil {
 		reqLogger.Error(err, "Failed to list cluster, going to retry...")
 		return reconcile.Result{}, err
@@ -157,7 +157,7 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 
 	reqLogger.Info("Policy was found in cluster namespace but doesn't belong to any root policy, deleting it...",
 		"Namespace", instance.GetNamespace(), "Name", instance.GetName())
-	err = r.Delete(context.TODO(), instance)
+	err = r.Delete(ctx, instance)
 	if err != nil && !errors.IsNotFound(err) {
 		reqLogger.Error(err, "Failed to delete policy...", "Namespace", instance.GetNamespace(),
 			"Name", instance.GetName())
