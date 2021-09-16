@@ -221,7 +221,7 @@ e2e-debug:
 	kubectl get all -n $(KIND_NAMESPACE)
 	kubectl get Policy.policy.open-cluster-management.io --all-namespaces
 	kubectl describe pods -n $(KIND_NAMESPACE)
-	kubectl logs $$(kubectl get pods -n $(KIND_NAMESPACE) -o name | grep $(IMG)) -n $(KIND_NAMESPACE)
+	kubectl logs $$(kubectl get pods -n $(KIND_NAMESPACE) -o name | grep $(IMG)) -n $(KIND_NAMESPACE) -c governance-policy-propagator
 
 ############################################################
 # e2e test coverage

@@ -43,7 +43,7 @@ func TestInitializeAttempts(t *testing.T) {
 				Initialize(&rest.Config{}, &k8sInterface)
 
 				if attempts != test.expected {
-					t.Fatalf("Expected attempts=%d, got %d", attempts, test.expected)
+					t.Fatalf("Expected attempts=%d, got %d", test.expected, attempts)
 				}
 			},
 		)
@@ -82,7 +82,7 @@ func TestInitializeRequeueErrorDelay(t *testing.T) {
 				Initialize(&rest.Config{}, &k8sInterface)
 
 				if requeueErrorDelay != test.expected {
-					t.Fatalf("Expected requeueErrorDelay=%d, got %d", attempts, test.expected)
+					t.Fatalf("Expected requeueErrorDelay=%d, got %d", test.expected, attempts)
 				}
 			},
 		)
