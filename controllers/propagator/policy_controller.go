@@ -34,6 +34,7 @@ var log = logf.Log.WithName(ControllerName)
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies/finalizers,verbs=update
+//+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=placementbindings,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=cluster.open-cluster-management.io,resources=managedclusters;placementdecisions;placements,verbs=get;list;watch
 //+kubebuilder:rbac:groups=apps.open-cluster-management.io,resources=placementrules,verbs=get;list;watch
 //+kubebuilder:rbac:groups=core,resources=events,verbs=get;list;watch;create;update;patch;delete
@@ -44,6 +45,12 @@ var log = logf.Log.WithName(ControllerName)
 func (r *PolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerName).
+		For(
+			&policiesv1.Policy{},
+			builder.WithPredicates(common.NeverEnqueue)).
+		// This is a workaround - the controller-runtime requires a "For", but does not allow it to
+		// modify the eventhandler. Currently we need to enqueue requests for Policies in a very
+		// particular way, so we will define that in a separate "Watches"
 		Watches(
 			&source.Kind{Type: &policiesv1.Policy{}},
 			&common.EnqueueRequestsFromMapFunc{ToRequests: policyMapper(mgr.GetClient())}).

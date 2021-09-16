@@ -8,6 +8,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 var _ handler.EventHandler = &EnqueueRequestsFromMapFunc{}
@@ -45,3 +46,5 @@ func (e *EnqueueRequestsFromMapFunc) mapAndEnqueue(q workqueue.RateLimitingInter
 		q.Add(req)
 	}
 }
+
+var NeverEnqueue = predicate.NewPredicateFuncs(func(o client.Object) bool { return false })

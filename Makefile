@@ -131,10 +131,10 @@ test-dependencies:
 ############################################################
 
 build: generate fmt
-	@build/common/scripts/gobuild.sh build/_output/bin/$(IMG) ./cmd/manager
+	@build/common/scripts/gobuild.sh build/_output/bin/$(IMG) main.go
 
 local: generate fmt
-	@GOOS=darwin build/common/scripts/gobuild.sh build/_output/bin/$(IMG) ./cmd/manager
+	@GOOS=darwin build/common/scripts/gobuild.sh build/_output/bin/$(IMG) main.go
 
 ############################################################
 # images section

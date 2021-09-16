@@ -42,9 +42,8 @@ func (r *PolicyAutomationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&source.Kind{Type: &policyv1.Policy{}},
 			&common.EnqueueRequestsFromMapFunc{ToRequests: policyMapper(mgr.GetClient())},
 			builder.WithPredicates(policyPredicateFuncs)).
-		Watches(
-			&source.Kind{Type: &policyv1beta1.PolicyAutomation{}},
-			&common.EnqueueRequestsFromMapFunc{ToRequests: policyAutomationMapper(mgr.GetClient())},
+		For(
+			&policyv1beta1.PolicyAutomation{},
 			builder.WithPredicates(policyAuomtationPredicateFuncs)).
 		Complete(r)
 }
@@ -79,6 +78,12 @@ func (r *PolicyAutomationReconciler) Reconcile(ctx context.Context, request ctrl
 		}
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
+	}
+
+	if policyAutomation.Spec.PolicyRef == "" {
+		reqLogger.Info("No policyRef in PolicyAutomation... ignoring it...",
+			"Namespace", policyAutomation.GetNamespace(), "Name", policyAutomation.GetName())
+		return reconcile.Result{}, nil
 	}
 
 	reqLogger = log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name,
