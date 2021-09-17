@@ -5,7 +5,6 @@ package propagator
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -23,7 +22,9 @@ import (
 	"github.com/open-cluster-management/governance-policy-propagator/pkg/controller/common"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -560,10 +561,9 @@ func (r *ReconcilePolicy) handleDecision(instance *policiesv1.Policy, decision a
 			// template processor
 			if policyHasTemplates(instance) {
 				//resolve hubTemplate before replicating
-				err = r.processTemplates(replicatedPlc, decision, instance)
-				if err != nil {
-					return err
-				}
+				//any errors are logged and recorded in the processTemplates call but ignored
+				//status will be  handled appropriately by the policycontrollers on managedcluster
+				r.processTemplates(replicatedPlc, decision, instance)
 			}
 
 			reqLogger.Info("Creating replicated policy...", "Namespace", decision.ClusterNamespace,
@@ -587,16 +587,17 @@ func (r *ReconcilePolicy) handleDecision(instance *policiesv1.Policy, decision a
 		}
 
 	}
+
 	// replicated policy already created, need to compare and patch
 	comparePlc := instance
 	if policyHasTemplates(instance) {
 		//template delimis detected, build a temp holder policy with templates resolved
 		//before doing a compare with the replicated policy in the cluster namespaces
 		tempResolvedPlc := instance.DeepCopy()
-		tmplErr := r.processTemplates(tempResolvedPlc, decision, instance)
-		if tmplErr != nil {
-			return tmplErr
-		}
+		//resolve hubTemplate before replicating
+		//any errors are logged and recorded in the processTemplates call but ignored
+		//status will be  handled appropriately by the policycontrollers on managedcluster
+		r.processTemplates(tempResolvedPlc, decision, instance)
 		comparePlc = tempResolvedPlc
 	}
 
@@ -639,6 +640,14 @@ func (r *ReconcilePolicy) processTemplates(replicatedPlc *policiesv1.Policy, dec
 	reqLogger := log.WithValues("Policy-Namespace", rootPlc.GetNamespace(), "Policy-Name", rootPlc.GetName(), "Managed-Cluster", decision.ClusterName)
 	reqLogger.Info("Processing Templates..")
 
+	//clear the trigger-update annotation, its only for the root policy shouldnt be in  replicated policies
+	//as it will cause an unnecessary update to the managed clusters
+	annotations := replicatedPlc.GetAnnotations()
+	if _, ok := annotations["policy.open-cluster-management.io/trigger-update"]; ok {
+		delete(annotations, "policy.open-cluster-management.io/trigger-update")
+		replicatedPlc.SetAnnotations(annotations)
+	}
+
 	templateCfg.LookupNamespace = rootPlc.GetNamespace()
 	tmplResolver, err := templates.NewResolver(kubeClient, kubeConfig, templateCfg)
 	if err != nil {
@@ -676,7 +685,29 @@ func (r *ReconcilePolicy) processTemplates(replicatedPlc *policiesv1.Policy, dec
 			reqLogger.Error(tplErr, "Failed to resolve templates")
 
 			r.recorder.Event(rootPlc, "Warning", "PolicyPropagation",
-				fmt.Sprintf("Failed to resolve templates for policy %s/%s for cluster %s/%s .", rootPlc.GetName(), rootPlc.GetNamespace(), decision.ClusterNamespace, decision.ClusterName))
+				fmt.Sprintf("Failed to resolve templates for cluster %s/%s: %s", decision.ClusterNamespace, decision.ClusterName, tplErr.Error()))
+			//Set an annotation on the policyTemplate(e.g. ConfigurationPolicy)  to the template processing error msg
+			//managed clusters will use this when creating a violation
+			policyTObjectUnstructured := &unstructured.Unstructured{}
+			jsonErr := json.Unmarshal(policyT.ObjectDefinition.Raw, policyTObjectUnstructured)
+			if jsonErr != nil {
+				//it shouldnt get here but if it did just log a msg
+				//its alright, a generic msg will be used on the managedcluster
+				reqLogger.Error(jsonErr, fmt.Sprintf("Error unmarshalling to json for Policy %s, Cluster %s.", rootPlc.GetName(), decision.ClusterName))
+			} else {
+				policyTAnnotations := policyTObjectUnstructured.GetAnnotations()
+				if policyTAnnotations == nil {
+					policyTAnnotations = make(map[string]string)
+				}
+				policyTAnnotations["policy.open-cluster-management.io/hub-templates-error"] = tplErr.Error()
+				policyTObjectUnstructured.SetAnnotations(policyTAnnotations)
+				updatedPolicyT, jsonErr := json.Marshal(policyTObjectUnstructured)
+				if jsonErr != nil {
+					reqLogger.Error(jsonErr, fmt.Sprintf("Error unmarshalling to json for Policy %s, Cluster %s.", rootPlc.GetName(), decision.ClusterName))
+				} else {
+					policyT.ObjectDefinition.Raw = updatedPolicyT
+				}
+			}
 
 			return tplErr
 		}
@@ -684,14 +715,6 @@ func (r *ReconcilePolicy) processTemplates(replicatedPlc *policiesv1.Policy, dec
 		policyT.ObjectDefinition.Raw = resolveddata
 
 	}
-
-	//Also remove  the tempate processing annotation from the replicated policy
-	annotations := replicatedPlc.GetAnnotations()
-	if _, ok := annotations["policy.open-cluster-management.io/trigger-update"]; ok {
-		delete(annotations, "policy.open-cluster-management.io/trigger-update")
-		replicatedPlc.SetAnnotations(annotations)
-	}
-
 	return nil
 }
 
