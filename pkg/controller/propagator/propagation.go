@@ -562,9 +562,10 @@ func (r *ReconcilePolicy) handleDecision(instance *policiesv1.Policy, decision a
 			//do a quick check for any template delims in the policy before putting it through
 			// template processor
 			if policyHasTemplates(instance) {
-				//resolve hubTemplate before replicating
-				//any errors are logged and recorded in the processTemplates call but ignored
-				//status will be  handled appropriately by the policycontrollers on managedcluster
+				// resolve hubTemplate before replicating
+				// #nosec G104 -- any errors are logged and recorded in the processTemplates method,
+				// but the ignored status will be handled appropriately by the policy controllers on
+				// the managed cluster(s).
 				r.processTemplates(replicatedPlc, decision, instance)
 			}
 
@@ -597,8 +598,9 @@ func (r *ReconcilePolicy) handleDecision(instance *policiesv1.Policy, decision a
 		//before doing a compare with the replicated policy in the cluster namespaces
 		tempResolvedPlc := instance.DeepCopy()
 		//resolve hubTemplate before replicating
-		//any errors are logged and recorded in the processTemplates call but ignored
-		//status will be  handled appropriately by the policycontrollers on managedcluster
+		// #nosec G104 -- any errors are logged and recorded in the processTemplates method,
+		// but the ignored status will be handled appropriately by the policy controllers on
+		// the managed cluster(s).
 		r.processTemplates(tempResolvedPlc, decision, instance)
 		comparePlc = tempResolvedPlc
 	}
