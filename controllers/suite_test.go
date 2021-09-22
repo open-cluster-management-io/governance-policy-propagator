@@ -42,7 +42,11 @@ var _ = BeforeSuite(func() {
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "config", "crd", "bases")},
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "deploy", "crds", "policy.open-cluster-management.io_placementbindings.yaml"),
+			filepath.Join("..", "deploy", "crds", "policy.open-cluster-management.io_policies.yaml"),
+			filepath.Join("..", "deploy", "crds", "policy.open-cluster-management.io_policyautomations.yaml"),
+		},
 		ErrorIfCRDPathMissing: true,
 	}
 
