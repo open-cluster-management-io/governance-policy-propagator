@@ -109,6 +109,13 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - '*'
+  resources:
+  - '*'
+  verbs:
+  - get
+  - list
 
 ---
 kind: RoleBinding

@@ -28,3 +28,11 @@ spec:
                   Clustername: managed1
                   Clusterid: '{{ fromClusterClaim id.openshift.io }}'
                   Vlanid: 123
+                  indent-test: |
+                    Do.
+                    Or do not.
+                    There is no try.
+                  autoindent-test: |
+                    Do.
+                    Or do not.
+                    There is no try.

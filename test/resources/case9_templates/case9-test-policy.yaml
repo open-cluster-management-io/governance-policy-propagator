@@ -30,6 +30,10 @@ spec:
                   Clusterid: '{{ fromClusterClaim id.openshift.io }}'
                   Vlanid: |
                     '{{hub printf "%s-vlanid" .ManagedClusterName | fromConfigMap "policy-propagator-test" "case9-config"  | toInt hub}}'
+                  indent-test: |
+                    {{hub fromSecret "policy-propagator-test" "case9-secret" "saying" | base64dec | indent 4 hub}}
+                  autoindent-test: |
+                    {{hub fromSecret "policy-propagator-test" "case9-secret" "saying" | base64dec | autoindent hub}}
 ---
 apiVersion: policy.open-cluster-management.io/v1
 kind: PlacementBinding
@@ -63,3 +67,10 @@ metadata:
 data:
   managed1-vlanid: "123"
   managed2-vlanid: "456"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: case9-secret
+data:
+  saying: RG8uCk9yIGRvIG5vdC4KVGhlcmUgaXMgbm8gdHJ5Lgo=
