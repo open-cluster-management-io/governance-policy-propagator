@@ -235,7 +235,7 @@ spec:
               fieldPath: metadata.name
         - name: OPERATOR_NAME
           value: governance-policy-propagator
-        image: quay.io/open-cluster-management/governance-policy-propagator:latest-dev
+        image: quay.io/open-cluster-management/governance-policy-propagator:latest
         imagePullPolicy: Always
         name: governance-policy-propagator
         ports:
