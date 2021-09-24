@@ -212,7 +212,6 @@ github.com/go-openapi/validate v0.18.0/go.mod h1:Uh4HdOzKt19xGIGm1qHf/ofbX1YQ4Y+
 github.com/go-openapi/validate v0.19.2/go.mod h1:1tRCw7m3jtI8eNWEEliiAqUIcBztB2KDnRCRMUi7GTA=
 github.com/go-openapi/validate v0.19.5/go.mod h1:8DJv2CVJQ6kGNpFW6eV9N3JviE1C85nY1c2z52x1Gk4=
 github.com/go-stack/stack v1.8.0/go.mod h1:v0f6uXyyMGvRgIKkXu+yp6POWl0qKG85gN/melR3HDY=
-github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0 h1:p104kn46Q8WdvHunIJ9dAyjPVtrBPhSr3KT2yUst43I=
 github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0/go.mod h1:fyg7847qk6SyHyPtNmDHnmrv/HOrqktSC+C9fM+CJOE=
 github.com/gobuffalo/flect v0.1.5/go.mod h1:W3K3X9ksuZfir8f/LrfVtWmCDQFfayuylOJ7sz/Fj80=
 github.com/gogo/protobuf v1.1.1/go.mod h1:r8qH/GZQm5c6nD/R0oafs1akxWv10x8SbQlK7atdtwQ=
@@ -426,8 +425,8 @@ github.com/open-cluster-management/api v0.0.0-20200903203421-64b667f5455c/go.mod
 github.com/open-cluster-management/api v0.0.0-20210513122330-d76f10481f05/go.mod h1:ot+A1DWq+v1IV+e1S7nhIteYAmNByFgtazvzpoeAfRQ=
 github.com/open-cluster-management/api v0.0.0-20210527013639-a6845f2ebcb1 h1:AaFycHD9YOfFXe9C5VsYxKf4LKCXKSLZgK2DnFdHY4M=
 github.com/open-cluster-management/api v0.0.0-20210527013639-a6845f2ebcb1/go.mod h1:ot+A1DWq+v1IV+e1S7nhIteYAmNByFgtazvzpoeAfRQ=
-github.com/open-cluster-management/go-template-utils v1.2.2 h1:I0tYSJTJQFf2jDOnT9mexIRa1u2MEu7rF6rc6xJjR6M=
-github.com/open-cluster-management/go-template-utils v1.2.2/go.mod h1:+D8buOYN/VMVuTEd8WnnJQn+Z1oU4sT2OXbYZE+mIDk=
+github.com/open-cluster-management/go-template-utils v1.2.3 h1:eeSayCDXV0IJAJjr083yuIY95NSQmQSIgTqeJ44GO2g=
+github.com/open-cluster-management/go-template-utils v1.2.3/go.mod h1:+D8buOYN/VMVuTEd8WnnJQn+Z1oU4sT2OXbYZE+mIDk=
 github.com/open-cluster-management/klusterlet-addon-controller v0.0.0-20210303215539-1d12cebe6f19/go.mod h1:YWcjLe+zqmdqPFvwzASizCa8JdXe5briBgxoP+r3CRM=
 github.com/open-cluster-management/library-e2e-go v0.0.0-20200620112055-c80fc3c14997/go.mod h1:glvUOJg5EAb1Lq0OPcYhl57PJTxN2T5xuSfdV3Iab4Y=
 github.com/open-cluster-management/library-go v0.0.0-20200828173847-299c21e6c3fc/go.mod h1:X9KdKajEnrx6+LQSjo+61gLdk4Ntmwp+YEYD0CIJT7I=

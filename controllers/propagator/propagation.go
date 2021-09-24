@@ -49,7 +49,7 @@ func Initialize(kubeconfig *rest.Config, kubeclient *kubernetes.Interface) {
 	kubeClient = kubeclient
 	// Adding four spaces to the indentation makes the usage of `indent N` be from the logical
 	// starting point of the resource object wrapped in the ConfigurationPolicy.
-	templateCfg = templates.Config{AdditionalIndentation: 16, StartDelim: "{{hub", StopDelim: "hub}}"}
+	templateCfg = templates.Config{AdditionalIndentation: 8, StartDelim: "{{hub", StopDelim: "hub}}"}
 
 	attempts = getEnvVarPosInt(attemptsEnvName, attemptsDefault)
 	requeueErrorDelay = getEnvVarPosInt(requeueErrorDelayEnvName, requeueErrorDelayDefault)
