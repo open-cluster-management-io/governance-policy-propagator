@@ -130,7 +130,7 @@ test-dependencies:
 # build section
 ############################################################
 
-build: generate fmt
+build: fmt
 	@build/common/scripts/gobuild.sh build/_output/bin/$(IMG) main.go
 
 local: generate fmt
