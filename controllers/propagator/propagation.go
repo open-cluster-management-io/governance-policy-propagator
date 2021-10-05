@@ -644,9 +644,20 @@ func (r *PolicyReconciler) processTemplates(replicatedPlc *policiesv1.Policy, de
 	reqLogger := log.WithValues("Policy-Namespace", rootPlc.GetNamespace(), "Policy-Name", rootPlc.GetName(), "Managed-Cluster", decision.ClusterName)
 	reqLogger.Info("Processing Templates..")
 
+	annotations := replicatedPlc.GetAnnotations()
+
+	//if disable-templates annotations exists and is true, then exit without processing templates
+	if disable, ok := annotations["policy.open-cluster-management.io/disable-templates"]; ok {
+		reqLogger.Info("Disable annotations :" + disable)
+
+		if bool_disable, err := strconv.ParseBool(disable); err == nil && bool_disable {
+			reqLogger.Info("Detected Annotation to disable templates. Exiting template processing")
+			return nil
+		}
+	}
+
 	//clear the trigger-update annotation, its only for the root policy shouldnt be in  replicated policies
 	//as it will cause an unnecessary update to the managed clusters
-	annotations := replicatedPlc.GetAnnotations()
 	if _, ok := annotations["policy.open-cluster-management.io/trigger-update"]; ok {
 		delete(annotations, "policy.open-cluster-management.io/trigger-update")
 		replicatedPlc.SetAnnotations(annotations)
