@@ -13,6 +13,7 @@
 # limitations under the License.
 # Copyright Contributors to the Open Cluster Management project
 
+PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 
 # This repo is build in Travis-ci by default;
 # Override this variable in local env.
@@ -54,6 +55,8 @@ ifneq ($(KIND_VERSION), latest)
 else
 	KIND_ARGS =
 endif
+# KubeBuilder configuration
+KBVERSION := 2.3.1
 
 LOCAL_OS := $(shell uname)
 ifeq ($(LOCAL_OS),Linux)
@@ -119,7 +122,7 @@ lint: lint-all
 # test section
 ############################################################
 
-test:
+test: manifests generate fmt
 	go test ${TESTARGS} `go list ./... | grep -v test/e2e`
 
 test-dependencies:
@@ -131,11 +134,11 @@ test-dependencies:
 # build section
 ############################################################
 
-build:
-	@build/common/scripts/gobuild.sh build/_output/bin/$(IMG) ./cmd/manager
+build: fmt
+	@build/common/scripts/gobuild.sh build/_output/bin/$(IMG) main.go
 
-local:
-	@GOOS=darwin build/common/scripts/gobuild.sh build/_output/bin/$(IMG) ./cmd/manager
+local: generate fmt
+	@GOOS=darwin build/common/scripts/gobuild.sh build/_output/bin/$(IMG) main.go
 
 ############################################################
 # images section
@@ -167,17 +170,17 @@ kind-bootstrap-cluster: kind-create-cluster install-crds kind-deploy-controller 
 .PHONY: kind-bootstrap-cluster-dev
 kind-bootstrap-cluster-dev: kind-create-cluster install-crds install-resources
 
-kind-deploy-controller:
+kind-deploy-controller: manifests
 	@echo installing policy-propagator
 	kubectl get ns $(KIND_NAMESPACE) ; if [ $$? -ne 0 ] ; then kubectl create ns $(KIND_NAMESPACE) ; fi
-	kubectl apply -f deploy/ -n $(KIND_NAMESPACE)
+	kubectl apply -f deploy/operator.yaml -n $(KIND_NAMESPACE)
 
-kind-deploy-controller-dev:
+kind-deploy-controller-dev: manifests
 	@echo Pushing image to KinD cluster
 	kind load docker-image $(REGISTRY)/$(IMG):$(TAG) --name $(KIND_NAME)
 	@echo Installing $(IMG)
 	kubectl get ns $(KIND_NAMESPACE) ; if [ $$? -ne 0 ] ; then kubectl create ns $(KIND_NAMESPACE) ; fi
-	kubectl apply -f deploy/ -n $(KIND_NAMESPACE)
+	kubectl apply -f deploy/operator.yaml -n $(KIND_NAMESPACE)
 	@echo "Patch deployment image"
 	kubectl patch deployment $(IMG) -n $(KIND_NAMESPACE) -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"$(IMG)\",\"imagePullPolicy\":\"Never\"}]}}}}"
 	kubectl patch deployment $(IMG) -n $(KIND_NAMESPACE) -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"$(IMG)\",\"image\":\"$(REGISTRY)/$(IMG):$(TAG)\"}]}}}}"
@@ -191,16 +194,16 @@ kind-create-cluster:
 kind-delete-cluster:
 	kind delete cluster --name $(KIND_NAME)
 
-install-crds:
+install-crds: manifests
 	@echo installing crds
-	kubectl apply -f deploy/crds/apps.open-cluster-management.io_placementrules_crd.yaml
-	kubectl apply -f deploy/crds/policy.open-cluster-management.io_placementbindings_crd.yaml
-	kubectl apply -f deploy/crds/policy.open-cluster-management.io_policies_crd.yaml
-	kubectl apply -f deploy/crds/policy.open-cluster-management.io_policyautomations_crd.yaml
-	kubectl apply -f test/crds/cluster.open-cluster-management.io_managedclusters.yaml
-	kubectl apply -f test/crds/cluster.open-cluster-management.io_placementdecisions_crd.yaml
-	kubectl apply -f test/crds/cluster.open-cluster-management.io_placements_crd.yaml
-	kubectl apply -f test/crds/tower.ansible.com_joblaunch_crd.yaml
+	kubectl apply -f deploy/crds/policy.open-cluster-management.io_placementbindings.yaml
+	kubectl apply -f deploy/crds/policy.open-cluster-management.io_policies.yaml
+	kubectl apply -f deploy/crds/policy.open-cluster-management.io_policyautomations.yaml
+	kubectl apply -f https://raw.githubusercontent.com/open-cluster-management/multicloud-operators-placementrule/main/deploy/crds/apps.open-cluster-management.io_placementrules_crd.yaml
+	kubectl apply -f https://raw.githubusercontent.com/open-cluster-management/api/main/cluster/v1/0000_00_clusters.open-cluster-management.io_managedclusters.crd.yaml
+	kubectl apply -f https://raw.githubusercontent.com/open-cluster-management/api/main/cluster/v1alpha1/0000_03_clusters.open-cluster-management.io_placements.crd.yaml
+	kubectl apply -f https://raw.githubusercontent.com/open-cluster-management/api/main/cluster/v1alpha1/0000_04_clusters.open-cluster-management.io_placementdecisions.crd.yaml
+	kubectl apply -f deploy/crds/external/tower.ansible.com_joblaunch_crd.yaml
 
 install-resources:
 	@echo creating namespaces
@@ -215,14 +218,14 @@ e2e-test:
 	ginkgo -v --slowSpecThreshold=10 test/e2e
 
 e2e-dependencies:
-	go get github.com/onsi/ginkgo/ginkgo@v1.14.1
-	go get github.com/onsi/gomega/...@v1.10.1
+	go get github.com/onsi/ginkgo/ginkgo@v1.16.4
+	go get github.com/onsi/gomega/...@v1.13.0
 
 e2e-debug:
 	kubectl get all -n $(KIND_NAMESPACE)
 	kubectl get Policy.policy.open-cluster-management.io --all-namespaces
 	kubectl describe pods -n $(KIND_NAMESPACE)
-	kubectl logs $$(kubectl get pods -n $(KIND_NAMESPACE) -o name | grep $(IMG)) -n $(KIND_NAMESPACE)
+	kubectl logs $$(kubectl get pods -n $(KIND_NAMESPACE) -o name | grep $(IMG)) -n $(KIND_NAMESPACE) -c governance-policy-propagator
 
 ############################################################
 # e2e test coverage
@@ -235,3 +238,39 @@ run-instrumented:
 
 stop-instrumented:
 	ps -ef | grep 'govern' | grep -v grep | awk '{print $$2}' | xargs kill
+
+# Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
+CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
+
+.PHONY: manifests
+manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=governance-policy-propagator paths="./..." output:crd:artifacts:config=deploy/crds output:rbac:artifacts:config=deploy/rbac
+
+.PHONY: generate
+generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+
+.PHONY: generate-operator-yaml
+generate-operator-yaml: kustomize manifests
+	$(KUSTOMIZE) build deploy/manager > deploy/operator.yaml
+
+CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
+controller-gen: ## Download controller-gen locally if necessary.
+	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.6.1)
+
+KUSTOMIZE = $(shell pwd)/bin/kustomize
+kustomize: ## Download kustomize locally if necessary.
+	$(call go-get-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v3@v3.8.7)
+
+# go-get-tool will 'go get' any package $2 and install it to $1.
+define go-get-tool
+@[ -f $(1) ] || { \
+set -e ;\
+TMP_DIR=$$(mktemp -d) ;\
+cd $$TMP_DIR ;\
+go mod init tmp ;\
+echo "Downloading $(2)" ;\
+GOBIN=$(PROJECT_DIR)/bin go get $(2) ;\
+rm -rf $$TMP_DIR ;\
+}
+endef

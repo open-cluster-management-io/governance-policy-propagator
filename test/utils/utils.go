@@ -8,13 +8,14 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/ghodss/yaml"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	appsv1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/apps/v1"
-	clusterv1alpha1 "github.com/open-cluster-management/governance-policy-propagator/pkg/apis/cluster/v1alpha1"
+	clusterv1alpha1 "github.com/open-cluster-management/api/cluster/v1alpha1"
+	appsv1 "github.com/open-cluster-management/multicloud-operators-placementrule/pkg/apis/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -36,9 +37,9 @@ func GeneratePlrStatus(clusters ...string) *appsv1.PlacementRuleStatus {
 
 // GeneratePldStatus generate pld status with given clusters
 func GeneratePldStatus(placementName string, placementNamespace string, clusters ...string) *clusterv1alpha1.PlacementDecisionStatus {
-	plrDecision := []clusterv1alpha1.Decision{}
+	plrDecision := []clusterv1alpha1.ClusterDecision{}
 	for _, cluster := range clusters {
-		plrDecision = append(plrDecision, clusterv1alpha1.Decision{
+		plrDecision = append(plrDecision, clusterv1alpha1.ClusterDecision{
 			ClusterName: cluster,
 			Reason:      "test",
 		})
@@ -216,4 +217,38 @@ func KubectlWithOutput(args ...string) (string, error) {
 	output, err := exec.Command("kubectl", args...).CombinedOutput()
 	fmt.Println(string(output))
 	return string(output), err
+}
+
+// GetMetrics execs into the propagator pod and curls the metrics endpoint, filters
+// the response with the given patterns, and returns the value(s) for the matching
+// metric(s).
+func GetMetrics(metricPatterns ...string) []string {
+	propPodInfo, err := KubectlWithOutput("get", "pod", "-n=open-cluster-management",
+		"-l=name=governance-policy-propagator", "--no-headers")
+	if err != nil {
+		return []string{err.Error()}
+	}
+	propPodName := strings.Split(propPodInfo, " ")[0]
+
+	metricFilter := " | grep " + strings.Join(metricPatterns, " | grep ")
+	cmd := exec.Command("kubectl", "exec", "-n=open-cluster-management", propPodName, "-c",
+		"governance-policy-propagator", "--", "bash", "-c", `curl localhost:8383/metrics`+metricFilter)
+	matchingMetricsRaw, err := cmd.Output()
+	if err != nil {
+		if err.Error() == "exit status 1" {
+			return []string{} // exit 1 indicates that grep couldn't find a match.
+		}
+		return []string{err.Error()}
+	}
+
+	matchingMetrics := strings.Split(strings.TrimSpace(string(matchingMetricsRaw)), "\n")
+	values := make([]string, len(matchingMetrics))
+	for i, metric := range matchingMetrics {
+		fields := strings.Fields(metric)
+		if len(fields) > 0 {
+			values[i] = fields[len(fields)-1]
+		}
+	}
+
+	return values
 }
