@@ -38,8 +38,14 @@ const attemptsEnvName = "CONTROLLER_CONFIG_RETRY_ATTEMPTS"
 const requeueErrorDelayEnvName = "CONTROLLER_CONFIG_REQUEUE_ERROR_DELAY"
 const requeueErrorDelayDefault = 5
 
+// The configuration of the maximum number of Go routines to spawn when handling placement decisions
+// per policy.
+const concurrencyPerPolicyEnvName = "CONTROLLER_CONFIG_CONCURRENCY_PER_POLICY"
+const concurrencyPerPolicyDefault = 5
+
 var attempts int
 var requeueErrorDelay int
+var concurrencyPerPolicy int
 var kubeConfig *rest.Config
 var kubeClient *kubernetes.Interface
 var templateCfg templates.Config
@@ -57,6 +63,7 @@ func Initialize(kubeconfig *rest.Config, kubeclient *kubernetes.Interface) {
 
 	attempts = getEnvVarPosInt(attemptsEnvName, attemptsDefault)
 	requeueErrorDelay = getEnvVarPosInt(requeueErrorDelayEnvName, requeueErrorDelayDefault)
+	concurrencyPerPolicy = getEnvVarPosInt(concurrencyPerPolicyEnvName, concurrencyPerPolicyDefault)
 }
 
 func getEnvVarPosInt(name string, defaultValue int) int {
@@ -120,8 +127,76 @@ func (r *PolicyReconciler) cleanUpPolicy(instance *policiesv1.Policy) error {
 	return nil
 }
 
+// handleDecision(instance *policiesv1.Policy, decision appsv1.PlacementDecision)
+type decisionHandler interface {
+	handleDecision(instance *policiesv1.Policy, decision appsv1.PlacementDecision) error
+}
+
+// decisionResult contains the result of handling a placement decision of a policy. It is intended
+// to be sent in a channel by handleDecisionWrapper for the calling Go routine to determine if the
+// processing was successful. Identifier is a string in the format of
+// <cluster namespace>/<cluster name>. Err is the error associated with handling the decision. This
+// can be nil to denote success.
+type decisionResult struct {
+	Identifier string
+	Err        error
+}
+
+// handleDecisionWrapper wraps the handleDecision method for concurrency. decisionHandler is an
+// object with the handleDecision method. This is used instead of making this a method on the
+// PolicyReconciler struct in order for easier unit testing. instance is the policy the placement
+// decision is about. decisions is the channel with the placement decisions for the input policy to
+// process. When this channel closes, it means that all decisions have been processed. results is a
+// channel this method will send the outcome of handling each placement decision. The calling Go
+// routine can use this to determine success.
+func handleDecisionWrapper(
+	decisionHandler decisionHandler,
+	instance *policiesv1.Policy,
+	decisions <-chan appsv1.PlacementDecision,
+	results chan<- decisionResult,
+) {
+	for decision := range decisions {
+		reqLogger := log.WithValues(
+			"Policy-Namespace", instance.GetNamespace(), "Policy-Name", instance.GetName(),
+		)
+		identifier := fmt.Sprintf("%s/%s", decision.ClusterNamespace, decision.ClusterName)
+		reqLogger.Info(
+			fmt.Sprintf("Handling the decision for %s", identifier),
+		)
+
+		instanceCopy := *instance.DeepCopy()
+		err := retry.Do(
+			func() error {
+				return decisionHandler.handleDecision(&instanceCopy, decision)
+			},
+			getRetryOptions(reqLogger, "Retrying to replicate the policy")...,
+		)
+
+		if err == nil {
+			reqLogger.Info(
+				fmt.Sprintf(
+					"Replicated the policy %s/%s...",
+					decision.ClusterNamespace,
+					common.FullNameForPolicy(instance),
+				),
+			)
+		} else {
+			reqLogger.Info(
+				fmt.Sprintf(
+					"Giving up on replicating the policy %s/%s",
+					decision.ClusterNamespace,
+					common.FullNameForPolicy(instance),
+				),
+			)
+		}
+
+		results <- decisionResult{identifier, err}
+	}
+}
+
 // handleDecisions will get all the placement decisions based on the input policy and placement
-// binding list and propagate the policy. It returns the following:
+// binding list and propagate the policy. Note that this method performs concurrent operations.
+// It returns the following:
 // * placements - a slice of all the placement decisions discovered
 // * allDecisions - a set of all the placement decisions encountered in the format of
 //   <namespace>/<name>
@@ -169,30 +244,61 @@ func (r *PolicyReconciler) handleDecisions(
 				// Only handle the first match in pb.spec.subjects
 				break
 			}
-			// Only handle replicated policies when the policy is not disabled
-			// plr found, checking decision
-			for _, decision := range decisions {
-				key := fmt.Sprintf("%s/%s", decision.ClusterNamespace, decision.ClusterName)
-				allDecisions[key] = true
-				// create/update replicated policy for each decision
-				err := retry.Do(
-					func() error {
-						return r.handleDecision(instance, decision)
-					},
-					getRetryOptions(reqLogger, "Retrying to replicate the policy...")...,
-				)
 
-				if err != nil {
-					reqLogger.Info(
-						fmt.Sprintf(
-							"Giving up on replicating the policy %s/%s...",
-							decision.ClusterNamespace,
-							common.FullNameForPolicy(instance),
-						),
-					)
-					failedClusters[key] = true
+			if len(decisions) == 0 {
+				reqLogger.Info("No decisions to process on this policy")
+				break
+			}
+
+			// Setup the workers which will call r.handleDecision. The number of workers depends
+			// on the number of decisions and the limit defined in concurrencyPerPolicy.
+			// decisionsChan acts as the work queue of decisions to process. resultsChan contains
+			// the results from the decisions being processed.
+			decisionsChan := make(chan appsv1.PlacementDecision, len(decisions))
+			resultsChan := make(chan decisionResult, len(decisions))
+			var numWorkers int
+			if len(decisions) > concurrencyPerPolicy {
+				numWorkers = concurrencyPerPolicy
+			} else {
+				numWorkers = len(decisions)
+			}
+
+			for i := 0; i < numWorkers; i++ {
+				go handleDecisionWrapper(r, instance, decisionsChan, resultsChan)
+			}
+
+			for _, decision := range decisions {
+				reqLogger.Info(
+					fmt.Sprintf(
+						`Scheduling work to handle the decision for the cluster "%v"`,
+						decision.ClusterName,
+					),
+				)
+				decisionsChan <- decision
+			}
+
+			// Wait for all the decisions to be processed.
+			reqLogger.Info(
+				fmt.Sprintf("Waiting for the result of handling %d decision(s)", len(decisions)),
+			)
+			processedResults := 0
+			for result := range resultsChan {
+				allDecisions[result.Identifier] = true
+				if result.Err != nil {
+					failedClusters[result.Identifier] = true
+				}
+
+				processedResults++
+
+				// Once all the decisions have been processed, it's safe to close
+				// the channels and stop blocking in this goroutine.
+				if processedResults == len(decisions) {
+					close(decisionsChan)
+					close(resultsChan)
+					reqLogger.Info("All decisions have been handled")
 				}
 			}
+
 			// Only handle the first match in pb.spec.subjects
 			break
 		}
