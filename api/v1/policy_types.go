@@ -10,6 +10,7 @@ import (
 )
 
 // RemediationAction describes weather to enforce or inform
+// +kubebuilder:validation:Enum=Inform;inform;Enforce;enforce
 type RemediationAction string
 
 const (
@@ -23,7 +24,7 @@ const (
 //PolicyTemplate template for custom security policy
 type PolicyTemplate struct {
 	// +kubebuilder:pruning:PreserveUnknownFields
-	ObjectDefinition runtime.RawExtension `json:"objectDefinition,omitempty"`
+	ObjectDefinition runtime.RawExtension `json:"objectDefinition"`
 }
 
 // ComplianceState shows the state of enforcement
@@ -41,7 +42,7 @@ const (
 type PolicySpec struct {
 	Disabled          bool              `json:"disabled"`
 	RemediationAction RemediationAction `json:"remediationAction,omitempty"` // Enforce, Inform
-	PolicyTemplates   []*PolicyTemplate `json:"policy-templates,omitempty"`
+	PolicyTemplates   []*PolicyTemplate `json:"policy-templates"`
 }
 
 // PlacementDecision defines the decision made by controller
@@ -101,9 +102,9 @@ type PolicyStatus struct {
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type Policy struct {
 	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.ObjectMeta `json:"metadata"`
 
-	Spec   PolicySpec   `json:"spec,omitempty"`
+	Spec   PolicySpec   `json:"spec"`
 	Status PolicyStatus `json:"status,omitempty"`
 }
 
