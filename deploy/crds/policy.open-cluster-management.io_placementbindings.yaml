@@ -39,11 +39,18 @@ spec:
             description: Subject reference
             properties:
               apiGroup:
+                minLength: 1
                 type: string
               kind:
+                minLength: 1
                 type: string
               name:
+                minLength: 1
                 type: string
+            required:
+            - apiGroup
+            - kind
+            - name
             type: object
           status:
             description: PlacementBindingStatus defines the observed state of PlacementBinding
@@ -53,13 +60,23 @@ spec:
               description: Subject reference
               properties:
                 apiGroup:
+                  minLength: 1
                   type: string
                 kind:
+                  minLength: 1
                   type: string
                 name:
+                  minLength: 1
                   type: string
+              required:
+              - apiGroup
+              - kind
+              - name
               type: object
             type: array
+        required:
+        - placementRef
+        - subjects
         type: object
     served: true
     storage: true

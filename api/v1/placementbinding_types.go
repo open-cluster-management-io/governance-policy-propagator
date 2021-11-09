@@ -9,9 +9,15 @@ import (
 
 // Subject reference
 type Subject struct {
-	APIGroup string `json:"apiGroup,omitempty"`
-	Kind     string `json:"kind,omitempty"`
-	Name     string `json:"name,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	APIGroup string `json:"apiGroup"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Kind string `json:"kind"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
 }
 
 // PlacementBindingStatus defines the observed state of PlacementBinding
@@ -30,10 +36,11 @@ type PlacementBindingStatus struct {
 type PlacementBinding struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	PlacementRef Subject                `json:"placementRef,omitempty"`
-	Subjects     []Subject              `json:"subjects,omitempty"`
-	Status       PlacementBindingStatus `json:"status,omitempty"`
+	// +kubebuilder:validation:Required
+	PlacementRef Subject `json:"placementRef"`
+	// +kubebuilder:validation:Required
+	Subjects []Subject              `json:"subjects"`
+	Status   PlacementBindingStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
