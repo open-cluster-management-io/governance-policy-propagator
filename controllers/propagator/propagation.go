@@ -53,7 +53,7 @@ var templateCfg templates.Config
 func Initialize(kubeconfig *rest.Config, kubeclient *kubernetes.Interface) {
 	kubeConfig = kubeconfig
 	kubeClient = kubeclient
-	// Adding four spaces to the indentation makes the usage of `indent N` be from the logical
+	// Adding eight spaces to the indentation makes the usage of `indent N` be from the logical
 	// starting point of the resource object wrapped in the ConfigurationPolicy.
 	templateCfg = templates.Config{
 		AdditionalIndentation: 8,
