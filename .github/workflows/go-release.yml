@@ -9,6 +9,9 @@ env:
   GO_VERSION: '1.16'
   TAG: ${{ github.ref_name }}
   RELEASE_VERSION: ${{ github.ref_name }}
+defaults:
+  run:
+    working-directory: go/src/open-cluster-management.io/governance-policy-propagator
 
 jobs:
   release:
@@ -19,7 +22,7 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 1
-          path: governance-policy-propagator
+          path: go/src/open-cluster-management.io/governance-policy-propagator
       - name: install Go
         uses: actions/setup-go@v2
         with:
