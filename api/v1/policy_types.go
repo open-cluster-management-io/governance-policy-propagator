@@ -21,7 +21,7 @@ const (
 	Inform RemediationAction = "Inform"
 )
 
-//PolicyTemplate template for custom security policy
+// PolicyTemplate template for custom security policy
 type PolicyTemplate struct {
 	// +kubebuilder:pruning:PreserveUnknownFields
 	ObjectDefinition runtime.RawExtension `json:"objectDefinition"`

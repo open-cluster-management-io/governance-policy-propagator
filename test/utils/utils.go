@@ -32,11 +32,14 @@ func GeneratePlrStatus(clusters ...string) *appsv1.PlacementRuleStatus {
 			ClusterNamespace: cluster,
 		})
 	}
+
 	return &appsv1.PlacementRuleStatus{Decisions: plrDecision}
 }
 
 // GeneratePldStatus generate pld status with given clusters
-func GeneratePldStatus(placementName string, placementNamespace string, clusters ...string) *clusterv1alpha1.PlacementDecisionStatus {
+func GeneratePldStatus(
+	placementName string, placementNamespace string, clusters ...string,
+) *clusterv1alpha1.PlacementDecisionStatus {
 	plrDecision := []clusterv1alpha1.ClusterDecision{}
 	for _, cluster := range clusters {
 		plrDecision = append(plrDecision, clusterv1alpha1.ClusterDecision{
@@ -44,6 +47,7 @@ func GeneratePldStatus(placementName string, placementNamespace string, clusters
 			Reason:      "test",
 		})
 	}
+
 	return &clusterv1alpha1.PlacementDecisionStatus{Decisions: plrDecision}
 }
 
@@ -52,6 +56,7 @@ func Pause(s uint) {
 	if s < 1 {
 		s = 1
 	}
+
 	time.Sleep(time.Duration(float64(s)) * time.Second)
 }
 
@@ -59,13 +64,16 @@ func Pause(s uint) {
 func ParseYaml(file string) *unstructured.Unstructured {
 	yamlFile, err := ioutil.ReadFile(file)
 	Expect(err).To(BeNil())
+
 	yamlPlc := &unstructured.Unstructured{}
 	err = yaml.Unmarshal(yamlFile, yamlPlc)
 	Expect(err).To(BeNil())
+
 	return yamlPlc
 }
 
-// GetClusterLevelWithTimeout keeps polling to get the object for timeout seconds until wantFound is met (true for found, false for not found)
+// GetClusterLevelWithTimeout keeps polling to get the object for timeout seconds until wantFound is met
+// (true for found, false for not found)
 func GetClusterLevelWithTimeout(
 	clientHubDynamic dynamic.Interface,
 	gvr schema.GroupVersionResource,
@@ -76,30 +84,38 @@ func GetClusterLevelWithTimeout(
 	if timeout < 1 {
 		timeout = 1
 	}
+
 	var obj *unstructured.Unstructured
 
 	Eventually(func() error {
 		var err error
 		namespace := clientHubDynamic.Resource(gvr)
+
 		obj, err = namespace.Get(context.TODO(), name, metav1.GetOptions{})
 		if wantFound && err != nil {
 			return err
 		}
+
 		if !wantFound && err == nil {
 			return fmt.Errorf("expected to return IsNotFound error")
 		}
+
 		if !wantFound && err != nil && !errors.IsNotFound(err) {
 			return err
 		}
+
 		return nil
 	}, timeout, 1).Should(BeNil())
+
 	if wantFound {
 		return obj
 	}
+
 	return nil
 }
 
-// GetWithTimeout keeps polling to get the object for timeout seconds until wantFound is met (true for found, false for not found)
+// GetWithTimeout keeps polling to get the object for timeout seconds until wantFound is met
+// (true for found, false for not found)
 func GetWithTimeout(
 	clientHubDynamic dynamic.Interface,
 	gvr schema.GroupVersionResource,
@@ -110,31 +126,38 @@ func GetWithTimeout(
 	if timeout < 1 {
 		timeout = 1
 	}
+
 	var obj *unstructured.Unstructured
 
 	Eventually(func() error {
 		var err error
 		namespace := clientHubDynamic.Resource(gvr).Namespace(namespace)
+
 		obj, err = namespace.Get(context.TODO(), name, metav1.GetOptions{})
 		if wantFound && err != nil {
 			return err
 		}
+
 		if !wantFound && err == nil {
 			return fmt.Errorf("expected to return IsNotFound error")
 		}
+
 		if !wantFound && err != nil && !errors.IsNotFound(err) {
 			return err
 		}
+
 		return nil
 	}, timeout, 1).Should(BeNil())
+
 	if wantFound {
 		return obj
 	}
-	return nil
 
+	return nil
 }
 
-// ListWithTimeout keeps polling to list the object for timeout seconds until wantFound is met (true for found, false for not found)
+// ListWithTimeout keeps polling to list the object for timeout seconds until wantFound is met
+// (true for found, false for not found)
 func ListWithTimeout(
 	clientHubDynamic dynamic.Interface,
 	gvr schema.GroupVersionResource,
@@ -146,29 +169,33 @@ func ListWithTimeout(
 	if timeout < 1 {
 		timeout = 1
 	}
+
 	var list *unstructured.UnstructuredList
 
 	Eventually(func() error {
 		var err error
 		list, err = clientHubDynamic.Resource(gvr).List(context.TODO(), opts)
+
 		if err != nil {
 			return err
-		} else {
-			if len(list.Items) != size {
-				return fmt.Errorf("list size doesn't match, expected %d actual %d", size, len(list.Items))
-			} else {
-				return nil
-			}
 		}
+
+		if len(list.Items) != size {
+			return fmt.Errorf("list size doesn't match, expected %d actual %d", size, len(list.Items))
+		}
+
+		return nil
 	}, timeout, 1).Should(BeNil())
+
 	if wantFound {
 		return list
 	}
-	return nil
 
+	return nil
 }
 
-// ListWithTimeoutByNamespace keeps polling to list the object for timeout seconds until wantFound is met (true for found, false for not found)
+// ListWithTimeoutByNamespace keeps polling to list the object for timeout seconds until wantFound is met
+// (true for found, false for not found)
 func ListWithTimeoutByNamespace(
 	clientHubDynamic dynamic.Interface,
 	gvr schema.GroupVersionResource,
@@ -181,31 +208,35 @@ func ListWithTimeoutByNamespace(
 	if timeout < 1 {
 		timeout = 1
 	}
+
 	var list *unstructured.UnstructuredList
 
 	Eventually(func() error {
 		var err error
 		list, err = clientHubDynamic.Resource(gvr).Namespace(ns).List(context.TODO(), opts)
+
 		if err != nil {
 			return err
-		} else {
-			if len(list.Items) != size {
-				return fmt.Errorf("list size doesn't match, expected %d actual %d", size, len(list.Items))
-			} else {
-				return nil
-			}
 		}
+
+		if len(list.Items) != size {
+			return fmt.Errorf("list size doesn't match, expected %d actual %d", size, len(list.Items))
+		}
+
+		return nil
 	}, timeout, 1).Should(BeNil())
+
 	if wantFound {
 		return list
 	}
-	return nil
 
+	return nil
 }
 
 // Kubectl execute kubectl cli
 func Kubectl(args ...string) {
 	cmd := exec.Command("kubectl", args...)
+
 	err := cmd.Start()
 	if err != nil {
 		Fail(fmt.Sprintf("Error: %v", err))
@@ -215,7 +246,9 @@ func Kubectl(args ...string) {
 // KubectlWithOutput execute kubectl cli and return output and error
 func KubectlWithOutput(args ...string) (string, error) {
 	output, err := exec.Command("kubectl", args...).CombinedOutput()
+	// nolint: forbidigo
 	fmt.Println(string(output))
+
 	return string(output), err
 }
 
@@ -228,21 +261,25 @@ func GetMetrics(metricPatterns ...string) []string {
 	if err != nil {
 		return []string{err.Error()}
 	}
+
 	propPodName := strings.Split(propPodInfo, " ")[0]
 
 	metricFilter := " | grep " + strings.Join(metricPatterns, " | grep ")
 	cmd := exec.Command("kubectl", "exec", "-n=open-cluster-management", propPodName, "-c",
 		"governance-policy-propagator", "--", "bash", "-c", `curl localhost:8383/metrics`+metricFilter)
+
 	matchingMetricsRaw, err := cmd.Output()
 	if err != nil {
 		if err.Error() == "exit status 1" {
 			return []string{} // exit 1 indicates that grep couldn't find a match.
 		}
+
 		return []string{err.Error()}
 	}
 
 	matchingMetrics := strings.Split(strings.TrimSpace(string(matchingMetricsRaw)), "\n")
 	values := make([]string, len(matchingMetrics))
+
 	for i, metric := range matchingMetrics {
 		fields := strings.Fields(metric)
 		if len(fields) > 0 {

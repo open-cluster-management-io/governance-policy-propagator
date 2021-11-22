@@ -5,14 +5,17 @@ package common
 
 import (
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
-	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/api/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
+
+	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/api/v1"
 )
 
-const APIGroup string = "policy.open-cluster-management.io"
-const ClusterNameLabel string = APIGroup + "/cluster-name"
-const ClusterNamespaceLabel string = APIGroup + "/cluster-namespace"
-const RootPolicyLabel string = APIGroup + "/root-policy"
+const (
+	APIGroup              string = "policy.open-cluster-management.io"
+	ClusterNameLabel      string = APIGroup + "/cluster-name"
+	ClusterNamespaceLabel string = APIGroup + "/cluster-namespace"
+	RootPolicyLabel       string = APIGroup + "/root-policy"
+)
 
 // IsInClusterNamespace check if policy is in cluster namespace
 func IsInClusterNamespace(ns string, allClusters []clusterv1.ManagedCluster) bool {
@@ -21,6 +24,7 @@ func IsInClusterNamespace(ns string, allClusters []clusterv1.ManagedCluster) boo
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -40,29 +44,35 @@ func FullNameForPolicy(plc *policiesv1.Policy) string {
 func CompareSpecAndAnnotation(plc1 *policiesv1.Policy, plc2 *policiesv1.Policy) bool {
 	annotationMatch := equality.Semantic.DeepEqual(plc1.GetAnnotations(), plc2.GetAnnotations())
 	specMatch := equality.Semantic.DeepEqual(plc1.Spec, plc2.Spec)
+
 	return annotationMatch && specMatch
 }
 
 // IsPbForPoicy compares group and kind with policy group and kind for given pb
 func IsPbForPoicy(pb *policiesv1.PlacementBinding) bool {
-	subjects := pb.Subjects
 	found := false
+
+	subjects := pb.Subjects
 	for _, subject := range subjects {
 		if subject.Kind == policiesv1.Kind && subject.APIGroup == policiesv1.SchemeGroupVersion.Group {
 			found = true
+
 			break
 		}
 	}
+
 	return found
 }
 
 // FindNonCompliantClustersForPolicy returns cluster in noncompliant status with given policy
 func FindNonCompliantClustersForPolicy(plc *policiesv1.Policy) []string {
 	clusterList := []string{}
+
 	for _, clusterStatus := range plc.Status.Status {
 		if clusterStatus.ComplianceState == policiesv1.NonCompliant {
 			clusterList = append(clusterList, clusterStatus.ClusterName)
 		}
 	}
+
 	return clusterList
 }

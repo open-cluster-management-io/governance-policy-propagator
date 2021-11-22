@@ -9,11 +9,12 @@ import (
 	"testing"
 	"time"
 
-	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/api/v1"
 	appsv1 "github.com/open-cluster-management/multicloud-operators-placementrule/pkg/apis/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+
+	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/api/v1"
 )
 
 func TestInitializeAttempts(t *testing.T) {
@@ -34,6 +35,7 @@ func TestInitializeAttempts(t *testing.T) {
 				defer func() {
 					// Reset to the default values
 					attempts = 0
+
 					err := os.Unsetenv(attemptsEnvName)
 					if err != nil {
 						t.Fatalf("failed to unset the environment variable: %v", err)
@@ -44,6 +46,7 @@ func TestInitializeAttempts(t *testing.T) {
 				if err != nil {
 					t.Fatalf("failed to set the environment variable: %v", err)
 				}
+
 				var k8sInterface kubernetes.Interface
 				Initialize(&rest.Config{}, &k8sInterface)
 
@@ -73,6 +76,7 @@ func TestInitializeRequeueErrorDelay(t *testing.T) {
 				defer func() {
 					// Reset to the default values
 					requeueErrorDelay = 0
+
 					err := os.Unsetenv(requeueErrorDelayEnvName)
 					if err != nil {
 						t.Fatalf("failed to unset the environment variable: %v", err)
@@ -112,6 +116,7 @@ func TestInitializeConcurrencyPerPolicyEnvName(t *testing.T) {
 				defer func() {
 					// Reset to the default values
 					concurrencyPerPolicy = 0
+
 					err := os.Unsetenv(concurrencyPerPolicyEnvName)
 					if err != nil {
 						t.Fatalf("failed to unset the environment variable: %v", err)
@@ -175,9 +180,11 @@ func TestHandleDecisionWrapper(t *testing.T) {
 		// Load up the decisionsChan channel with all the decisions so that handleDecisionWrapper
 		// will call handleDecision with each.
 		decisionsChan := make(chan appsv1.PlacementDecision, len(decisions))
+
 		for _, decision := range decisions {
 			decisionsChan <- decision
 		}
+
 		resultsChan := make(chan decisionResult, len(decisions))
 
 		// Instantiate the mock PolicyReconciler to pass to handleDecisionWrapper.
@@ -211,7 +218,7 @@ func TestHandleDecisionWrapper(t *testing.T) {
 			if test.ExpectedError {
 				if result.Err == nil {
 					t.Fatal("Expected an error but didn't get one")
-				} else if result.Err != test.Error {
+				} else if result.Err != test.Error { // nolint: errorlint
 					t.Fatalf("Expected the error %v but got: %v", test.Error, result.Err)
 				}
 			} else if result.Err != nil {

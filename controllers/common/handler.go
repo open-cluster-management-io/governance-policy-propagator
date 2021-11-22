@@ -27,7 +27,6 @@ func (e *EnqueueRequestsFromMapFunc) Create(evt event.CreateEvent, q workqueue.R
 
 // Update implements EventHandler
 func (e *EnqueueRequestsFromMapFunc) Update(evt event.UpdateEvent, q workqueue.RateLimitingInterface) {
-	// e.mapAndEnqueue(q, evt.ObjectOld)
 	e.mapAndEnqueue(q, evt.ObjectNew)
 }
 

@@ -4,10 +4,10 @@
 package utils
 
 import (
+	"fmt"
+
 	"github.com/onsi/gomega/types"
 	"k8s.io/apimachinery/pkg/api/equality"
-
-	"fmt"
 )
 
 func SemanticEqual(expected interface{}) types.GomegaMatcher {
