@@ -50,7 +50,6 @@ jobs:
 
     - name: Verify format
       run: |
-        make fmt-dependencies
         make fmt
         git diff --exit-code
         make lint
