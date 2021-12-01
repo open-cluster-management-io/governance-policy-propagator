@@ -232,7 +232,7 @@ var _ = Describe("Test policy propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 		})
-		It("should remove policy from ns managed1 and managed2", func() {
+		It("should prevent user from creating subject with unsupported kind", func() {
 			By("Patching test-policy-pb with a plc with wrong kind")
 			pb := utils.GetWithTimeout(
 				clientHubDynamic,
@@ -252,11 +252,7 @@ var _ = Describe("Test policy propagation", func() {
 			_, err := clientHubDynamic.Resource(gvrPlacementBinding).Namespace(testNamespace).Update(
 				context.TODO(), pb, metav1.UpdateOptions{},
 			)
-			Expect(err).To(BeNil())
-			opt := metav1.ListOptions{
-				LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case1PolicyName,
-			}
-			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
+			Expect(err).NotTo(BeNil())
 		})
 		It("should propagate to cluster ns managed1 and managed2", func() {
 			By("Patching test-policy-pb with correct plc")

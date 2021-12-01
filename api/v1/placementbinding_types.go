@@ -14,6 +14,21 @@ type Subject struct {
 	APIGroup string `json:"apiGroup"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Enum=Policy
+	Kind string `json:"kind"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+}
+
+// PlacementSubject reference
+type PlacementSubject struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	APIGroup string `json:"apiGroup"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Enum=PlacementRule;Placement
 	Kind string `json:"kind"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
@@ -33,8 +48,10 @@ type PlacementBinding struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 	// +kubebuilder:validation:Required
-	PlacementRef Subject `json:"placementRef"`
+	PlacementRef PlacementSubject `json:"placementRef"`
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MaxItems=1
+	// +kubebuilder:validation:MinItems=1
 	Subjects []Subject              `json:"subjects"`
 	Status   PlacementBindingStatus `json:"status,omitempty"`
 }
