@@ -222,11 +222,7 @@ var _ = Describe("Test policy propagation", func() {
 			_, err := clientHubDynamic.Resource(gvrPlacementBinding).Namespace(testNamespace).Update(
 				context.TODO(), pb, metav1.UpdateOptions{},
 			)
-			Expect(err).To(BeNil())
-			opt := metav1.ListOptions{
-				LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case6PolicyName,
-			}
-			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
+			Expect(err).NotTo(BeNil())
 		})
 		It("should propagate to cluster ns managed1 and managed2", func() {
 			By("Patching test-policy-pb with correct plc")

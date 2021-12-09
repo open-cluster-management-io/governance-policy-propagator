@@ -11,6 +11,7 @@ import (
 type Subject struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Enum=policy.open-cluster-management.io
 	APIGroup string `json:"apiGroup"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
@@ -25,6 +26,7 @@ type Subject struct {
 type PlacementSubject struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Enum=apps.open-cluster-management.io;cluster.open-cluster-management.io
 	APIGroup string `json:"apiGroup"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1

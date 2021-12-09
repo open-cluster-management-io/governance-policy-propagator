@@ -39,6 +39,9 @@ spec:
             description: PlacementSubject reference
             properties:
               apiGroup:
+                enum:
+                - apps.open-cluster-management.io
+                - cluster.open-cluster-management.io
                 minLength: 1
                 type: string
               kind:
@@ -63,6 +66,8 @@ spec:
               description: Subject reference
               properties:
                 apiGroup:
+                  enum:
+                  - policy.open-cluster-management.io
                   minLength: 1
                   type: string
                 kind:
