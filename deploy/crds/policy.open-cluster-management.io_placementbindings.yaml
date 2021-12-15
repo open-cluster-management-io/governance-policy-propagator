@@ -36,14 +36,27 @@ spec:
           metadata:
             type: object
           placementRef:
-            description: Subject reference
+            description: PlacementSubject reference
             properties:
               apiGroup:
+                enum:
+                - apps.open-cluster-management.io
+                - cluster.open-cluster-management.io
+                minLength: 1
                 type: string
               kind:
+                enum:
+                - PlacementRule
+                - Placement
+                minLength: 1
                 type: string
               name:
+                minLength: 1
                 type: string
+            required:
+            - apiGroup
+            - kind
+            - name
             type: object
           status:
             description: PlacementBindingStatus defines the observed state of PlacementBinding
@@ -53,13 +66,29 @@ spec:
               description: Subject reference
               properties:
                 apiGroup:
+                  enum:
+                  - policy.open-cluster-management.io
+                  minLength: 1
                   type: string
                 kind:
+                  enum:
+                  - Policy
+                  minLength: 1
                   type: string
                 name:
+                  minLength: 1
                   type: string
+              required:
+              - apiGroup
+              - kind
+              - name
               type: object
+            maxItems: 1
+            minItems: 1
             type: array
+        required:
+        - placementRef
+        - subjects
         type: object
     served: true
     storage: true

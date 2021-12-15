@@ -32,20 +32,18 @@ type AutomationDef struct {
 	Type string `json:"type,omitempty"`
 	// Name of the Ansible Template to run in Tower as a job
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 	// ExtraVars is passed to the Ansible job at execution time and is a known Ansible entity.
 	// +kubebuilder:pruning:PreserveUnknownFields
 	ExtraVars *runtime.RawExtension `json:"extra_vars,omitempty"`
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	TowerSecret string `json:"secret"`
 }
 
 // PolicyAutomationStatus defines the observed state of PolicyAutomation
-type PolicyAutomationStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
-}
+type PolicyAutomationStatus struct{}
 
 //+kubebuilder:object:root=true
 
@@ -56,8 +54,8 @@ type PolicyAutomationStatus struct {
 type PolicyAutomation struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec   PolicyAutomationSpec   `json:"spec,omitempty"`
+	// +kubebuilder:validation:Required
+	Spec   PolicyAutomationSpec   `json:"spec"`
 	Status PolicyAutomationStatus `json:"status,omitempty"`
 }
 

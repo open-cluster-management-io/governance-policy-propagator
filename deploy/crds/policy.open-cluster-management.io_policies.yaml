@@ -57,13 +57,21 @@ spec:
                     objectDefinition:
                       type: object
                       x-kubernetes-preserve-unknown-fields: true
+                  required:
+                  - objectDefinition
                   type: object
                 type: array
               remediationAction:
                 description: RemediationAction describes weather to enforce or inform
+                enum:
+                - Inform
+                - inform
+                - Enforce
+                - enforce
                 type: string
             required:
             - disabled
+            - policy-templates
             type: object
           status:
             description: PolicyStatus defines the observed state of Policy
@@ -138,6 +146,9 @@ spec:
                   type: object
                 type: array
             type: object
+        required:
+        - metadata
+        - spec
         type: object
     served: true
     storage: true

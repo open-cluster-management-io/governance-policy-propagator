@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"time"
 
+	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
+	clusterv1alpha1 "github.com/open-cluster-management/api/cluster/v1alpha1"
+	appsv1 "github.com/open-cluster-management/multicloud-operators-placementrule/pkg/apis/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -20,11 +23,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
-	clusterv1alpha1 "github.com/open-cluster-management/api/cluster/v1alpha1"
 	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/api/v1"
 	"github.com/open-cluster-management/governance-policy-propagator/controllers/common"
-	appsv1 "github.com/open-cluster-management/multicloud-operators-placementrule/pkg/apis/apps/v1"
 )
 
 const ControllerName string = "policy-propagator"
@@ -89,13 +89,16 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 
 	// Fetch the Policy instance
 	instance := &policiesv1.Policy{}
+
 	err := r.Get(ctx, request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected.
 			reqLogger.Info("Policy not found, may have been deleted, deleting replicated policies...")
+
 			replicatedPlcList := &policiesv1.PolicyList{}
+
 			err := r.List(ctx, replicatedPlcList,
 				client.MatchingLabels(common.LabelsForRootPolicy(&policiesv1.Policy{
 					TypeMeta: metav1.TypeMeta{
@@ -110,8 +113,10 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 			if err != nil {
 				// there was an error, requeue
 				reqLogger.Error(err, "Failed to list replicated policy...")
+
 				return reconcile.Result{}, err
 			}
+
 			for _, plc := range replicatedPlcList.Items {
 				reqLogger.Info("Deleting replicated policies...", "Namespace", plc.GetNamespace(),
 					"Name", plc.GetName())
@@ -120,20 +125,26 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 				if err != nil && !errors.IsNotFound(err) {
 					reqLogger.Error(err, "Failed to delete replicated policy...", "Namespace", plc.GetNamespace(),
 						"Name", plc.GetName())
+
 					return reconcile.Result{}, err
 				}
 			}
+
 			reqLogger.Info("Policy clean up complete, reconciliation completed.")
+
 			return reconcile.Result{}, nil
 		}
+
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
 
 	clusterList := &clusterv1.ManagedClusterList{}
+
 	err = r.List(ctx, clusterList, &client.ListOptions{})
 	if err != nil {
 		reqLogger.Error(err, "Failed to list cluster, going to retry...")
+
 		return reconcile.Result{}, err
 	}
 
@@ -146,9 +157,12 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 				instance,
 				fmt.Sprintf("Retrying the request in %d minutes", requeueErrorDelay),
 			)
+
 			duration := time.Duration(requeueErrorDelay) * time.Minute
+
 			// An error must not be returned for RequeueAfter to take effect. See:
 			// https://github.com/kubernetes-sigs/controller-runtime/blob/5de246bfbfd1a75f966b5662edcb9c7235244160/pkg/internal/controller/controller.go#L319-L322
+			// nolint: nilerr
 			return reconcile.Result{RequeueAfter: duration}, nil
 		}
 
@@ -157,11 +171,14 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 
 	reqLogger.Info("Policy was found in cluster namespace but doesn't belong to any root policy, deleting it...",
 		"Namespace", instance.GetNamespace(), "Name", instance.GetName())
+
 	err = r.Delete(ctx, instance)
 	if err != nil && !errors.IsNotFound(err) {
 		reqLogger.Error(err, "Failed to delete policy...", "Namespace", instance.GetNamespace(),
 			"Name", instance.GetName())
+
 		return reconcile.Result{}, err
 	}
+
 	return reconcile.Result{}, nil
 }

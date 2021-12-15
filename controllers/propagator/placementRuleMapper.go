@@ -6,12 +6,13 @@ package propagator
 import (
 	"context"
 
-	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/api/v1"
 	appsv1 "github.com/open-cluster-management/multicloud-operators-placementrule/pkg/apis/apps/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/api/v1"
 )
 
 func placementRuleMapper(c client.Client) handler.MapFunc {
@@ -19,11 +20,13 @@ func placementRuleMapper(c client.Client) handler.MapFunc {
 		log.Info("Reconcile Request for PlacementRule", "Name", object.GetName(), "Namespace", object.GetNamespace())
 		// list pb
 		pbList := &policiesv1.PlacementBindingList{}
+
 		// find pb in the same namespace of placementrule
 		err := c.List(context.TODO(), pbList, &client.ListOptions{Namespace: object.GetNamespace()})
 		if err != nil {
 			return nil
 		}
+
 		var result []reconcile.Request
 		// loop through pb to find if current placementrule is used for policy
 		for _, pb := range pbList.Items {
@@ -34,8 +37,15 @@ func placementRuleMapper(c client.Client) handler.MapFunc {
 				subjects := pb.Subjects
 				for _, subject := range subjects {
 					if subject.APIGroup == policiesv1.SchemeGroupVersion.Group && subject.Kind == policiesv1.Kind {
-						log.Info("Found reconciliation request from placement rule...", "Namespace", object.GetNamespace(),
-							"Name", object.GetName(), "Policy-Name", subject.Name)
+						log.Info(
+							"Found reconciliation request from placement rule...",
+							"Namespace",
+							object.GetNamespace(),
+							"Name",
+							object.GetName(),
+							"Policy-Name",
+							subject.Name,
+						)
 						// generate reconcile request for policy referenced by pb
 						request := reconcile.Request{NamespacedName: types.NamespacedName{
 							Name:      subject.Name,
@@ -46,6 +56,7 @@ func placementRuleMapper(c client.Client) handler.MapFunc {
 				}
 			}
 		}
+
 		return result
 	}
 }

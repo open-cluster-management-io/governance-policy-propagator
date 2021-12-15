@@ -7,11 +7,12 @@ import (
 	"context"
 
 	clusterv1alpha1 "github.com/open-cluster-management/api/cluster/v1alpha1"
-	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/api/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/api/v1"
 )
 
 func placementDecisionMapper(c client.Client) handler.MapFunc {
@@ -29,6 +30,7 @@ func placementDecisionMapper(c client.Client) handler.MapFunc {
 		lopts := &client.ListOptions{Namespace: object.GetNamespace()}
 		opts := client.MatchingFields{"placementRef.name": placementName}
 		opts.ApplyToList(lopts)
+
 		err := c.List(context.TODO(), pbList, lopts)
 		if err != nil {
 			return nil
@@ -41,14 +43,17 @@ func placementDecisionMapper(c client.Client) handler.MapFunc {
 				pb.PlacementRef.Kind != "Placement" || pb.PlacementRef.Name != placementName {
 				continue
 			}
+
 			// found matching placement rule in pb -- check if it is for policy
 			subjects := pb.Subjects
 			for _, subject := range subjects {
 				if subject.APIGroup != policiesv1.SchemeGroupVersion.Group || subject.Kind != policiesv1.Kind {
 					continue
 				}
+
 				log.Info("Found reconciliation request from placement decision...", "Namespace", object.GetNamespace(),
 					"Name", object.GetName(), "Policy-Name", subject.Name)
+
 				// generate reconcile request for policy referenced by pb
 				request := reconcile.Request{NamespacedName: types.NamespacedName{
 					Name:      subject.Name,
@@ -57,6 +62,7 @@ func placementDecisionMapper(c client.Client) handler.MapFunc {
 				result = append(result, request)
 			}
 		}
+
 		return result
 	}
 }
