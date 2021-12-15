@@ -6,13 +6,13 @@ package propagator
 import (
 	"context"
 
-	clusterv1alpha1 "github.com/open-cluster-management/api/cluster/v1alpha1"
 	"k8s.io/apimachinery/pkg/types"
+	clusterv1alpha1 "open-cluster-management.io/api/cluster/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/api/v1"
+	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 )
 
 func placementDecisionMapper(c client.Client) handler.MapFunc {

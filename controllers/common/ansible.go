@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
-	policyv1beta1 "github.com/open-cluster-management/governance-policy-propagator/api/v1beta1"
+	policyv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
 )
 
 // CreateAnsibleJob creates ansiblejob with given PolicyAutomation

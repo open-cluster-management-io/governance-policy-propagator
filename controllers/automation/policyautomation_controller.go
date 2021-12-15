@@ -20,9 +20,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	policyv1 "github.com/open-cluster-management/governance-policy-propagator/api/v1"
-	policyv1beta1 "github.com/open-cluster-management/governance-policy-propagator/api/v1beta1"
-	"github.com/open-cluster-management/governance-policy-propagator/controllers/common"
+	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
+	policyv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
+	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
 const ControllerName string = "policy-automation"

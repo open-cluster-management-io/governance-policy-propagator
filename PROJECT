@@ -5,7 +5,7 @@ plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
 projectName: governance-policy-propagator
-repo: github.com/open-cluster-management/governance-policy-propagator
+repo: open-cluster-management.io/governance-policy-propagator
 resources:
 - api:
     crdVersion: v1
@@ -14,7 +14,7 @@ resources:
   domain: open-cluster-management.io
   group: policy
   kind: Policy
-  path: github.com/open-cluster-management/governance-policy-propagator/api/v1
+  path: open-cluster-management.io/governance-policy-propagator/api/v1
   version: v1
 - api:
     crdVersion: v1
@@ -22,7 +22,7 @@ resources:
   domain: open-cluster-management.io
   group: policy
   kind: PlacementBinding
-  path: github.com/open-cluster-management/governance-policy-propagator/api/v1
+  path: open-cluster-management.io/governance-policy-propagator/api/v1
   version: v1
 - api:
     crdVersion: v1
@@ -31,6 +31,6 @@ resources:
   domain: open-cluster-management.io
   group: policy
   kind: PolicyAutomation
-  path: github.com/open-cluster-management/governance-policy-propagator/api/v1beta1
+  path: open-cluster-management.io/governance-policy-propagator/api/v1beta1
   version: v1beta1
 version: "3"

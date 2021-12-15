@@ -17,8 +17,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	//+kubebuilder:scaffold:imports
-	policyv1 "github.com/open-cluster-management/governance-policy-propagator/api/v1"
-	policyv1beta1 "github.com/open-cluster-management/governance-policy-propagator/api/v1beta1"
+	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
+	policyv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to

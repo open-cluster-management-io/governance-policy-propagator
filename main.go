@@ -12,9 +12,6 @@ import (
 	"strconv"
 	"strings"
 
-	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
-	clusterv1alpha1 "github.com/open-cluster-management/api/cluster/v1alpha1"
-	appsv1 "github.com/open-cluster-management/multicloud-operators-placementrule/pkg/apis/apps/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
@@ -23,6 +20,9 @@ import (
 
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	clusterv1alpha1 "open-cluster-management.io/api/cluster/v1alpha1"
+	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,12 +31,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	//+kubebuilder:scaffold:imports
-	policyv1 "github.com/open-cluster-management/governance-policy-propagator/api/v1"
-	policyv1beta1 "github.com/open-cluster-management/governance-policy-propagator/api/v1beta1"
-	automationctrl "github.com/open-cluster-management/governance-policy-propagator/controllers/automation"
-	metricsctrl "github.com/open-cluster-management/governance-policy-propagator/controllers/policymetrics"
-	propagatorctrl "github.com/open-cluster-management/governance-policy-propagator/controllers/propagator"
-	"github.com/open-cluster-management/governance-policy-propagator/version"
+	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
+	policyv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
+	automationctrl "open-cluster-management.io/governance-policy-propagator/controllers/automation"
+	metricsctrl "open-cluster-management.io/governance-policy-propagator/controllers/policymetrics"
+	propagatorctrl "open-cluster-management.io/governance-policy-propagator/controllers/propagator"
+	"open-cluster-management.io/governance-policy-propagator/version"
 )
 
 var (
