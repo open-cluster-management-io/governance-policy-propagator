@@ -4,10 +4,10 @@
 package common
 
 import (
-	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
-	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/api/v1"
+	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 )
 
 const (

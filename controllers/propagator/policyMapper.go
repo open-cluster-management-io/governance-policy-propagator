@@ -11,7 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/open-cluster-management/governance-policy-propagator/controllers/common"
+	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
 // policyMapper looks at object and returns a slice of reconcile.Request to reconcile

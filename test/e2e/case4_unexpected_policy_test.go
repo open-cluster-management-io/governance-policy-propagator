@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/open-cluster-management/governance-policy-propagator/test/utils"
+	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
 const (
