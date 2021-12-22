@@ -17,7 +17,10 @@ import (
 
 func placementRuleMapper(c client.Client) handler.MapFunc {
 	return func(object client.Object) []reconcile.Request {
-		log.Info("Reconcile Request for PlacementRule", "Name", object.GetName(), "Namespace", object.GetNamespace())
+		log := log.WithValues("name", object.GetName(), "namespace", object.GetNamespace())
+
+		log.V(2).Info("Reconcile Request for PlacementRule")
+
 		// list pb
 		pbList := &policiesv1.PlacementBindingList{}
 
@@ -37,15 +40,7 @@ func placementRuleMapper(c client.Client) handler.MapFunc {
 				subjects := pb.Subjects
 				for _, subject := range subjects {
 					if subject.APIGroup == policiesv1.SchemeGroupVersion.Group && subject.Kind == policiesv1.Kind {
-						log.Info(
-							"Found reconciliation request from placement rule...",
-							"Namespace",
-							object.GetNamespace(),
-							"Name",
-							object.GetName(),
-							"Policy-Name",
-							subject.Name,
-						)
+						log.V(1).Info("Found reconciliation request from placement rule", "policyName", subject.Name)
 						// generate reconcile request for policy referenced by pb
 						request := reconcile.Request{NamespacedName: types.NamespacedName{
 							Name:      subject.Name,

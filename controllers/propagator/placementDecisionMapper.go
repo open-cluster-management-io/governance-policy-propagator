@@ -17,7 +17,9 @@ import (
 
 func placementDecisionMapper(c client.Client) handler.MapFunc {
 	return func(object client.Object) []reconcile.Request {
-		log.Info("Reconcile Request for PlacementDecision %s in namespace %s", object.GetName(), object.GetNamespace())
+		log := log.WithValues("name", object.GetName(), "namespace", object.GetNamespace())
+
+		log.V(2).Info("Reconcile request for a placement decision")
 
 		// get the placement name from the placementdecision
 		placementName := object.GetLabels()["cluster.open-cluster-management.io/placement"]
@@ -51,8 +53,7 @@ func placementDecisionMapper(c client.Client) handler.MapFunc {
 					continue
 				}
 
-				log.Info("Found reconciliation request from placement decision...", "Namespace", object.GetNamespace(),
-					"Name", object.GetName(), "Policy-Name", subject.Name)
+				log.V(2).Info("Found reconciliation request from a placement decision", "policyName", subject.Name)
 
 				// generate reconcile request for policy referenced by pb
 				request := reconcile.Request{NamespacedName: types.NamespacedName{

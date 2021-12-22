@@ -18,11 +18,14 @@ func placementBindingMapper(c client.Client) handler.MapFunc {
 		object := obj.(*policiesv1.PlacementBinding)
 		var result []reconcile.Request
 
+		log := log.WithValues("name", object.GetName(), "namespace", object.GetNamespace())
+
+		log.V(2).Info("Reconcile request for a PlacementBinding")
+
 		subjects := object.Subjects
 		for _, subject := range subjects {
 			if subject.APIGroup == policiesv1.SchemeGroupVersion.Group && subject.Kind == policiesv1.Kind {
-				log.Info("Found reconciliation request from placement binding...",
-					"Namespace", object.GetNamespace(), "Name", object.GetName(), "Policy-Name", subject.Name)
+				log.V(2).Info("Found reconciliation request from placement binding", "policyName", subject.Name)
 
 				request := reconcile.Request{NamespacedName: types.NamespacedName{
 					Name:      subject.Name,

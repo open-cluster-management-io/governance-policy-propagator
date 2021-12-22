@@ -40,14 +40,18 @@ import (
 )
 
 var (
-	scheme   = k8sruntime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
+	scheme = k8sruntime.NewScheme()
+	log    = ctrl.Log.WithName("setup")
 )
 
 func printVersion() {
-	setupLog.Info(fmt.Sprintf("Operator Version: %s", version.Version))
-	setupLog.Info(fmt.Sprintf("Go Version: %s", runtime.Version()))
-	setupLog.Info(fmt.Sprintf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH))
+	log.Info(
+		"Using",
+		"OperatorVersion", version.Version,
+		"GoVersion", runtime.Version(),
+		"GOOS", runtime.GOOS,
+		"GOARCH", runtime.GOARCH,
+	)
 }
 
 func init() {
@@ -86,7 +90,7 @@ func main() {
 
 	namespace, err := getWatchNamespace()
 	if err != nil {
-		setupLog.Error(err, "Failed to get watch namespace")
+		log.Error(err, "Failed to get watch namespace")
 		os.Exit(1)
 	}
 
@@ -102,7 +106,7 @@ func main() {
 		qpsVal, err := strconv.ParseFloat(qpsOverride, 32)
 		if err == nil {
 			cfg.QPS = float32(qpsVal)
-			setupLog.Info(fmt.Sprintf("Using QPS override: %v", cfg.QPS))
+			log.Info("Using QPS override", "value", cfg.QPS)
 		}
 	}
 
@@ -111,7 +115,7 @@ func main() {
 		burstVal, err := strconv.Atoi(burstOverride)
 		if err == nil {
 			cfg.Burst = burstVal
-			setupLog.Info(fmt.Sprintf("Using Burst override: %v", cfg.Burst))
+			log.Info("Using Burst override", "value", cfg.Burst)
 		}
 	}
 
@@ -136,18 +140,18 @@ func main() {
 
 	mgr, err := ctrl.NewManager(cfg, options)
 	if err != nil {
-		setupLog.Error(err, "unable to start manager")
+		log.Error(err, "Unable to start manager")
 		os.Exit(1)
 	}
 
-	setupLog.Info("Registering Components.")
+	log.Info("Registering components")
 
 	if err = (&propagatorctrl.PolicyReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor(propagatorctrl.ControllerName),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", propagatorctrl.ControllerName)
+		log.Error(err, "Unable to create the controller", "controller", propagatorctrl.ControllerName)
 		os.Exit(1)
 	}
 
@@ -156,7 +160,7 @@ func main() {
 			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
 		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", metricsctrl.ControllerName)
+			log.Error(err, "Unable to create the controller", "controller", metricsctrl.ControllerName)
 			os.Exit(1)
 		}
 	}
@@ -167,18 +171,18 @@ func main() {
 		Scheme:        mgr.GetScheme(),
 		Recorder:      mgr.GetEventRecorderFor(automationctrl.ControllerName),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", automationctrl.ControllerName)
+		log.Error(err, "Unable to create the controller", "controller", automationctrl.ControllerName)
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up health check")
+		log.Error(err, "Unable to set up health check")
 		os.Exit(1)
 	}
 
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up ready check")
+		log.Error(err, "Unable to set up ready check")
 		os.Exit(1)
 	}
 
@@ -201,10 +205,10 @@ func main() {
 		panic(err)
 	}
 
-	setupLog.Info("starting manager")
+	log.Info("Starting manager")
 
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
+		log.Error(err, "Problem running manager")
 		os.Exit(1)
 	}
 }

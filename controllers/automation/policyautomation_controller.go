@@ -16,7 +16,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -27,7 +26,7 @@ import (
 
 const ControllerName string = "policy-automation"
 
-var log = logf.Log.WithName(ControllerName)
+var log = ctrl.Log.WithName(ControllerName)
 
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policyautomations,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policyautomations/status,verbs=get;update;patch
@@ -68,7 +67,7 @@ type PolicyAutomationReconciler struct {
 func (r *PolicyAutomationReconciler) Reconcile(
 	ctx context.Context, request ctrl.Request,
 ) (ctrl.Result, error) {
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	log := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 
 	// Fetch the PolicyAutomation instance
 	policyAutomation := &policyv1beta1.PolicyAutomation{}
@@ -76,7 +75,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 	err := r.Get(ctx, request.NamespacedName, policyAutomation)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			reqLogger.Info("Automation was deleted, doing nothing...")
+			log.V(2).Info("Automation was deleted. Nothing to do.")
 
 			return reconcile.Result{}, nil
 		}
@@ -86,22 +85,19 @@ func (r *PolicyAutomationReconciler) Reconcile(
 	}
 
 	if policyAutomation.Spec.PolicyRef == "" {
-		reqLogger.Info("No policyRef in PolicyAutomation... ignoring it...",
-			"Namespace", policyAutomation.GetNamespace(), "Name", policyAutomation.GetName())
+		log.Info("No policyRef in PolicyAutomation. Will ignore it.")
 
 		return reconcile.Result{}, nil
 	}
 
-	reqLogger = log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name,
-		"policyRef", policyAutomation.Spec.PolicyRef)
-	reqLogger.Info("Handling automation...")
+	log = log.WithValues("policyRef", policyAutomation.Spec.PolicyRef)
 
 	if policyAutomation.Annotations["policy.open-cluster-management.io/rerun"] == "true" {
-		reqLogger.Info("Triggering manual run...")
+		log.Info("Creating an Ansible job", "mode", "manual")
 
 		err = common.CreateAnsibleJob(policyAutomation, r.DynamicClient, "manual", nil)
 		if err != nil {
-			reqLogger.Error(err, "Failed to create ansible job...")
+			log.Error(err, "Failed to create the Ansible job", "mode", "manual")
 
 			return reconcile.Result{}, err
 		}
@@ -110,16 +106,14 @@ func (r *PolicyAutomationReconciler) Reconcile(
 
 		err = r.Update(ctx, policyAutomation, &client.UpdateOptions{})
 		if err != nil {
-			reqLogger.Error(err, "Failed to remove annotation `policy.open-cluster-management.io/rerun`...")
+			log.Error(err, "Failed to remove the annotation `policy.open-cluster-management.io/rerun`")
 
 			return reconcile.Result{}, err
 		}
 
-		reqLogger.Info("Manual run complete...")
-
 		return reconcile.Result{}, nil
 	} else if policyAutomation.Spec.Mode == "disabled" {
-		reqLogger.Info("Automation is disabled, doing nothing...")
+		log.Info("Automation is disabled, doing nothing")
 
 		return reconcile.Result{}, nil
 	} else {
@@ -132,59 +126,64 @@ func (r *PolicyAutomationReconciler) Reconcile(
 		if err != nil {
 			if errors.IsNotFound(err) {
 				// policy is gone, need to delete automation
-				reqLogger.Info("Policy specified in policyRef field not found, may have been deleted, doing nothing...")
+				log.Info("Policy specified in policyRef field not found, may have been deleted, doing nothing")
 
 				return reconcile.Result{}, nil
 			}
 
 			// Error reading the object - requeue the request.
-			reqLogger.Error(err, "Failed to retrieve policy specified in policyRef field...")
+			log.Error(err, "Failed to retrieve the policy specified in the policyRef field")
 
 			return reconcile.Result{}, err
 		}
 
 		if policy.Spec.Disabled {
-			reqLogger.Info("Policy is disabled, doing nothing...")
+			log.Info("The policy is disabled. Doing nothing.")
 
 			return reconcile.Result{}, nil
 		}
 
 		if policyAutomation.Spec.Mode == "scan" {
-			reqLogger.Info("Triggering scan mode...")
+			log := log.WithValues("mode", "scan")
+			log.V(2).Info("Triggering scan mode")
 
 			requeueAfter, err := time.ParseDuration(policyAutomation.Spec.RescanAfter)
 			if err != nil {
+				if policyAutomation.Spec.RescanAfter != "" {
+					log.Error(err, "Invalid spec.rescanAfter value")
+				}
+
 				return reconcile.Result{RequeueAfter: requeueAfter}, err
 			}
 
 			targetList := common.FindNonCompliantClustersForPolicy(policy)
 			if len(targetList) > 0 {
-				reqLogger.Info("Creating ansible job with targetList", "targetList", targetList)
+				log.Info("Creating An Ansible job", "targetList", targetList)
 
 				err = common.CreateAnsibleJob(policyAutomation, r.DynamicClient, "scan", targetList)
 				if err != nil {
 					return reconcile.Result{RequeueAfter: requeueAfter}, err
 				}
 			} else {
-				reqLogger.Info("No cluster is in noncompliant status, doing nothing...")
+				log.Info("All clusters are compliant. Doing nothing.")
 			}
 
 			// no violations found, doing nothing
 			r.counter++
-			reqLogger.Info(
+			log.V(2).Info(
 				"RequeueAfter.", "RequeueAfter", requeueAfter.String(), "Counter", fmt.Sprintf("%d", r.counter),
 			)
 
 			return reconcile.Result{RequeueAfter: requeueAfter}, nil
 		} else if policyAutomation.Spec.Mode == "once" {
-			reqLogger.Info("Triggering once mode...")
+			log := log.WithValues("mode", "once")
 			targetList := common.FindNonCompliantClustersForPolicy(policy)
 			if len(targetList) > 0 {
-				reqLogger.Info("Creating ansible job with targetList", "targetList", targetList)
+				log.Info("Creating an Ansible job", "targetList", targetList)
 
 				err = common.CreateAnsibleJob(policyAutomation, r.DynamicClient, "once", targetList)
 				if err != nil {
-					reqLogger.Error(err, "Failed to create ansible job...")
+					log.Error(err, "Failed to create the Ansible job")
 
 					return reconcile.Result{}, err
 				}
@@ -193,12 +192,12 @@ func (r *PolicyAutomationReconciler) Reconcile(
 
 				err = r.Update(ctx, policyAutomation, &client.UpdateOptions{})
 				if err != nil {
-					reqLogger.Error(err, "Failed to update mode to disabled...")
+					log.Error(err, "Failed to update the mode to disabled")
 
 					return reconcile.Result{}, err
 				}
 			} else {
-				reqLogger.Info("No cluster is in noncompliant status, doing nothing...")
+				log.Info("All clusters are compliant. Doing nothing.")
 			}
 		}
 	}
