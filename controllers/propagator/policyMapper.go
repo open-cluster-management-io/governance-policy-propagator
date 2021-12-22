@@ -18,21 +18,23 @@ import (
 // owners of object from label: policy.open-cluster-management.io/root-policy
 func policyMapper(c client.Client) handler.MapFunc {
 	return func(object client.Object) []reconcile.Request {
+		log := log.WithValues("name", object.GetName(), "namespace", object.GetNamespace())
+
+		log.V(2).Info("Reconcile request for a policy")
+
 		rootPlcName := object.GetLabels()[common.RootPolicyLabel]
 		var name string
 		var namespace string
 
 		if rootPlcName != "" {
 			// policy.open-cluster-management.io/root-policy exists, should be a replicated policy
-			log.Info("Found reconciliation request from replicated policy...", "Namespace", object.GetNamespace(),
-				"Name", object.GetName())
+			log.V(2).Info("Found reconciliation request from replicated policy")
 
 			name = strings.Split(rootPlcName, ".")[1]
 			namespace = strings.Split(rootPlcName, ".")[0]
 		} else {
 			// policy.open-cluster-management.io/root-policy doesn't exist, should be a root policy
-			log.Info("Found reconciliation request from root policy...", "Namespace", object.GetNamespace(),
-				"Name", object.GetName())
+			log.V(2).Info("Found reconciliation request from root policy")
 
 			name = object.GetName()
 			namespace = object.GetNamespace()

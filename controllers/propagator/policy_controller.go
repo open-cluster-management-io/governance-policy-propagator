@@ -19,7 +19,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -29,7 +28,7 @@ import (
 
 const ControllerName string = "policy-propagator"
 
-var log = logf.Log.WithName(ControllerName)
+var log = ctrl.Log.WithName(ControllerName)
 
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies/status,verbs=get;update;patch
@@ -83,9 +82,9 @@ type PolicyReconciler struct {
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	log := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 
-	reqLogger.Info("Reconciling Policy...")
+	log.Info("Reconciling the policy")
 
 	// Fetch the Policy instance
 	instance := &policiesv1.Policy{}
@@ -95,7 +94,7 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected.
-			reqLogger.Info("Policy not found, may have been deleted, deleting replicated policies...")
+			log.Info("Policy not found, so it may have been deleted. Deleting the replicated policies.")
 
 			replicatedPlcList := &policiesv1.PolicyList{}
 
@@ -112,28 +111,31 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 				})))
 			if err != nil {
 				// there was an error, requeue
-				reqLogger.Error(err, "Failed to list replicated policy...")
+				log.Error(err, "Failed to list the replicated policies")
 
 				return reconcile.Result{}, err
 			}
 
 			for _, plc := range replicatedPlcList.Items {
-				reqLogger.Info("Deleting replicated policies...", "Namespace", plc.GetNamespace(),
-					"Name", plc.GetName())
+				log := log.WithValues("name", plc.GetName(), "namespace", plc.GetNamespace())
+
+				log.V(1).Info("Deleting the replicated policy")
+
 				// #nosec G601 -- no memory addresses are stored in collections
 				err := r.Delete(ctx, &plc)
 				if err != nil && !errors.IsNotFound(err) {
-					reqLogger.Error(err, "Failed to delete replicated policy...", "Namespace", plc.GetNamespace(),
-						"Name", plc.GetName())
+					log.Error(err, "Failed to delete the replicated policy")
 
 					return reconcile.Result{}, err
 				}
 			}
 
-			reqLogger.Info("Policy clean up complete, reconciliation completed.")
+			log.Info("The policy clean up completed. Reconciliation complete.")
 
 			return reconcile.Result{}, nil
 		}
+
+		log.Error(err, "Failed to get the policy")
 
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
@@ -143,7 +145,7 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 
 	err = r.List(ctx, clusterList, &client.ListOptions{})
 	if err != nil {
-		reqLogger.Error(err, "Failed to list cluster, going to retry...")
+		log.Error(err, "Failed to list ManagedCluster objects. Requeueing the request.")
 
 		return reconcile.Result{}, err
 	}
@@ -169,13 +171,13 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 		return reconcile.Result{}, nil
 	}
 
-	reqLogger.Info("Policy was found in cluster namespace but doesn't belong to any root policy, deleting it...",
-		"Namespace", instance.GetNamespace(), "Name", instance.GetName())
+	log = log.WithValues("name", instance.GetName(), "namespace", instance.GetNamespace())
+
+	log.Info("The policy was found in the cluster namespace but doesn't belong to any root policy, deleting it")
 
 	err = r.Delete(ctx, instance)
 	if err != nil && !errors.IsNotFound(err) {
-		reqLogger.Error(err, "Failed to delete policy...", "Namespace", instance.GetNamespace(),
-			"Name", instance.GetName())
+		log.Error(err, "Failed to delete the policy")
 
 		return reconcile.Result{}, err
 	}

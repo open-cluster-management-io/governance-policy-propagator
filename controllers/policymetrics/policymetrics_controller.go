@@ -13,7 +13,6 @@ import (
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
@@ -22,7 +21,7 @@ import (
 
 const ControllerName string = "policy-metrics"
 
-var log = logf.Log.WithName(ControllerName)
+var log = ctrl.Log.WithName(ControllerName)
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MetricReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -48,8 +47,8 @@ type MetricReconciler struct {
 // Reconcile reads the state of the cluster for the Policy object and ensures that the exported
 // policy metrics are accurate, updating them as necessary.
 func (r *MetricReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling metric for Policy...")
+	log := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	log.Info("Reconciling metric for the policy")
 
 	// Need to know if the policy is a root policy to create the correct prometheus labels
 	// Can't try to use a label on the policy, because the policy might have been deleted.
@@ -57,7 +56,7 @@ func (r *MetricReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 
 	err := r.List(ctx, clusterList, &client.ListOptions{})
 	if err != nil {
-		reqLogger.Error(err, "Failed to list clusters, going to retry...")
+		log.Error(err, "Failed to list clusters, going to requeue the request")
 
 		return reconcile.Result{}, err
 	}
@@ -70,7 +69,7 @@ func (r *MetricReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 		splitName := strings.SplitN(request.Name, ".", 2)
 		if len(splitName) < 2 {
 			// Don't do any metrics if the policy is invalid.
-			reqLogger.Info("Invalid policy in cluster namespace: missing root policy ns prefix")
+			log.Info("Invalid policy in cluster namespace: missing root policy ns prefix")
 
 			return reconcile.Result{}, nil
 		}
@@ -97,33 +96,31 @@ func (r *MetricReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 		if errors.IsNotFound(err) {
 			// Try to delete the gauge, but don't get hung up on errors. Log whether it was deleted.
 			statusGaugeDeleted := policyStatusGauge.Delete(promLabels)
-			reqLogger.Info("Policy not found - must have been deleted.",
-				"status-gauge-deleted", statusGaugeDeleted)
+			log.Info("Policy not found. It must have been deleted.", "status-gauge-deleted", statusGaugeDeleted)
 
 			return reconcile.Result{}, nil
 		}
 
-		reqLogger.Error(err, "Failed to get Policy")
+		log.Error(err, "Failed to get Policy")
 
 		return reconcile.Result{}, err
 	}
 
-	reqLogger.Info("Got active state", "pol.Spec.Disabled", pol.Spec.Disabled)
+	log.V(2).Info("Got active state", "pol.Spec.Disabled", pol.Spec.Disabled)
 
 	if pol.Spec.Disabled {
 		// The policy is no longer active, so delete its metric
 		statusGaugeDeleted := policyStatusGauge.Delete(promLabels)
-		reqLogger.Info("Metric removed for non-active policy",
-			"status-gauge-deleted", statusGaugeDeleted)
+		log.V(1).Info("Metric removed for non-active policy", "status-gauge-deleted", statusGaugeDeleted)
 
 		return reconcile.Result{}, nil
 	}
 
-	reqLogger.Info("Got ComplianceState", "pol.Status.ComplianceState", pol.Status.ComplianceState)
+	log.V(2).Info("Got ComplianceState", "pol.Status.ComplianceState", pol.Status.ComplianceState)
 
 	statusMetric, err := policyStatusGauge.GetMetricWith(promLabels)
 	if err != nil {
-		reqLogger.Error(err, "Failed to get status metric from GaugeVec")
+		log.Error(err, "Failed to get status metric from GaugeVec")
 
 		return reconcile.Result{}, err
 	}
