@@ -50,29 +50,37 @@ const (
 	concurrencyPerPolicyDefault = 5
 )
 
+const (
+	startDelim = "{{hub"
+	stopDelim  = "hub}}"
+)
+
 var (
 	attempts             int
 	requeueErrorDelay    int
 	concurrencyPerPolicy int
 	kubeConfig           *rest.Config
 	kubeClient           *kubernetes.Interface
-	templateCfg          templates.Config
 )
 
 func Initialize(kubeconfig *rest.Config, kubeclient *kubernetes.Interface) {
 	kubeConfig = kubeconfig
 	kubeClient = kubeclient
-	// Adding eight spaces to the indentation makes the usage of `indent N` be from the logical
-	// starting point of the resource object wrapped in the ConfigurationPolicy.
-	templateCfg = templates.Config{
-		AdditionalIndentation: 8,
-		DisabledFunctions:     []string{"fromSecret"},
-		StartDelim:            "{{hub", StopDelim: "hub}}",
-	}
-
 	attempts = getEnvVarPosInt(attemptsEnvName, attemptsDefault)
 	requeueErrorDelay = getEnvVarPosInt(requeueErrorDelayEnvName, requeueErrorDelayDefault)
 	concurrencyPerPolicy = getEnvVarPosInt(concurrencyPerPolicyEnvName, concurrencyPerPolicyDefault)
+}
+
+// getTemplateCfg returns the default policy template configuration.
+func getTemplateCfg() templates.Config {
+	// Adding eight spaces to the indentation makes the usage of `indent N` be from the logical
+	// starting point of the resource object wrapped in the ConfigurationPolicy.
+	return templates.Config{
+		AdditionalIndentation: 8,
+		DisabledFunctions:     []string{"fromSecret"},
+		StartDelim:            startDelim,
+		StopDelim:             stopDelim,
+	}
 }
 
 func getEnvVarPosInt(name string, defaultValue int) int {
@@ -786,7 +794,7 @@ func (r *PolicyReconciler) handleDecision(instance *policiesv1.Policy, decision 
 // a helper to quickly check if there are any templates in any of the policy templates
 func policyHasTemplates(instance *policiesv1.Policy) bool {
 	for _, policyT := range instance.Spec.PolicyTemplates {
-		if templates.HasTemplate(policyT.ObjectDefinition.Raw, templateCfg.StartDelim) {
+		if templates.HasTemplate(policyT.ObjectDefinition.Raw, startDelim) {
 			return true
 		}
 	}
@@ -827,6 +835,7 @@ func (r *PolicyReconciler) processTemplates(
 		replicatedPlc.SetAnnotations(annotations)
 	}
 
+	templateCfg := getTemplateCfg()
 	templateCfg.LookupNamespace = rootPlc.GetNamespace()
 
 	tmplResolver, err := templates.NewResolver(kubeClient, kubeConfig, templateCfg)
