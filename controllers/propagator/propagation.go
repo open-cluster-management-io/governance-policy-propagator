@@ -835,6 +835,13 @@ func (r *PolicyReconciler) processTemplates(
 		replicatedPlc.SetAnnotations(annotations)
 	}
 
+	// For now, get/generate the key but the integration will occur in a future commit.
+	// See https://github.com/stolostron/backlog/issues/18712
+	_, err := r.getEncryptionKey(decision.ClusterName)
+	if err != nil {
+		return err
+	}
+
 	templateCfg := getTemplateCfg()
 	templateCfg.LookupNamespace = rootPlc.GetNamespace()
 
