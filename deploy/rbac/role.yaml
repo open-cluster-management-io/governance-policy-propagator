@@ -125,6 +125,32 @@ rules:
   - patch
   - update
 - apiGroups:
+  - policy.open-cluster-management.io
+  resources:
+  - policysets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - policy.open-cluster-management.io
+  resources:
+  - policysets/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - policy.open-cluster-management.io
+  resources:
+  - policysets/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - tower.ansible.com
   resources:
   - ansiblejobs

@@ -35,6 +35,7 @@ import (
 	policyv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
 	automationctrl "open-cluster-management.io/governance-policy-propagator/controllers/automation"
 	metricsctrl "open-cluster-management.io/governance-policy-propagator/controllers/policymetrics"
+	policysetctrl "open-cluster-management.io/governance-policy-propagator/controllers/policyset"
 	propagatorctrl "open-cluster-management.io/governance-policy-propagator/controllers/propagator"
 	"open-cluster-management.io/governance-policy-propagator/version"
 )
@@ -172,6 +173,14 @@ func main() {
 		Recorder:      mgr.GetEventRecorderFor(automationctrl.ControllerName),
 	}).SetupWithManager(mgr); err != nil {
 		log.Error(err, "Unable to create the controller", "controller", automationctrl.ControllerName)
+		os.Exit(1)
+	}
+
+	if err = (&policysetctrl.PolicySetReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		log.Error(err, "Unable to create controller", "controller", policysetctrl.ControllerName)
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
