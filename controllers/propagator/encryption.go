@@ -50,6 +50,7 @@ func (c *EncryptionKeyCache) Set(clusterName string, key []byte) {
 // getEncryptionKey will get the encryption key for a managed cluster used for policy template encryption. If it doesn't
 // already exist as a secret on the Hub cluster, it will be generated. All retrieved keys are cached.
 func (r *PolicyReconciler) getEncryptionKey(clusterName string) ([]byte, error) {
+	// #nosec G101
 	const secretName = "policy-encryption-key"
 
 	key := r.encryptionKeyCache.Get(clusterName)
