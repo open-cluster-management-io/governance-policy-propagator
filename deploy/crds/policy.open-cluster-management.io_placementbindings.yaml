@@ -83,7 +83,6 @@ spec:
               - kind
               - name
               type: object
-            maxItems: 1
             minItems: 1
             type: array
         required:
