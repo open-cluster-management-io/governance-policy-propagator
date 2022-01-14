@@ -52,7 +52,6 @@ type PlacementBinding struct {
 	// +kubebuilder:validation:Required
 	PlacementRef PlacementSubject `json:"placementRef"`
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MaxItems=1
 	// +kubebuilder:validation:MinItems=1
 	Subjects []Subject              `json:"subjects"`
 	Status   PlacementBindingStatus `json:"status,omitempty"`
