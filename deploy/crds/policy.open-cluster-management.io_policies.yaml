@@ -129,6 +129,8 @@ spec:
                       type: string
                     placementRule:
                       type: string
+                    policySet:
+                      type: string
                   type: object
                 type: array
               status:

@@ -13,10 +13,19 @@ spec:
     kind: PolicySet
     listKind: PolicySetList
     plural: policysets
+    shortNames:
+    - plcset
     singular: policyset
   scope: Namespaced
   versions:
-  - name: v1
+  - additionalPrinterColumns:
+    - jsonPath: .status.compliant
+      name: Compliance state
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
     schema:
       openAPIV3Schema:
         description: PolicySet is the Schema for the policysets API
