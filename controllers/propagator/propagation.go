@@ -223,7 +223,7 @@ func (r *PolicyReconciler) handleDecisions(
 		for _, subject := range subjects {
 			if !(subject.APIGroup == policiesv1.SchemeGroupVersion.Group &&
 				subject.Kind == policiesv1.Kind &&
-				subject.Name == instance.GetName()) {
+				subject.Name == instance.GetName()) && !r.isPolicySetSubject(instance, subject) {
 				continue
 			}
 
@@ -598,11 +598,21 @@ func getApplicationPlacementDecisions(
 
 		return nil, nil, err
 	}
+	// retrieve the originator of the pb
+	var policySetName string
+
+	for _, subject := range pb.Subjects {
+		if subject.Kind == policiesv1.PolicySetKind {
+			policySetName = subject.Name
+
+			break
+		}
+	}
 	// add the PlacementRule to placement, if not found there are no decisions
 	placement := &policiesv1.Placement{
 		PlacementBinding: pb.GetName(),
 		PlacementRule:    plr.GetName(),
-		// Decisions:        plr.Status.Decisions,
+		PolicySet:        policySetName,
 	}
 
 	return plr.Status.Decisions, placement, nil
@@ -626,11 +636,21 @@ func getClusterPlacementDecisions(
 
 		return nil, nil, err
 	}
+	// retrieve the originator of the pb
+	var policySetName string
 
+	for _, subject := range pb.Subjects {
+		if subject.Kind == policiesv1.PolicySetKind {
+			policySetName = subject.Name
+
+			break
+		}
+	}
 	// add current Placement to placement, if not found no decisions will be found
 	placement := &policiesv1.Placement{
 		PlacementBinding: pb.GetName(),
 		Placement:        pl.GetName(),
+		PolicySet:        policySetName,
 	}
 	list := &clusterv1alpha1.PlacementDecisionList{}
 	lopts := &client.ListOptions{Namespace: instance.GetNamespace()}
@@ -938,4 +958,34 @@ func isConfigurationPolicy(policyT *policiesv1.PolicyTemplate) bool {
 	_ = json.Unmarshal(policyT.ObjectDefinition.Raw, &jsonDef)
 
 	return jsonDef != nil && jsonDef["kind"] == "ConfigurationPolicy"
+}
+
+func (r *PolicyReconciler) isPolicySetSubject(instance *policiesv1.Policy, subject policiesv1.Subject) bool {
+	log := log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
+
+	if subject.APIGroup == policiesv1.SchemeGroupVersion.Group &&
+		subject.Kind == policiesv1.PolicySetKind {
+		policySetNamespacedName := types.NamespacedName{
+			Name:      subject.Name,
+			Namespace: instance.GetNamespace(),
+		}
+
+		policySet := &policiesv1.PolicySet{}
+
+		err := r.Get(context.TODO(), policySetNamespacedName, policySet)
+		if err != nil {
+			log.Error(err, "Failed to get the policyset", "policySetName", subject.Name, "policyName",
+				instance.GetName(), "policyNamespace", instance.GetNamespace())
+
+			return false
+		}
+
+		for _, plc := range policySet.Spec.Policies {
+			if string(plc) == instance.GetName() {
+				return true
+			}
+		}
+	}
+
+	return false
 }

@@ -15,7 +15,7 @@ type Subject struct {
 	APIGroup string `json:"apiGroup"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:Enum=Policy
+	// +kubebuilder:validation:Enum=Policy;PolicySet
 	Kind string `json:"kind"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1

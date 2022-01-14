@@ -30,6 +30,7 @@ var (
 	clientHubDynamic      dynamic.Interface
 	gvrPolicy             schema.GroupVersionResource
 	gvrPolicyAutomation   schema.GroupVersionResource
+	gvrPolicySet          schema.GroupVersionResource
 	gvrPlacementBinding   schema.GroupVersionResource
 	gvrPlacementRule      schema.GroupVersionResource
 	gvrPlacement          schema.GroupVersionResource
@@ -53,6 +54,9 @@ var _ = BeforeSuite(func() {
 	By("Setup Hub client")
 	gvrPolicy = schema.GroupVersionResource{
 		Group: "policy.open-cluster-management.io", Version: "v1", Resource: "policies",
+	}
+	gvrPolicySet = schema.GroupVersionResource{
+		Group: "policy.open-cluster-management.io", Version: "v1", Resource: "policysets",
 	}
 	gvrPlacementBinding = schema.GroupVersionResource{
 		Group: "policy.open-cluster-management.io", Version: "v1", Resource: "placementbindings",

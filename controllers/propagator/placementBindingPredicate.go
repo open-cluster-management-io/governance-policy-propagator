@@ -11,7 +11,7 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
-// we only want to watch for pb contains policy as subjects
+// we only want to watch for pb contains policy and policyset as subjects
 var pbPredicateFuncs = predicate.Funcs{
 	UpdateFunc: func(e event.UpdateEvent) bool {
 		// nolint: forcetypeassert
@@ -19,18 +19,19 @@ var pbPredicateFuncs = predicate.Funcs{
 		// nolint: forcetypeassert
 		pbObjOld := e.ObjectOld.(*policiesv1.PlacementBinding)
 
-		return common.IsPbForPoicy(pbObjNew) || common.IsPbForPoicy(pbObjOld)
+		return common.IsPbForPoicy(pbObjNew) || common.IsPbForPoicy(pbObjOld) ||
+			common.IsPbForPoicySet(pbObjNew) || common.IsPbForPoicySet(pbObjOld)
 	},
 	CreateFunc: func(e event.CreateEvent) bool {
 		// nolint: forcetypeassert
 		pbObj := e.Object.(*policiesv1.PlacementBinding)
 
-		return common.IsPbForPoicy(pbObj)
+		return common.IsPbForPoicy(pbObj) || common.IsPbForPoicySet(pbObj)
 	},
 	DeleteFunc: func(e event.DeleteEvent) bool {
 		// nolint: forcetypeassert
 		pbObj := e.Object.(*policiesv1.PlacementBinding)
 
-		return common.IsPbForPoicy(pbObj)
+		return common.IsPbForPoicy(pbObj) || common.IsPbForPoicySet(pbObj)
 	},
 }

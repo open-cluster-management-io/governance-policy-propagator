@@ -49,9 +49,12 @@ type PolicySetStatusResult struct {
 	Message   string                   `json:"message,omitempty"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 // +kubebuilder:resource:path=policysets,scope=Namespaced
+// +kubebuilder:resource:path=policysets,shortName=plcset
+// +kubebuilder:printcolumn:name="Compliance state",type="string",JSONPath=".status.compliant"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // PolicySet is the Schema for the policysets API
 type PolicySet struct {
 	metav1.TypeMeta   `json:",inline"`

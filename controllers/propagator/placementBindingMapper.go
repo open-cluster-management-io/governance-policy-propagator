@@ -4,6 +4,8 @@
 package propagator
 
 import (
+	"context"
+
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -18,20 +20,43 @@ func placementBindingMapper(c client.Client) handler.MapFunc {
 		object := obj.(*policiesv1.PlacementBinding)
 		var result []reconcile.Request
 
-		log := log.WithValues("name", object.GetName(), "namespace", object.GetNamespace())
+		log := log.WithValues("placementBindingName", object.GetName(), "namespace", object.GetNamespace())
 
 		log.V(2).Info("Reconcile request for a PlacementBinding")
 
 		subjects := object.Subjects
 		for _, subject := range subjects {
-			if subject.APIGroup == policiesv1.SchemeGroupVersion.Group && subject.Kind == policiesv1.Kind {
-				log.V(2).Info("Found reconciliation request from placement binding", "policyName", subject.Name)
+			if subject.APIGroup == policiesv1.SchemeGroupVersion.Group {
+				if subject.Kind == policiesv1.Kind {
+					log.V(2).Info("Found reconciliation request from policy placement binding",
+						"policyName", subject.Name)
 
-				request := reconcile.Request{NamespacedName: types.NamespacedName{
-					Name:      subject.Name,
-					Namespace: object.GetNamespace(),
-				}}
-				result = append(result, request)
+					request := reconcile.Request{NamespacedName: types.NamespacedName{
+						Name:      subject.Name,
+						Namespace: object.GetNamespace(),
+					}}
+					result = append(result, request)
+				} else if subject.Kind == policiesv1.PolicySetKind {
+					policySetNamespacedName := types.NamespacedName{
+						Name:      subject.Name,
+						Namespace: object.GetNamespace(),
+					}
+					policySet := &policiesv1.PolicySet{}
+					err := c.Get(context.TODO(), policySetNamespacedName, policySet)
+					if err != nil {
+						return nil
+					}
+					policies := policySet.Spec.Policies
+					for _, plc := range policies {
+						log.V(2).Info("Found reconciliation request from policyset placement bindng",
+							"policySetName", subject.Name, "policyName", string(plc))
+						request := reconcile.Request{NamespacedName: types.NamespacedName{
+							Name:      string(plc),
+							Namespace: object.GetNamespace(),
+						}}
+						result = append(result, request)
+					}
+				}
 			}
 		}
 

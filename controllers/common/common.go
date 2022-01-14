@@ -64,6 +64,22 @@ func IsPbForPoicy(pb *policiesv1.PlacementBinding) bool {
 	return found
 }
 
+// IsPbForPoicySet compares group and kind with policyset group and kind for given pb
+func IsPbForPoicySet(pb *policiesv1.PlacementBinding) bool {
+	found := false
+
+	subjects := pb.Subjects
+	for _, subject := range subjects {
+		if subject.Kind == policiesv1.PolicySetKind && subject.APIGroup == policiesv1.SchemeGroupVersion.Group {
+			found = true
+
+			break
+		}
+	}
+
+	return found
+}
+
 // FindNonCompliantClustersForPolicy returns cluster in noncompliant status with given policy
 func FindNonCompliantClustersForPolicy(plc *policiesv1.Policy) []string {
 	clusterList := []string{}

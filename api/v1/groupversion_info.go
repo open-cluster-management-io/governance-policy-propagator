@@ -25,3 +25,6 @@ var (
 
 // Kind Policy
 const Kind = "Policy"
+
+// PolicySetKind Policy
+const PolicySetKind = "PolicySet"

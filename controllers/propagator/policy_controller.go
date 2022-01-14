@@ -34,6 +34,7 @@ var log = ctrl.Log.WithName(ControllerName)
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies/finalizers,verbs=update
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=placementbindings,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policysets,verbs=get;list;watch
 //+kubebuilder:rbac:groups=cluster.open-cluster-management.io,resources=managedclusters;placementdecisions;placements,verbs=get;list;watch
 //+kubebuilder:rbac:groups=apps.open-cluster-management.io,resources=placementrules,verbs=get;list;watch
 //+kubebuilder:rbac:groups=core,resources=events,verbs=get;list;watch;create;update;patch;delete
@@ -53,6 +54,10 @@ func (r *PolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&source.Kind{Type: &policiesv1.Policy{}},
 			&common.EnqueueRequestsFromMapFunc{ToRequests: policyMapper(mgr.GetClient())}).
+		Watches(
+			&source.Kind{Type: &policiesv1.PolicySet{}},
+			&common.EnqueueRequestsFromMapFunc{ToRequests: policySetMapper(mgr.GetClient())},
+			builder.WithPredicates(policySetPredicateFuncs)).
 		Watches(
 			&source.Kind{Type: &policiesv1.PlacementBinding{}},
 			handler.EnqueueRequestsFromMapFunc(placementBindingMapper(mgr.GetClient())),

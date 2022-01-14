@@ -73,6 +73,7 @@ spec:
                 kind:
                   enum:
                   - Policy
+                  - PolicySet
                   minLength: 1
                   type: string
                 name:

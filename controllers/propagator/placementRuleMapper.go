@@ -17,7 +17,7 @@ import (
 
 func placementRuleMapper(c client.Client) handler.MapFunc {
 	return func(object client.Object) []reconcile.Request {
-		log := log.WithValues("name", object.GetName(), "namespace", object.GetNamespace())
+		log := log.WithValues("placementRuleName", object.GetName(), "namespace", object.GetNamespace())
 
 		log.V(2).Info("Reconcile Request for PlacementRule")
 
@@ -39,14 +39,37 @@ func placementRuleMapper(c client.Client) handler.MapFunc {
 				// check if it is for policy
 				subjects := pb.Subjects
 				for _, subject := range subjects {
-					if subject.APIGroup == policiesv1.SchemeGroupVersion.Group && subject.Kind == policiesv1.Kind {
-						log.V(1).Info("Found reconciliation request from placement rule", "policyName", subject.Name)
-						// generate reconcile request for policy referenced by pb
-						request := reconcile.Request{NamespacedName: types.NamespacedName{
-							Name:      subject.Name,
-							Namespace: object.GetNamespace(),
-						}}
-						result = append(result, request)
+					if subject.APIGroup == policiesv1.SchemeGroupVersion.Group {
+						if subject.Kind == policiesv1.Kind {
+							log.V(2).Info("Found reconciliation request from policy placement rule", "policyName",
+								subject.Name)
+							// generate reconcile request for policy referenced by pb
+							request := reconcile.Request{NamespacedName: types.NamespacedName{
+								Name:      subject.Name,
+								Namespace: object.GetNamespace(),
+							}}
+							result = append(result, request)
+						} else if subject.Kind == policiesv1.PolicySetKind {
+							policySetNamespacedName := types.NamespacedName{
+								Name:      subject.Name,
+								Namespace: object.GetNamespace(),
+							}
+							policySet := &policiesv1.PolicySet{}
+							err := c.Get(context.TODO(), policySetNamespacedName, policySet)
+							if err != nil {
+								return nil
+							}
+							policies := policySet.Spec.Policies
+							for _, plc := range policies {
+								log.V(2).Info("Found reconciliation request from a policyset placement rule",
+									"policySetName", subject.Name, "policyName", string(plc))
+								request := reconcile.Request{NamespacedName: types.NamespacedName{
+									Name:      string(plc),
+									Namespace: object.GetNamespace(),
+								}}
+								result = append(result, request)
+							}
+						}
 					}
 				}
 			}
