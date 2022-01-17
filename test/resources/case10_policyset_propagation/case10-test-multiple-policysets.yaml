@@ -1,0 +1,104 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: case10-test-policy
+spec:
+  remediationAction: inform
+  disabled: false
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policies.ibm.com/v1alpha1
+        kind: TrustedContainerPolicy
+        metadata:
+          name: case1-test-policy-trustedcontainerpolicy
+        spec:
+          severity: low
+          namespaceSelector:
+            include: ["default"]
+            exclude: ["kube-system"]
+          remediationAction: inform
+          imageRegistry: quay.io
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PolicySet
+metadata:
+  name: case10-test-policyset1
+spec:
+  policies:
+  - case10-test-policy
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: case10-test-policyset1-pb
+placementRef:
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+  name: case10-test-policyset1-plm
+subjects:
+- apiGroup: policy.open-cluster-management.io
+  kind: PolicySet
+  name: case10-test-policyset1
+---
+apiVersion: cluster.open-cluster-management.io/v1alpha1
+kind: Placement
+metadata:
+  name: case10-test-policyset1-plm
+spec:
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions: []
+---
+apiVersion: cluster.open-cluster-management.io/v1alpha1
+kind: PlacementDecision
+metadata:
+  name: case10-test-policyset1-plm-decision
+  labels:
+    cluster.open-cluster-management.io/placement: case10-test-policyset1-plm
+status:
+  decisions:
+  - clusterName: managed1
+    reason: ""
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PolicySet
+metadata:
+  name: case10-test-policyset2
+spec:
+  policies:
+  - case10-test-policy
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: case10-test-policyset2-pb
+placementRef:
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+  name: case10-test-policyset2-plm
+subjects:
+- apiGroup: policy.open-cluster-management.io
+  kind: PolicySet
+  name: case10-test-policyset2
+---
+apiVersion: cluster.open-cluster-management.io/v1alpha1
+kind: Placement
+metadata:
+  name: case10-test-policyset2-plm
+spec:
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions: []
+---
+apiVersion: cluster.open-cluster-management.io/v1alpha1
+kind: PlacementDecision
+metadata:
+  name: case10-test-policyset2-plm-decision
+  labels:
+    cluster.open-cluster-management.io/placement: case10-test-policyset2-plm
+status:
+  decisions:
+  - clusterName: managed2
+    reason: ""
