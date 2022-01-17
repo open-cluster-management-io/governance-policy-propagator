@@ -56,7 +56,7 @@ func (r *PolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&common.EnqueueRequestsFromMapFunc{ToRequests: policyMapper(mgr.GetClient())}).
 		Watches(
 			&source.Kind{Type: &policiesv1.PolicySet{}},
-			&common.EnqueueRequestsFromMapFunc{ToRequests: policySetMapper(mgr.GetClient())},
+			handler.EnqueueRequestsFromMapFunc(policySetMapper(mgr.GetClient())),
 			builder.WithPredicates(policySetPredicateFuncs)).
 		Watches(
 			&source.Kind{Type: &policiesv1.PlacementBinding{}},
