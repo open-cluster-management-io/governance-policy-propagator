@@ -44,7 +44,10 @@ func placementBindingMapper(c client.Client) handler.MapFunc {
 					policySet := &policiesv1.PolicySet{}
 					err := c.Get(context.TODO(), policySetNamespacedName, policySet)
 					if err != nil {
-						return nil
+						log.V(2).Info("Failed to retrieve policyset referenced in placementbinding",
+							"policySetName", subject.Name, "error", err)
+
+						continue
 					}
 					policies := policySet.Spec.Policies
 					for _, plc := range policies {
