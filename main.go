@@ -127,7 +127,7 @@ func main() {
 		MetricsBindAddress:     metricsAddr,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "c6e0b7c1.open-cluster-management.io",
+		LeaderElectionID:       "policy-propagator.open-cluster-management.io",
 	}
 
 	// Add support for MultiNamespace set in WATCH_NAMESPACE (e.g ns1,ns2)
