@@ -262,11 +262,20 @@ func GetMetrics(metricPatterns ...string) []string {
 		return []string{err.Error()}
 	}
 
-	propPodName := strings.Split(propPodInfo, " ")[0]
+	var cmd *exec.Cmd
 
 	metricFilter := " | grep " + strings.Join(metricPatterns, " | grep ")
-	cmd := exec.Command("kubectl", "exec", "-n=open-cluster-management", propPodName, "-c",
-		"governance-policy-propagator", "--", "bash", "-c", `curl localhost:8383/metrics`+metricFilter)
+	metricsCmd := `curl localhost:8383/metrics` + metricFilter
+
+	// The pod name is "No" when the response is "No resources found"
+	propPodName := strings.Split(propPodInfo, " ")[0]
+	if propPodName == "No" {
+		// A missing pod could mean the controller is running locally
+		cmd = exec.Command("bash", "-c", metricsCmd)
+	} else {
+		cmd = exec.Command("kubectl", "exec", "-n=open-cluster-management", propPodName, "-c",
+			"governance-policy-propagator", "--", "bash", "-c", metricsCmd)
+	}
 
 	matchingMetricsRaw, err := cmd.Output()
 	if err != nil {
