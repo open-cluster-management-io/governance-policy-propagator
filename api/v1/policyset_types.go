@@ -29,9 +29,9 @@ type PolicySetStatus struct {
 
 // PolicySetStatusPlacement defines a placement object for the status
 type PolicySetStatusPlacement struct {
-	PlacementBinding   string   `json:"placementBinding,omitempty"`
-	Placement          string   `json:"placement,omitempty"`
-	PlacementDecisions []string `json:"placementDecisions,omitempty"`
+	PlacementBinding string `json:"placementBinding,omitempty"`
+	Placement        string `json:"placement,omitempty"`
+	PlacementRule    string `json:"placementRule,omitempty"`
 }
 
 // PolicySetResultCluster shows the compliance status of a policy for a specific cluster

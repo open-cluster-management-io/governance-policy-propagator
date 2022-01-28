@@ -1,0 +1,24 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: PolicySet
+metadata:
+  name: case11-test-policyset
+spec:
+  policies:
+  - case11-test-policy
+status:
+  compliant: NonCompliant
+  placement:
+  - placementBinding: case11-test-policyset-pb
+    placementRule: case11-test-policyset-plr
+  results:
+  - clusters:
+    - clusterName: managed1
+      clusterNamespace: managed1
+      compliant: NonCompliant
+    - clusterName: managed2
+      clusterNamespace: managed2
+      compliant: NonCompliant
+    compliant: NonCompliant
+    policy: case11-test-policy
+  - message: policyset-does-not-exist not found
+    policy: policyset-does-not-exist

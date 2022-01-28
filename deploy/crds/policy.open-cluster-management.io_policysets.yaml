@@ -69,10 +69,8 @@ spec:
                       type: string
                     placementBinding:
                       type: string
-                    placementDecisions:
-                      items:
-                        type: string
-                      type: array
+                    placementRule:
+                      type: string
                   type: object
                 type: array
               results:
