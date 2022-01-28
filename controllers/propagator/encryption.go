@@ -6,14 +6,18 @@ package propagator
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"sync"
 
+	"github.com/stolostron/go-template-utils/v2/pkg/templates"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
+
+const ivAnnotation = "policy.open-cluster-management.io/encryption-iv"
 
 // EncryptionKeyCache acts as a cache for encryption keys for each managed cluster for policy template encryption.
 // This abstracts locking and unlocking operations to account for concurrency.
@@ -107,4 +111,42 @@ func (r *PolicyReconciler) getEncryptionKey(clusterName string) ([]byte, error) 
 	r.encryptionKeyCache.Set(clusterName, key)
 
 	return key, nil
+}
+
+// getInitializationVector retrieves the initialization vector from the annotation
+// "policy.open-cluster-management.io/encryption-iv" if the annotation exists or generates a new
+// initialization vector and adds it to the annotations object if it's missing.
+func (r *PolicyReconciler) getInitializationVector(
+	policyName string, clusterName string, annotations map[string]string,
+) ([]byte, error) {
+	log := log.WithValues("policy", policyName, "cluster", clusterName)
+
+	if initializationVector, ok := annotations[ivAnnotation]; ok {
+		log.V(2).Info("Found initialization vector annotation")
+
+		decodedVector, err := base64.StdEncoding.DecodeString(initializationVector)
+		if err == nil {
+			if len(decodedVector) == templates.IVSize {
+				return decodedVector, nil
+			}
+		}
+
+		log.V(2).Info("The initialization vector failed validation")
+	}
+
+	log.V(2).Info("Generating initialization vector annotation")
+
+	initializationVector := make([]byte, templates.IVSize)
+
+	_, err := rand.Read(initializationVector)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to generate the initialization vector for cluster %s for policy %s: %w",
+			clusterName, policyName, err,
+		)
+	}
+
+	annotations[ivAnnotation] = base64.StdEncoding.EncodeToString(initializationVector)
+
+	return initializationVector, nil
 }
