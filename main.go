@@ -177,8 +177,9 @@ func main() {
 	}
 
 	if err = (&policysetctrl.PolicySetReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor(policysetctrl.ControllerName),
 	}).SetupWithManager(mgr); err != nil {
 		log.Error(err, "Unable to create controller", "controller", policysetctrl.ControllerName)
 		os.Exit(1)
