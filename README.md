@@ -21,7 +21,7 @@ Every reconcile does the following:
 
 Go to the [Contributing guide](CONTRIBUTING.md) to learn how to get involved.
 
-## Geting started 
+## Getting started
 
 Check the [Security guide](SECURITY.md) if you need to report a security issue.
 
@@ -34,11 +34,21 @@ changes that affect the YAML files, the YAML files can be regenerated with
 ### Build and deploy locally
 You will need [kind](https://kind.sigs.k8s.io/docs/user/quick-start/) installed.
 
-```bash
-make kind-bootstrap-cluster-dev
-make build-images
-make kind-deploy-controller-dev
-```
+1. Create the Kind cluster
+   ```bash
+   make kind-bootstrap-cluster-dev
+   ```
+2. Start the propagator:
+   - Run in a pod on the cluster:
+     ```bash
+     make build-images
+     make kind-deploy-controller-dev
+     ```
+   - Run locally:
+     ```bash
+     make run
+     ```
+
 ### Running tests
 ```
 make test-dependencies

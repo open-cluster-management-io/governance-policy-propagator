@@ -1,0 +1,57 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  annotations:
+    "policy.open-cluster-management.io/encryption-iv": "7cznVUq5SXEE4RMZNkGOrQ=="
+  name: case9-test-policy
+spec:
+  remediationAction: inform
+  disabled: false
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          annotations:
+            "policy.open-cluster-management.io/encryption-iv": "7cznVUq5SXEE4RMZNkGOrQ=="
+          name: case9-test-configpolicy
+        spec:
+          remediationAction: inform
+          namespaceSelector:
+            exclude: ["kube-*"]
+            include: ["default"]
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                kind: ConfigMap
+                apiVersion: v1
+                metadata:
+                  name: case9-test-configmap
+                  namespace: test
+                data:
+                  Clustername: managed2
+                  Clusterid: '{{ fromClusterClaim id.openshift.io }}'
+                  Vlanid: $ocm_encrypted:316/YUguokEwCAunllk94w==
+                  someTopSecretThing: $ocm_encrypted:5n8twYYcFOIYqFznODvRPlMsZ9iGWUoyIDWml4HTPkrG5JX2/TLF63sfvDZD9fvP
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          annotations:
+            "policy.open-cluster-management.io/encryption-iv": "7cznVUq5SXEE4RMZNkGOrQ=="
+          name: case9-test-configpolicy
+        spec:
+          remediationAction: inform
+          namespaceSelector:
+            exclude: ["kube-*"]
+            include: ["default"]
+          object-templates:
+            - complianceType: mustnothave
+              objectDefinition:
+                kind: ConfigMap
+                apiVersion: v1
+                metadata:
+                  name: case9-test-configmap2
+                  namespace: test
+                data:
+                  thisOtherThing: $ocm_encrypted:oW1OaQWTqTspUDlgLFelRQ==

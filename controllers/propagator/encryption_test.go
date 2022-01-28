@@ -6,10 +6,12 @@ package propagator
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/stolostron/go-template-utils/v2/pkg/templates"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -17,6 +19,7 @@ import (
 )
 
 const (
+	policyName  = "test-policy"
 	clusterName = "local-cluster"
 	keySize     = 256
 	secretName  = "policy-encryption-key"
@@ -102,4 +105,55 @@ func TestGetEncryptionKeyCached(t *testing.T) {
 
 	Expect(err).To(BeNil())
 	Expect(string(key[0])).To(Equal("A"))
+}
+
+func TestGetInitializationVector(t *testing.T) {
+	t.Parallel()
+	RegisterFailHandler(Fail)
+
+	// Test when the initialization vector is generated
+	tests := []struct {
+		description string
+		annotations map[string]string
+	}{
+		{
+			"No IV",
+			map[string]string{},
+		},
+		{
+			"Valid IV",
+			map[string]string{
+				ivAnnotation: "7cznVUq5SXEE4RMZNkGOrQ==",
+			},
+		},
+		{
+			"Invalid IV",
+			map[string]string{
+				ivAnnotation: "this-is-invalid",
+			},
+		},
+	}
+
+	r := PolicyReconciler{}
+
+	for _, test := range tests {
+		subTest := test
+		t.Run(
+			test.description,
+			func(t *testing.T) {
+				t.Parallel()
+				initializationVector, err := r.getInitializationVector(policyName, clusterName, subTest.annotations)
+
+				Expect(err).To(BeNil())
+				// Verify that the returned initialization vector is 128 bits
+				Expect(len(initializationVector)).To(Equal(templates.IVSize))
+				// Verify that the annotation object was updated
+				Expect(
+					subTest.annotations[ivAnnotation],
+				).To(Equal(
+					base64.StdEncoding.EncodeToString(initializationVector),
+				))
+			},
+		)
+	}
 }

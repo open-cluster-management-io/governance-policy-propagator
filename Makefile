@@ -158,6 +158,9 @@ build-images:
 	@docker build -t ${IMAGE_NAME_AND_VERSION} -f build/Dockerfile .
 	@docker tag ${IMAGE_NAME_AND_VERSION} $(REGISTRY)/$(IMG):$(TAG)
 
+run:
+	WATCH_NAMESPACE="" go run main.go --leader-elect=false --zap-log-level=2
+
 ############################################################
 # clean section
 ############################################################
