@@ -4,6 +4,10 @@
 package common
 
 import (
+	"time"
+
+	"github.com/avast/retry-go/v3"
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/equality"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
@@ -91,4 +95,15 @@ func FindNonCompliantClustersForPolicy(plc *policiesv1.Policy) []string {
 	}
 
 	return clusterList
+}
+
+// GetRetryOptions returns reasonable options to call retry.Do with.
+func GetRetryOptions(logger logr.Logger, retryMsg string, attempts uint) []retry.Option {
+	return []retry.Option{
+		retry.Attempts(attempts),
+		retry.Delay(2 * time.Second),
+		retry.MaxDelay(10 * time.Second),
+		retry.OnRetry(func(n uint, err error) { logger.Info(retryMsg) }),
+		retry.LastErrorOnly(true),
+	}
 }

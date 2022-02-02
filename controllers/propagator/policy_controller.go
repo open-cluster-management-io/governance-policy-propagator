@@ -77,9 +77,8 @@ var _ reconcile.Reconciler = &PolicyReconciler{}
 // PolicyReconciler reconciles a Policy object
 type PolicyReconciler struct {
 	client.Client
-	encryptionKeyCache EncryptionKeyCache
-	Scheme             *runtime.Scheme
-	Recorder           record.EventRecorder
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // Reconcile reads that state of the cluster for a Policy object and makes changes based on the state read
