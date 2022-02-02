@@ -102,6 +102,16 @@ rules:
   - update
   - watch
 - apiGroups:
+  - ""
+  resourceNames:
+  - policy-encryption-key
+  resources:
+  - secrets
+  verbs:
+  - get
+  - update
+  - watch
+- apiGroups:
   - policy.open-cluster-management.io
   resources:
   - placementbindings

@@ -51,8 +51,9 @@ const (
 )
 
 const (
-	startDelim = "{{hub"
-	stopDelim  = "hub}}"
+	startDelim              = "{{hub"
+	stopDelim               = "hub}}"
+	TriggerUpdateAnnotation = "policy.open-cluster-management.io/trigger-update"
 )
 
 var (
@@ -102,13 +103,7 @@ func getEnvVarPosInt(name string, defaultValue int) int {
 
 // The options to call retry.Do with
 func getRetryOptions(logger logr.Logger, retryMsg string) []retry.Option {
-	return []retry.Option{
-		retry.Attempts(uint(attempts)),
-		retry.Delay(2 * time.Second),
-		retry.MaxDelay(10 * time.Second),
-		retry.OnRetry(func(n uint, err error) { logger.Info(retryMsg) }),
-		retry.LastErrorOnly(true),
-	}
+	return common.GetRetryOptions(logger, retryMsg, uint(attempts))
 }
 
 // cleanUpPolicy will delete all replicated policies associated with provided policy.
@@ -785,13 +780,13 @@ func (r *PolicyReconciler) handleDecision(instance *policiesv1.Policy, decision 
 		tempResolvedPlc := instance.DeepCopy()
 
 		// If the replicated policy has an initialization vector specified, set it for processing
-		if initializationVector, ok := replicatedPlc.Annotations[ivAnnotation]; ok {
+		if initializationVector, ok := replicatedPlc.Annotations[IVAnnotation]; ok {
 			tempAnnotations := tempResolvedPlc.GetAnnotations()
 			if tempAnnotations == nil {
 				tempAnnotations = make(map[string]string)
 			}
 
-			tempAnnotations[ivAnnotation] = initializationVector
+			tempAnnotations[IVAnnotation] = initializationVector
 
 			tempResolvedPlc.SetAnnotations(tempAnnotations)
 		}
@@ -862,8 +857,8 @@ func (r *PolicyReconciler) processTemplates(
 
 	// clear the trigger-update annotation, it's only for the root policy shouldn't be in replicated
 	// policies as it will cause an unnecessary update to the managed clusters
-	if _, ok := annotations["policy.open-cluster-management.io/trigger-update"]; ok {
-		delete(annotations, "policy.open-cluster-management.io/trigger-update")
+	if _, ok := annotations[TriggerUpdateAnnotation]; ok {
+		delete(annotations, TriggerUpdateAnnotation)
 		replicatedPlc.SetAnnotations(annotations)
 	}
 
@@ -1008,11 +1003,11 @@ func (r *PolicyReconciler) processTemplates(
 				policyTAnnotations = make(map[string]string)
 			}
 
-			policyIV := annotations[ivAnnotation]
-			foundIV := policyTAnnotations[ivAnnotation]
+			policyIV := annotations[IVAnnotation]
+			foundIV := policyTAnnotations[IVAnnotation]
 
 			if policyIV != foundIV {
-				policyTAnnotations[ivAnnotation] = policyIV
+				policyTAnnotations[IVAnnotation] = policyIV
 				policyTObjectUnstructured.SetAnnotations(policyTAnnotations)
 
 				updatedPolicyT, jsonErr := json.Marshal(policyTObjectUnstructured)

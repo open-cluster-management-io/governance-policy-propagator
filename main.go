@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
@@ -34,6 +36,7 @@ import (
 	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	policyv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
 	automationctrl "open-cluster-management.io/governance-policy-propagator/controllers/automation"
+	encryptionkeysctrl "open-cluster-management.io/governance-policy-propagator/controllers/encryptionkeys"
 	metricsctrl "open-cluster-management.io/governance-policy-propagator/controllers/policymetrics"
 	policysetctrl "open-cluster-management.io/governance-policy-propagator/controllers/policyset"
 	propagatorctrl "open-cluster-management.io/governance-policy-propagator/controllers/propagator"
@@ -71,12 +74,25 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
+	var keyRotationDays, keyRotationMaxConcurrency uint
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8383", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.UintVar(
+		&keyRotationDays,
+		"encryption-key-rotation",
+		30,
+		"The number of days until the policy encryption key is rotated",
+	)
+	flag.UintVar(
+		&keyRotationMaxConcurrency,
+		"key-rotation-max-concurrency",
+		10,
+		"The maximum number of concurrent reconciles for the policy-encryption-keys controller",
+	)
 
 	opts := zap.Options{
 		Development: true,
@@ -88,6 +104,16 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	printVersion()
+
+	if keyRotationDays < 1 {
+		log.Info("the encryption-key-rotation flag must be greater than 0")
+		os.Exit(1)
+	}
+
+	if keyRotationMaxConcurrency < 1 {
+		log.Info("the key-rotation-max-concurrency flag must be greater than 0")
+		os.Exit(1)
+	}
 
 	namespace, err := getWatchNamespace()
 	if err != nil {
@@ -120,6 +146,18 @@ func main() {
 		}
 	}
 
+	// Set a field selector so that a watch on secrets will be limited to just the secret with the policy template
+	// encryption key.
+	newCacheFunc := cache.BuilderWithOptions(
+		cache.Options{
+			SelectorsByObject: cache.SelectorsByObject{
+				&corev1.Secret{}: {
+					Field: fields.SelectorFromSet(fields.Set{"metadata.name": propagatorctrl.EncryptionKeySecret}),
+				},
+			},
+		},
+	)
+
 	// Set default manager options
 	options := ctrl.Options{
 		Namespace:              namespace,
@@ -128,6 +166,7 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "policy-propagator.open-cluster-management.io",
+		NewCache:               newCacheFunc,
 	}
 
 	// Add support for MultiNamespace set in WATCH_NAMESPACE (e.g ns1,ns2)
@@ -184,6 +223,17 @@ func main() {
 		log.Error(err, "Unable to create controller", "controller", policysetctrl.ControllerName)
 		os.Exit(1)
 	}
+
+	if err = (&encryptionkeysctrl.EncryptionKeysReconciler{
+		Client:                  mgr.GetClient(),
+		KeyRotationDays:         keyRotationDays,
+		MaxConcurrentReconciles: keyRotationMaxConcurrency,
+		Scheme:                  mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		log.Error(err, "Unable to create controller", "controller", encryptionkeysctrl.ControllerName)
+		os.Exit(1)
+	}
+
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
