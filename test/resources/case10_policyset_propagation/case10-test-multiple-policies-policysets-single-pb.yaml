@@ -1,0 +1,91 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: case10-test-policy1
+spec:
+  remediationAction: inform
+  disabled: false
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policies.ibm.com/v1alpha1
+        kind: TrustedContainerPolicy
+        metadata:
+          name: case10-test-policy1-trustedcontainerpolicy
+        spec:
+          severity: low
+          namespaceSelector:
+            include: ["default"]
+            exclude: ["kube-system"]
+          remediationAction: inform
+          imageRegistry: quay.io
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: case10-test-policy2
+spec:
+  remediationAction: inform
+  disabled: false
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policies.ibm.com/v1alpha1
+        kind: TrustedContainerPolicy
+        metadata:
+          name: case10-test-policy2-trustedcontainerpolicy
+        spec:
+          severity: low
+          namespaceSelector:
+            include: ["default"]
+            exclude: ["kube-system"]
+          remediationAction: inform
+          imageRegistry: quay.io
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PolicySet
+metadata:
+  name: case10-test-policyset1
+spec:
+  policies:
+  - case10-test-policy1
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PolicySet
+metadata:
+  name: case10-test-policyset2
+spec:
+  policies:
+  - case10-test-policy2
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: case10-test-policyset-pb
+placementRef:
+  apiGroup: apps.open-cluster-management.io
+  kind: PlacementRule
+  name: case10-test-policyset-plr
+subjects:
+- apiGroup: policy.open-cluster-management.io
+  kind: Policy
+  name: case10-test-policy1
+- apiGroup: policy.open-cluster-management.io
+  kind: PolicySet
+  name: case10-test-policyset1
+- apiGroup: policy.open-cluster-management.io
+  kind: PolicySet
+  name: case10-test-policyset2
+- apiGroup: policy.open-cluster-management.io
+  kind: Policy
+  name: case10-test-policy1
+---
+apiVersion: apps.open-cluster-management.io/v1
+kind: PlacementRule
+metadata:
+  name: case10-test-policyset-plr
+spec:
+  clusterConditions:
+  - status: "True"
+    type: ManagedClusterConditionAvailable
+  clusterSelector:
+    matchExpressions:
+      []
