@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
@@ -919,6 +920,26 @@ var _ = Describe("Test policyset propagation", func() {
 			)
 			Expect(plcSet2).NotTo(BeNil())
 		})
+		It(case10PolicyName+"1 should have "+case10PolicySetName+"1 placement", func() {
+			plc1 := utils.GetWithTimeout(
+				clientHubDynamic, gvrPolicy, case10PolicyName+"1", testNamespace, true, defaultTimeoutSeconds,
+			)
+			placement, found, err := unstructured.NestedSlice(plc1.Object, "status", "placement")
+			Expect(err).Should(BeNil())
+			Expect(found).Should(BeTrue())
+			Expect(len(placement)).Should(Equal(1))
+			Expect(placement[0].(map[string]interface{})["policySet"]).Should(Equal(case10PolicySetName + "1"))
+		})
+		It(case10PolicyName+"2 should have "+case10PolicySetName+"2 placement", func() {
+			plc1 := utils.GetWithTimeout(
+				clientHubDynamic, gvrPolicy, case10PolicyName+"2", testNamespace, true, defaultTimeoutSeconds,
+			)
+			placement, found, err := unstructured.NestedSlice(plc1.Object, "status", "placement")
+			Expect(err).Should(BeNil())
+			Expect(found).Should(BeTrue())
+			Expect(len(placement)).Should(Equal(1))
+			Expect(placement[0].(map[string]interface{})["policySet"]).Should(Equal(case10PolicySetName + "2"))
+		})
 		It("should propagate to cluster ns managed1", func() {
 			By("Patching " + case10PolicySetName + "-plm with decision of cluster managed1")
 			plm := utils.GetWithTimeout(
@@ -1033,6 +1054,65 @@ var _ = Describe("Test policyset propagation", func() {
 				LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case10PolicyName + "2",
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 1, true, defaultTimeoutSeconds)
+		})
+		It("should cleanup", func() {
+			By("Deleting " + case10PolicySetMultipleSinglePBYaml)
+			_, err := utils.KubectlWithOutput("delete",
+				"-f", case10PolicySetMultipleSinglePBYaml,
+				"-n", testNamespace)
+			Expect(err).To(BeNil())
+			plcSet1 := utils.GetWithTimeout(
+				clientHubDynamic, gvrPolicySet, case10PolicySetName+"1", testNamespace, false, defaultTimeoutSeconds,
+			)
+			Expect(plcSet1).To(BeNil())
+			plcSet2 := utils.GetWithTimeout(
+				clientHubDynamic, gvrPolicySet, case10PolicySetName+"2", testNamespace, false, defaultTimeoutSeconds,
+			)
+			Expect(plcSet2).To(BeNil())
+			opt := metav1.ListOptions{
+				LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case10PolicyName,
+			}
+			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
+		})
+	})
+
+	Describe("Test policy placement with multiple policies and policysets with single placementbinding", func() {
+		case10PolicySetMultipleSinglePBYaml := path + "case10-test-multiple-policies-policysets-single-pb.yaml"
+		It("should be created in user ns", func() {
+			By("Creating " + case10PolicySetMultipleSinglePBYaml)
+			_, err := utils.KubectlWithOutput("apply",
+				"-f", case10PolicySetMultipleSinglePBYaml,
+				"-n", testNamespace)
+			Expect(err).To(BeNil())
+			plcSet1 := utils.GetWithTimeout(
+				clientHubDynamic, gvrPolicySet, case10PolicySetName+"1", testNamespace, true, defaultTimeoutSeconds,
+			)
+			Expect(plcSet1).NotTo(BeNil())
+			plcSet2 := utils.GetWithTimeout(
+				clientHubDynamic, gvrPolicySet, case10PolicySetName+"2", testNamespace, true, defaultTimeoutSeconds,
+			)
+			Expect(plcSet2).NotTo(BeNil())
+		})
+		It(case10PolicyName+"1 should have 2 placement", func() {
+			plc1 := utils.GetWithTimeout(
+				clientHubDynamic, gvrPolicy, case10PolicyName+"1", testNamespace, true, defaultTimeoutSeconds,
+			)
+			placement, found, err := unstructured.NestedSlice(plc1.Object, "status", "placement")
+			Expect(err).Should(BeNil())
+			Expect(found).Should(BeTrue())
+			Expect(len(placement)).Should(Equal(2))
+			Expect(placement[0].(map[string]interface{})["policySet"]).Should(BeNil())
+			Expect(placement[1].(map[string]interface{})["policySet"]).Should(Equal(case10PolicySetName + "1"))
+		})
+		It(case10PolicyName+"2 should have 1 placement", func() {
+			plc1 := utils.GetWithTimeout(
+				clientHubDynamic, gvrPolicy, case10PolicyName+"2", testNamespace, true, defaultTimeoutSeconds,
+			)
+			placement, found, err := unstructured.NestedSlice(plc1.Object, "status", "placement")
+			Expect(err).Should(BeNil())
+			Expect(found).Should(BeTrue())
+			Expect(len(placement)).Should(Equal(1))
+			Expect(placement[0].(map[string]interface{})["policySet"]).Should(Equal(case10PolicySetName + "2"))
 		})
 		It("should cleanup", func() {
 			By("Deleting " + case10PolicySetMultipleSinglePBYaml)
