@@ -51,6 +51,9 @@ ifneq ($(KIND_VERSION), latest)
 else
 	KIND_ARGS =
 endif
+# Fetch Ginkgo/Gomega versions from go.mod
+GINKGO_VERSION := $(shell awk '/github.com\/onsi\/ginkgo\/v2/ {print $$2}' go.mod)
+GOMEGA_VERSION := $(shell awk '/github.com\/onsi\/gomega/ {print $$2}' go.mod)
 # KubeBuilder configuration
 KUBEBUILDER_DIR = /usr/local/kubebuilder/bin
 KBVERSION = 3.2.0
@@ -212,12 +215,12 @@ install-resources:
 	kubectl apply -f test/resources/managed1-cluster.yaml
 	kubectl apply -f test/resources/managed2-cluster.yaml
 
+e2e-dependencies:
+	go get github.com/onsi/ginkgo/v2/ginkgo@$(GINKGO_VERSION)
+	go get github.com/onsi/gomega/...@$(GOMEGA_VERSION)
+
 e2e-test:
 	ginkgo -v --slowSpecThreshold=10 test/e2e
-
-e2e-dependencies:
-	go get github.com/onsi/ginkgo/ginkgo@v1.16.4
-	go get github.com/onsi/gomega/...@v1.13.0
 
 e2e-debug:
 	kubectl get all -n $(KIND_NAMESPACE)
