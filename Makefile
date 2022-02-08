@@ -41,7 +41,6 @@ TESTARGS_DEFAULT := "-v"
 export TESTARGS ?= $(TESTARGS_DEFAULT)
 DEST ?= $(GOPATH)/src/$(GIT_HOST)/$(BASE_DIR)
 VERSION ?= $(shell cat COMPONENT_VERSION 2> /dev/null)
-KBVERSION := 2.3.0
 IMAGE_NAME_AND_VERSION ?= $(REGISTRY)/$(IMG)
 # Handle KinD configuration
 KIND_NAME ?= test-hub
@@ -53,7 +52,9 @@ else
 	KIND_ARGS =
 endif
 # KubeBuilder configuration
-KBVERSION := 2.3.1
+KUBEBUILDER_DIR = /usr/local/kubebuilder/bin
+KBVERSION = 3.2.0
+K8S_VERSION = 1.21.2
 
 LOCAL_OS := $(shell uname)
 ifeq ($(LOCAL_OS),Linux)
@@ -112,14 +113,23 @@ lint: lint-dependencies lint-all
 ############################################################
 # test section
 ############################################################
+KUBEBUILDER_DIR = /usr/local/kubebuilder/bin
+KBVERSION = 3.2.0
+K8S_VERSION = 1.21.2
 
 test: manifests generate fmt
 	go test ${TESTARGS} `go list ./... | grep -v test/e2e`
 
 test-dependencies:
-	curl -L https://github.com/kubernetes-sigs/kubebuilder/releases/download/v$(KBVERSION)/kubebuilder_$(KBVERSION)_$(GOOS)_$(GOARCH).tar.gz | tar -xz -C /tmp/
-	sudo mv -n /tmp/kubebuilder_$(KBVERSION)_$(GOOS)_$(GOARCH) /usr/local/kubebuilder
-	export PATH=$PATH:/usr/local/kubebuilder/bin
+	@if (ls $(KUBEBUILDER_DIR)/*); then \
+		echo "^^^ Files found in $(KUBEBUILDER_DIR). Skipping installation."; exit 1; \
+	else \
+		echo "^^^ Kubebuilder binaries not found. Installing Kubebuilder binaries."; \
+	fi
+	sudo mkdir -p $(KUBEBUILDER_DIR)
+	sudo curl -L https://github.com/kubernetes-sigs/kubebuilder/releases/download/v$(KBVERSION)/kubebuilder_$(GOOS)_$(GOARCH) -o $(KUBEBUILDER_DIR)/kubebuilder
+	sudo chmod +x $(KUBEBUILDER_DIR)/kubebuilder
+	curl -L "https://go.kubebuilder.io/test-tools/$(K8S_VERSION)/$(GOOS)/$(GOARCH)" | sudo tar xz --strip-components=2 -C $(KUBEBUILDER_DIR)/
 
 ############################################################
 # build section
