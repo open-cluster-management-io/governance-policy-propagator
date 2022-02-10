@@ -912,6 +912,11 @@ func (r *PolicyReconciler) processTemplates(
 
 	annotations := replicatedPlc.GetAnnotations()
 
+	// handle possible nil map
+	if len(annotations) == 0 {
+		annotations = make(map[string]string)
+	}
+
 	// if disable-templates annotations exists and is true, then exit without processing templates
 	if disable, ok := annotations["policy.open-cluster-management.io/disable-templates"]; ok {
 		if boolDisable, err := strconv.ParseBool(disable); err == nil && boolDisable {
