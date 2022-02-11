@@ -572,11 +572,11 @@ func (r *PolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) error {
 	return nil
 }
 
-// getApplicationPlacementDecisions return the placement decisions from an application
+// getApplicationPlacements return the placements from an application
 // lifecycle placementrule
-func getApplicationPlacementDecisions(
+func getApplicationPlacements(
 	c client.Client, pb policiesv1.PlacementBinding, instance *policiesv1.Policy,
-) ([]appsv1.PlacementDecision, []*policiesv1.Placement, error) {
+) ([]*policiesv1.Placement, error) {
 	plr := &appsv1.PlacementRule{}
 
 	err := c.Get(context.TODO(), types.NamespacedName{
@@ -592,7 +592,7 @@ func getApplicationPlacementDecisions(
 			"name", pb.PlacementRef.Name,
 		)
 
-		return nil, nil, err
+		return nil, err
 	}
 
 	var placements []*policiesv1.Placement
@@ -643,14 +643,14 @@ func getApplicationPlacementDecisions(
 		}
 	}
 
-	return plr.Status.Decisions, placements, nil
+	return placements, nil
 }
 
-// getClusterPlacementDecisions return the placement decisions from cluster
-// placement decisions
-func getClusterPlacementDecisions(
+// getClusterPlacements return the placement decisions from an application
+// lifecycle placementrule
+func getClusterPlacements(
 	c client.Client, pb policiesv1.PlacementBinding, instance *policiesv1.Policy,
-) ([]appsv1.PlacementDecision, []*policiesv1.Placement, error) {
+) ([]*policiesv1.Placement, error) {
 	log := log.WithValues("name", pb.PlacementRef.Name, "namespace", instance.GetNamespace())
 	pl := &clusterv1alpha1.Placement{}
 
@@ -662,7 +662,7 @@ func getClusterPlacementDecisions(
 	if err != nil && !k8serrors.IsNotFound(err) {
 		log.Error(err, "Failed to get the Placement")
 
-		return nil, nil, err
+		return nil, err
 	}
 
 	var placements []*policiesv1.Placement
@@ -714,34 +714,7 @@ func getClusterPlacementDecisions(
 		}
 	}
 
-	list := &clusterv1alpha1.PlacementDecisionList{}
-	lopts := &client.ListOptions{Namespace: instance.GetNamespace()}
-
-	opts := client.MatchingLabels{"cluster.open-cluster-management.io/placement": pl.GetName()}
-	opts.ApplyToList(lopts)
-	err = c.List(context.TODO(), list, lopts)
-
-	// do not error out if not found
-	if err != nil && !k8serrors.IsNotFound(err) {
-		log.Error(err, "Failed to get the PlacementDecision")
-
-		return nil, nil, err
-	}
-
-	var decisions []appsv1.PlacementDecision
-	decisions = make([]appsv1.PlacementDecision, 0, len(list.Items))
-
-	for _, item := range list.Items {
-		for _, cluster := range item.Status.Decisions {
-			decided := &appsv1.PlacementDecision{
-				ClusterName:      cluster.ClusterName,
-				ClusterNamespace: cluster.ClusterName,
-			}
-			decisions = append(decisions, *decided)
-		}
-	}
-
-	return decisions, placements, nil
+	return placements, nil
 }
 
 // getPlacementDecisions gets the PlacementDecisions for a PlacementBinding
@@ -749,7 +722,12 @@ func getPlacementDecisions(c client.Client, pb policiesv1.PlacementBinding,
 	instance *policiesv1.Policy) ([]appsv1.PlacementDecision, []*policiesv1.Placement, error) {
 	if pb.PlacementRef.APIGroup == appsv1.SchemeGroupVersion.Group &&
 		pb.PlacementRef.Kind == "PlacementRule" {
-		d, placement, err := getApplicationPlacementDecisions(c, pb, instance)
+		d, err := common.GetApplicationPlacementDecisions(c, pb, instance, log)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		placement, err := getApplicationPlacements(c, pb, instance)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -757,7 +735,12 @@ func getPlacementDecisions(c client.Client, pb policiesv1.PlacementBinding,
 		return d, placement, nil
 	} else if pb.PlacementRef.APIGroup == clusterv1alpha1.SchemeGroupVersion.Group &&
 		pb.PlacementRef.Kind == "Placement" {
-		d, placement, err := getClusterPlacementDecisions(c, pb, instance)
+		d, err := common.GetClusterPlacementDecisions(c, pb, instance, log)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		placement, err := getClusterPlacements(c, pb, instance)
 		if err != nil {
 			return nil, nil, err
 		}

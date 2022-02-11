@@ -1,0 +1,19 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: PolicySet
+metadata:
+  name: test-plcset-managed1
+spec:
+  policies:
+  - case11-multiple-placements-rule
+status:
+  compliant: NonCompliant
+  placement:
+  - placementBinding: test-plcset-managed1-pb
+    placementRule: test-plcset-managed1-plr
+  results:
+  - clusters:
+    - clusterName: managed1
+      clusterNamespace: managed1
+      compliant: NonCompliant
+    compliant: NonCompliant
+    policy: case11-multiple-placements-rule

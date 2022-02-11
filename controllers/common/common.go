@@ -4,12 +4,18 @@
 package common
 
 import (
+	"context"
 	"time"
 
 	"github.com/avast/retry-go/v3"
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/equality"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	clusterv1alpha1 "open-cluster-management.io/api/cluster/v1alpha1"
+	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 )
@@ -106,4 +112,80 @@ func GetRetryOptions(logger logr.Logger, retryMsg string, attempts uint) []retry
 		retry.OnRetry(func(n uint, err error) { logger.Info(retryMsg) }),
 		retry.LastErrorOnly(true),
 	}
+}
+
+// GetClusterPlacementDecisions return the placement decisions from cluster
+// placement decisions
+func GetClusterPlacementDecisions(
+	c client.Client, pb policiesv1.PlacementBinding, instance *policiesv1.Policy, log logr.Logger,
+) ([]appsv1.PlacementDecision, error) {
+	log = log.WithValues("name", pb.PlacementRef.Name, "namespace", instance.GetNamespace())
+	pl := &clusterv1alpha1.Placement{}
+
+	err := c.Get(context.TODO(), types.NamespacedName{
+		Namespace: instance.GetNamespace(),
+		Name:      pb.PlacementRef.Name,
+	}, pl)
+	// no error when not found
+	if err != nil && !k8serrors.IsNotFound(err) {
+		log.Error(err, "Failed to get the Placement")
+
+		return nil, err
+	}
+
+	list := &clusterv1alpha1.PlacementDecisionList{}
+	lopts := &client.ListOptions{Namespace: instance.GetNamespace()}
+
+	opts := client.MatchingLabels{"cluster.open-cluster-management.io/placement": pl.GetName()}
+	opts.ApplyToList(lopts)
+	err = c.List(context.TODO(), list, lopts)
+
+	// do not error out if not found
+	if err != nil && !k8serrors.IsNotFound(err) {
+		log.Error(err, "Failed to get the PlacementDecision")
+
+		return nil, err
+	}
+
+	var decisions []appsv1.PlacementDecision
+	decisions = make([]appsv1.PlacementDecision, 0, len(list.Items))
+
+	for _, item := range list.Items {
+		for _, cluster := range item.Status.Decisions {
+			decided := &appsv1.PlacementDecision{
+				ClusterName:      cluster.ClusterName,
+				ClusterNamespace: cluster.ClusterName,
+			}
+			decisions = append(decisions, *decided)
+		}
+	}
+
+	return decisions, nil
+}
+
+// GetApplicationPlacementDecisions return the placement decisions from an application
+// lifecycle placementrule
+func GetApplicationPlacementDecisions(
+	c client.Client, pb policiesv1.PlacementBinding, instance *policiesv1.Policy, log logr.Logger,
+) ([]appsv1.PlacementDecision, error) {
+	log = log.WithValues("name", pb.PlacementRef.Name, "namespace", instance.GetNamespace())
+	plr := &appsv1.PlacementRule{}
+
+	err := c.Get(context.TODO(), types.NamespacedName{
+		Namespace: instance.GetNamespace(),
+		Name:      pb.PlacementRef.Name,
+	}, plr)
+	// no error when not found
+	if err != nil && !k8serrors.IsNotFound(err) {
+		log.Error(
+			err,
+			"Failed to get the PlacementRule",
+			"namespace", instance.GetNamespace(),
+			"name", pb.PlacementRef.Name,
+		)
+
+		return nil, err
+	}
+
+	return plr.Status.Decisions, nil
 }
