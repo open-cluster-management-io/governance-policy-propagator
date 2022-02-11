@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
+	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
 const ControllerName string = "policy-set"
@@ -131,20 +132,6 @@ func processPolicySet(ctx context.Context, c client.Client, plcSet *policyv1.Pol
 			})
 		} else {
 			// policy exists - can use it to calculate status data
-			log.V(1).Info("Evaluating changes in policy " + string(childPlcName))
-			if childPlc.Spec.Disabled {
-				generatedResults = append(generatedResults, policyv1.PolicySetStatusResult{
-					Policy:  string(childPlcName),
-					Message: string(childPlcName) + " is disabled",
-				})
-			} else {
-				generatedResults = append(generatedResults, policyv1.PolicySetStatusResult{
-					Policy:    string(childPlcName),
-					Compliant: string(childPlc.Status.ComplianceState),
-					Clusters:  statusToClusters(childPlc.Status.Status),
-				})
-			}
-
 			// aggregate compliance state
 			if string(childPlc.Status.ComplianceState) != "" {
 				complianceFound = true
@@ -158,6 +145,46 @@ func processPolicySet(ctx context.Context, c client.Client, plcSet *policyv1.Pol
 				if placement.PolicySet == plcSet.GetName() {
 					placementsByBinding[placement.PlacementBinding] = plcPlacementToSetPlacement(*placement)
 				}
+			}
+
+			// create list of all relevant clusters
+			clusters := []string{}
+			for pbName := range placementsByBinding {
+				pbNamespacedName := types.NamespacedName{
+					Name:      pbName,
+					Namespace: plcSet.Namespace,
+				}
+
+				pb := &policyv1.PlacementBinding{}
+
+				err := c.Get(ctx, pbNamespacedName, pb)
+				if err != nil {
+					log.V(1).Info("Error getting placement binding " + pbName)
+				}
+
+				var decisions []appsv1.PlacementDecision
+				decisions, err = getDecisions(c, *pb, childPlc)
+				if err != nil {
+					log.Error(err, "Error getting placement decisions for binding "+pbName)
+				}
+
+				for _, decision := range decisions {
+					clusters = append(clusters, decision.ClusterName)
+				}
+			}
+
+			log.V(1).Info("Evaluating changes in policy " + string(childPlcName))
+			if childPlc.Spec.Disabled {
+				generatedResults = append(generatedResults, policyv1.PolicySetStatusResult{
+					Policy:  string(childPlcName),
+					Message: string(childPlcName) + " is disabled",
+				})
+			} else {
+				generatedResults = append(generatedResults, policyv1.PolicySetStatusResult{
+					Policy:    string(childPlcName),
+					Compliant: complianceInRelevantClusters(childPlc.Status.Status, clusters),
+					Clusters:  statusToClusters(childPlc.Status.Status, clusters),
+				})
 			}
 		}
 	}
@@ -182,6 +209,30 @@ func processPolicySet(ctx context.Context, c client.Client, plcSet *policyv1.Pol
 	}
 
 	return needsUpdate
+}
+
+// getDecisions gets the PlacementDecisions for a PlacementBinding
+func getDecisions(c client.Client, pb policyv1.PlacementBinding,
+	instance *policyv1.Policy) ([]appsv1.PlacementDecision, error) {
+	if pb.PlacementRef.APIGroup == appsv1.SchemeGroupVersion.Group &&
+		pb.PlacementRef.Kind == "PlacementRule" {
+		d, err := common.GetApplicationPlacementDecisions(c, pb, instance, log)
+		if err != nil {
+			return nil, err
+		}
+
+		return d, nil
+	} else if pb.PlacementRef.APIGroup == clusterv1alpha1.SchemeGroupVersion.Group &&
+		pb.PlacementRef.Kind == "Placement" {
+		d, err := common.GetClusterPlacementDecisions(c, pb, instance, log)
+		if err != nil {
+			return nil, err
+		}
+
+		return d, nil
+	}
+
+	return nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Name, pb.Namespace)
 }
 
 // updatePolicySetStatus triggers an update on the status of a policy set that needs it
@@ -220,18 +271,55 @@ func (r *PolicySetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // Helper function to convert policy.status.status to policyset.status.results.clusters
-func statusToClusters(status []*policyv1.CompliancePerClusterStatus) []policyv1.PolicySetResultCluster {
+func statusToClusters(status []*policyv1.CompliancePerClusterStatus,
+	relevantClusters []string) []policyv1.PolicySetResultCluster {
 	clusters := []policyv1.PolicySetResultCluster{}
 
 	for i := range status {
-		clusters = append(clusters, policyv1.PolicySetResultCluster{
-			ClusterName:      status[i].ClusterName,
-			ClusterNamespace: status[i].ClusterNamespace,
-			Compliant:        string(status[i].ComplianceState),
-		})
+		if clusterInList(relevantClusters, status[i].ClusterName) {
+			clusters = append(clusters, policyv1.PolicySetResultCluster{
+				ClusterName:      status[i].ClusterName,
+				ClusterNamespace: status[i].ClusterNamespace,
+				Compliant:        string(status[i].ComplianceState),
+			})
+		}
 	}
 
 	return clusters
+}
+
+// Helper function to filter out compliance statuses that are not in scope
+func complianceInRelevantClusters(status []*policyv1.CompliancePerClusterStatus, relevantClusters []string) string {
+	complianceFound := false
+	compliance := "Compliant"
+
+	for i := range status {
+		if clusterInList(relevantClusters, status[i].ClusterName) {
+			if string(status[i].ComplianceState) == "NonCompliant" {
+				compliance = "NonCompliant"
+				complianceFound = true
+			} else if string(status[i].ComplianceState) != "" {
+				complianceFound = true
+			}
+		}
+	}
+
+	if complianceFound {
+		return compliance
+	}
+
+	return ""
+}
+
+// helper function to check whether a cluster is in a list of clusters
+func clusterInList(list []string, cluster string) bool {
+	for _, item := range list {
+		if item == cluster {
+			return true
+		}
+	}
+
+	return false
 }
 
 // Helper function to convert policy placement to policyset placement
