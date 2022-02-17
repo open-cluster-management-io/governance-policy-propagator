@@ -66,10 +66,10 @@ var _ = BeforeSuite(func() {
 		Group: "apps.open-cluster-management.io", Version: "v1", Resource: "placementrules",
 	}
 	gvrPlacement = schema.GroupVersionResource{
-		Group: "cluster.open-cluster-management.io", Version: "v1alpha1", Resource: "placements",
+		Group: "cluster.open-cluster-management.io", Version: "v1beta1", Resource: "placements",
 	}
 	gvrPlacementDecision = schema.GroupVersionResource{
-		Group: "cluster.open-cluster-management.io", Version: "v1alpha1", Resource: "placementdecisions",
+		Group: "cluster.open-cluster-management.io", Version: "v1beta1", Resource: "placementdecisions",
 	}
 	gvrSecret = schema.GroupVersionResource{
 		Group: "", Version: "v1", Resource: "secrets",

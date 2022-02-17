@@ -13,7 +13,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	clusterv1alpha1 "open-cluster-management.io/api/cluster/v1alpha1"
+	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -120,7 +120,7 @@ func GetClusterPlacementDecisions(
 	c client.Client, pb policiesv1.PlacementBinding, instance *policiesv1.Policy, log logr.Logger,
 ) ([]appsv1.PlacementDecision, error) {
 	log = log.WithValues("name", pb.PlacementRef.Name, "namespace", instance.GetNamespace())
-	pl := &clusterv1alpha1.Placement{}
+	pl := &clusterv1beta1.Placement{}
 
 	err := c.Get(context.TODO(), types.NamespacedName{
 		Namespace: instance.GetNamespace(),
@@ -133,7 +133,7 @@ func GetClusterPlacementDecisions(
 		return nil, err
 	}
 
-	list := &clusterv1alpha1.PlacementDecisionList{}
+	list := &clusterv1beta1.PlacementDecisionList{}
 	lopts := &client.ListOptions{Namespace: instance.GetNamespace()}
 
 	opts := client.MatchingLabels{"cluster.open-cluster-management.io/placement": pl.GetName()}

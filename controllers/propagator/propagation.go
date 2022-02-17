@@ -23,7 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	clusterv1alpha1 "open-cluster-management.io/api/cluster/v1alpha1"
+	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -652,7 +652,7 @@ func getClusterPlacements(
 	c client.Client, pb policiesv1.PlacementBinding, instance *policiesv1.Policy,
 ) ([]*policiesv1.Placement, error) {
 	log := log.WithValues("name", pb.PlacementRef.Name, "namespace", instance.GetNamespace())
-	pl := &clusterv1alpha1.Placement{}
+	pl := &clusterv1beta1.Placement{}
 
 	err := c.Get(context.TODO(), types.NamespacedName{
 		Namespace: instance.GetNamespace(),
@@ -733,7 +733,7 @@ func getPlacementDecisions(c client.Client, pb policiesv1.PlacementBinding,
 		}
 
 		return d, placement, nil
-	} else if pb.PlacementRef.APIGroup == clusterv1alpha1.SchemeGroupVersion.Group &&
+	} else if pb.PlacementRef.APIGroup == clusterv1beta1.SchemeGroupVersion.Group &&
 		pb.PlacementRef.Kind == "Placement" {
 		d, err := common.GetClusterPlacementDecisions(c, pb, instance, log)
 		if err != nil {

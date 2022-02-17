@@ -7,7 +7,7 @@ import (
 	"context"
 
 	"k8s.io/apimachinery/pkg/types"
-	clusterv1alpha1 "open-cluster-management.io/api/cluster/v1alpha1"
+	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -41,7 +41,7 @@ func placementDecisionMapper(c client.Client) handler.MapFunc {
 		var result []reconcile.Request
 		// loop through pb to find if current placement is used for policy set
 		for _, pb := range pbList.Items {
-			if pb.PlacementRef.APIGroup != clusterv1alpha1.SchemeGroupVersion.Group ||
+			if pb.PlacementRef.APIGroup != clusterv1beta1.SchemeGroupVersion.Group ||
 				pb.PlacementRef.Kind != "Placement" || pb.PlacementRef.Name != placementName {
 				continue
 			}
