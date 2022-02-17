@@ -13,7 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
-	clusterv1alpha1 "open-cluster-management.io/api/cluster/v1alpha1"
+	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -222,7 +222,7 @@ func getDecisions(c client.Client, pb policyv1.PlacementBinding,
 		}
 
 		return d, nil
-	} else if pb.PlacementRef.APIGroup == clusterv1alpha1.SchemeGroupVersion.Group &&
+	} else if pb.PlacementRef.APIGroup == clusterv1beta1.SchemeGroupVersion.Group &&
 		pb.PlacementRef.Kind == "Placement" {
 		d, err := common.GetClusterPlacementDecisions(c, pb, instance, log)
 		if err != nil {
@@ -265,7 +265,7 @@ func (r *PolicySetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&source.Kind{Type: &appsv1.PlacementRule{}},
 			handler.EnqueueRequestsFromMapFunc(placementRuleMapper(mgr.GetClient()))).
 		Watches(
-			&source.Kind{Type: &clusterv1alpha1.PlacementDecision{}},
+			&source.Kind{Type: &clusterv1beta1.PlacementDecision{}},
 			handler.EnqueueRequestsFromMapFunc(placementDecisionMapper(mgr.GetClient()))).
 		Complete(r)
 }

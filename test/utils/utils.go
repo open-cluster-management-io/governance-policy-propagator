@@ -19,7 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	clusterv1alpha1 "open-cluster-management.io/api/cluster/v1alpha1"
+	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 )
 
@@ -39,16 +39,16 @@ func GeneratePlrStatus(clusters ...string) *appsv1.PlacementRuleStatus {
 // GeneratePldStatus generate pld status with given clusters
 func GeneratePldStatus(
 	placementName string, placementNamespace string, clusters ...string,
-) *clusterv1alpha1.PlacementDecisionStatus {
-	plrDecision := []clusterv1alpha1.ClusterDecision{}
+) *clusterv1beta1.PlacementDecisionStatus {
+	plrDecision := []clusterv1beta1.ClusterDecision{}
 	for _, cluster := range clusters {
-		plrDecision = append(plrDecision, clusterv1alpha1.ClusterDecision{
+		plrDecision = append(plrDecision, clusterv1beta1.ClusterDecision{
 			ClusterName: cluster,
 			Reason:      "test",
 		})
 	}
 
-	return &clusterv1alpha1.PlacementDecisionStatus{Decisions: plrDecision}
+	return &clusterv1beta1.PlacementDecisionStatus{Decisions: plrDecision}
 }
 
 // Pause sleep for given seconds
