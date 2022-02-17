@@ -92,5 +92,6 @@ report.json
 
 .go
 
+vendor/
 bin
 testbin/*
