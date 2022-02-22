@@ -68,15 +68,15 @@ func (r *PolicySetReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 
 	log.V(1).Info("Policy set was found, processing it")
 
+	originalInstance := instance.DeepCopy()
 	setNeedsUpdate := processPolicySet(ctx, r.Client, instance)
 
 	if setNeedsUpdate {
 		log.Info("Status update needed")
 
-		faultyPlcSet, err := updatePolicySetStatus(ctx, r.Client, instance)
+		err := r.Status().Patch(ctx, instance, client.MergeFrom(originalInstance))
 		if err != nil {
-			log.Error(err, fmt.Sprintf("reason: policy update error: policy/%v, namespace: %v",
-				faultyPlcSet.Name, faultyPlcSet.Namespace))
+			log.Error(err, "Failed to update policy set status")
 
 			return reconcile.Result{}, err
 		}
@@ -198,7 +198,6 @@ func processPolicySet(ctx context.Context, c client.Client, plcSet *policyv1.Pol
 		Results:   generatedResults,
 		Placement: generatedPlacements,
 	}
-
 	if complianceFound {
 		builtStatus.Compliant = aggregatedCompliance
 	}
@@ -233,17 +232,6 @@ func getDecisions(c client.Client, pb policyv1.PlacementBinding,
 	}
 
 	return nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Name, pb.Namespace)
-}
-
-// updatePolicySetStatus triggers an update on the status of a policy set that needs it
-func updatePolicySetStatus(ctx context.Context, c client.Client, policySet *policyv1.PolicySet) (*policyv1.PolicySet,
-	error) {
-	err := c.Status().Update(ctx, policySet)
-	if err != nil {
-		return policySet, err
-	}
-
-	return nil, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
