@@ -40,7 +40,7 @@ spec:
           remediationAction: inform
           imageRegistry: quay.io
 ---
-apiVersion: policy.open-cluster-management.io/v1
+apiVersion: policy.open-cluster-management.io/v1beta1
 kind: PolicySet
 metadata:
   name: case10-test-policyset1
@@ -48,7 +48,7 @@ spec:
   policies:
   - case10-test-policy1
 ---
-apiVersion: policy.open-cluster-management.io/v1
+apiVersion: policy.open-cluster-management.io/v1beta1
 kind: PolicySet
 metadata:
   name: case10-test-policyset2

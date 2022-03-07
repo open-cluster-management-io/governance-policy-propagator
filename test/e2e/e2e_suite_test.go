@@ -57,7 +57,7 @@ var _ = BeforeSuite(func() {
 		Group: "policy.open-cluster-management.io", Version: "v1", Resource: "policies",
 	}
 	gvrPolicySet = schema.GroupVersionResource{
-		Group: "policy.open-cluster-management.io", Version: "v1", Resource: "policysets",
+		Group: "policy.open-cluster-management.io", Version: "v1beta1", Resource: "policysets",
 	}
 	gvrPlacementBinding = schema.GroupVersionResource{
 		Group: "policy.open-cluster-management.io", Version: "v1", Resource: "placementbindings",

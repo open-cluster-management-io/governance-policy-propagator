@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
+	policiesv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
 	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
@@ -55,7 +56,7 @@ func (r *PolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&source.Kind{Type: &policiesv1.Policy{}},
 			&common.EnqueueRequestsFromMapFunc{ToRequests: policyMapper(mgr.GetClient())}).
 		Watches(
-			&source.Kind{Type: &policiesv1.PolicySet{}},
+			&source.Kind{Type: &policiesv1beta1.PolicySet{}},
 			handler.EnqueueRequestsFromMapFunc(policySetMapper(mgr.GetClient())),
 			builder.WithPredicates(policySetPredicateFuncs)).
 		Watches(

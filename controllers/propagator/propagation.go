@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
+	policiesv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
 	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
@@ -602,7 +603,7 @@ func getApplicationPlacements(
 	for _, subject := range pb.Subjects {
 		if subject.Kind == policiesv1.PolicySetKind {
 			// retrieve policyset to see if policy is part of it
-			plcset := &policiesv1.PolicySet{}
+			plcset := &policiesv1beta1.PolicySet{}
 			err := c.Get(context.TODO(), types.NamespacedName{
 				Namespace: instance.GetNamespace(),
 				Name:      subject.Name,
@@ -620,7 +621,7 @@ func getApplicationPlacements(
 			}
 
 			for _, plcName := range plcset.Spec.Policies {
-				if plcName == policiesv1.NonEmptyString(instance.Name) {
+				if plcName == policiesv1beta1.NonEmptyString(instance.Name) {
 					// found matching policy in policyset, add placement to it
 					placement := &policiesv1.Placement{
 						PlacementBinding: pb.GetName(),
@@ -672,7 +673,7 @@ func getClusterPlacements(
 	for _, subject := range pb.Subjects {
 		if subject.Kind == policiesv1.PolicySetKind {
 			// retrieve policyset to see if policy is part of it
-			plcset := &policiesv1.PolicySet{}
+			plcset := &policiesv1beta1.PolicySet{}
 			err := c.Get(context.TODO(), types.NamespacedName{
 				Namespace: instance.GetNamespace(),
 				Name:      subject.Name,
@@ -690,7 +691,7 @@ func getClusterPlacements(
 			}
 
 			for _, plcName := range plcset.Spec.Policies {
-				if plcName == policiesv1.NonEmptyString(instance.Name) {
+				if plcName == policiesv1beta1.NonEmptyString(instance.Name) {
 					// found matching policy in policyset, add placement to it
 					placement := &policiesv1.Placement{
 						PlacementBinding: pb.GetName(),
@@ -1097,7 +1098,7 @@ func (r *PolicyReconciler) isPolicySetSubject(instance *policiesv1.Policy, subje
 			Namespace: instance.GetNamespace(),
 		}
 
-		policySet := &policiesv1.PolicySet{}
+		policySet := &policiesv1beta1.PolicySet{}
 
 		err := r.Get(context.TODO(), policySetNamespacedName, policySet)
 		if err != nil {

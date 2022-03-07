@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
+	policiesv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
 )
 
 func placementBindingMapper(c client.Client) handler.MapFunc {
@@ -41,7 +42,7 @@ func placementBindingMapper(c client.Client) handler.MapFunc {
 						Name:      subject.Name,
 						Namespace: object.GetNamespace(),
 					}
-					policySet := &policiesv1.PolicySet{}
+					policySet := &policiesv1beta1.PolicySet{}
 					err := c.Get(context.TODO(), policySetNamespacedName, policySet)
 					if err != nil {
 						log.V(2).Info("Failed to retrieve policyset referenced in placementbinding",
