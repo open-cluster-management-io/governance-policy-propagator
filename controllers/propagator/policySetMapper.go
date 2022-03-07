@@ -9,7 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
+	policiesv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
 )
 
 func policySetMapper(c client.Client) handler.MapFunc {
@@ -19,7 +19,7 @@ func policySetMapper(c client.Client) handler.MapFunc {
 
 		var result []reconcile.Request
 
-		for _, plc := range object.(*policiesv1.PolicySet).Spec.Policies {
+		for _, plc := range object.(*policiesv1beta1.PolicySet).Spec.Policies {
 			log.V(2).Info("Found reconciliation request from a policyset", "policyName", string(plc))
 
 			request := reconcile.Request{NamespacedName: types.NamespacedName{

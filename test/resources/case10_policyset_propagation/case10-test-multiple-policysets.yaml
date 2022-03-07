@@ -19,7 +19,7 @@ spec:
           remediationAction: inform
           imageRegistry: quay.io
 ---
-apiVersion: policy.open-cluster-management.io/v1
+apiVersion: policy.open-cluster-management.io/v1beta1
 kind: PolicySet
 metadata:
   name: case10-test-policyset1
@@ -61,7 +61,7 @@ status:
   - clusterName: managed1
     reason: ""
 ---
-apiVersion: policy.open-cluster-management.io/v1
+apiVersion: policy.open-cluster-management.io/v1beta1
 kind: PolicySet
 metadata:
   name: case10-test-policyset2

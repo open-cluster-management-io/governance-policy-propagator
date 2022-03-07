@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
+	policyv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
 	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
@@ -48,7 +49,7 @@ func (r *PolicySetReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 	log := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	log.Info("Reconciling policy sets...")
 	// Fetch the PolicySet instance
-	instance := &policyv1.PolicySet{}
+	instance := &policyv1beta1.PolicySet{}
 
 	err := r.Get(ctx, request.NamespacedName, instance)
 	if err != nil {
@@ -96,16 +97,16 @@ func (r *PolicySetReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 }
 
 // processPolicySet compares the status of a policyset to its desired state and determines whether an update is needed
-func processPolicySet(ctx context.Context, c client.Client, plcSet *policyv1.PolicySet) bool {
+func processPolicySet(ctx context.Context, c client.Client, plcSet *policyv1beta1.PolicySet) bool {
 	log.V(1).Info("Processing policy sets")
 
 	needsUpdate := false
 
 	// compile results and compliance state from policy statuses
-	generatedResults := []policyv1.PolicySetStatusResult{}
+	generatedResults := []policyv1beta1.PolicySetStatusResult{}
 	complianceFound := false
 	aggregatedCompliance := "Compliant"
-	placementsByBinding := map[string]policyv1.PolicySetStatusPlacement{}
+	placementsByBinding := map[string]policyv1beta1.PolicySetStatusPlacement{}
 
 	for i := range plcSet.Spec.Policies {
 		childPlcName := plcSet.Spec.Policies[i]
@@ -126,7 +127,7 @@ func processPolicySet(ctx context.Context, c client.Client, plcSet *policyv1.Pol
 				errMessage = strings.Split(err.Error(), "Policy.policy.open-cluster-management.io ")[1]
 			}
 
-			generatedResults = append(generatedResults, policyv1.PolicySetStatusResult{
+			generatedResults = append(generatedResults, policyv1beta1.PolicySetStatusResult{
 				Policy:  string(childPlcName),
 				Message: errMessage,
 			})
@@ -175,12 +176,12 @@ func processPolicySet(ctx context.Context, c client.Client, plcSet *policyv1.Pol
 
 			log.V(1).Info("Evaluating changes in policy " + string(childPlcName))
 			if childPlc.Spec.Disabled {
-				generatedResults = append(generatedResults, policyv1.PolicySetStatusResult{
+				generatedResults = append(generatedResults, policyv1beta1.PolicySetStatusResult{
 					Policy:  string(childPlcName),
 					Message: string(childPlcName) + " is disabled",
 				})
 			} else {
-				generatedResults = append(generatedResults, policyv1.PolicySetStatusResult{
+				generatedResults = append(generatedResults, policyv1beta1.PolicySetStatusResult{
 					Policy:    string(childPlcName),
 					Compliant: complianceInRelevantClusters(childPlc.Status.Status, clusters),
 					Clusters:  statusToClusters(childPlc.Status.Status, clusters),
@@ -189,12 +190,12 @@ func processPolicySet(ctx context.Context, c client.Client, plcSet *policyv1.Pol
 		}
 	}
 
-	generatedPlacements := []policyv1.PolicySetStatusPlacement{}
+	generatedPlacements := []policyv1beta1.PolicySetStatusPlacement{}
 	for _, pcmt := range placementsByBinding {
 		generatedPlacements = append(generatedPlacements, pcmt)
 	}
 
-	builtStatus := policyv1.PolicySetStatus{
+	builtStatus := policyv1beta1.PolicySetStatus{
 		Results:   generatedResults,
 		Placement: generatedPlacements,
 	}
@@ -239,7 +240,7 @@ func (r *PolicySetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerName).
 		For(
-			&policyv1.PolicySet{},
+			&policyv1beta1.PolicySet{},
 			builder.WithPredicates(policySetPredicateFuncs)).
 		Watches(
 			&source.Kind{Type: &policyv1.Policy{}},
@@ -260,12 +261,12 @@ func (r *PolicySetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // Helper function to convert policy.status.status to policyset.status.results.clusters
 func statusToClusters(status []*policyv1.CompliancePerClusterStatus,
-	relevantClusters []string) []policyv1.PolicySetResultCluster {
-	clusters := []policyv1.PolicySetResultCluster{}
+	relevantClusters []string) []policyv1beta1.PolicySetResultCluster {
+	clusters := []policyv1beta1.PolicySetResultCluster{}
 
 	for i := range status {
 		if clusterInList(relevantClusters, status[i].ClusterName) {
-			clusters = append(clusters, policyv1.PolicySetResultCluster{
+			clusters = append(clusters, policyv1beta1.PolicySetResultCluster{
 				ClusterName:      status[i].ClusterName,
 				ClusterNamespace: status[i].ClusterNamespace,
 				Compliant:        string(status[i].ComplianceState),
@@ -311,8 +312,8 @@ func clusterInList(list []string, cluster string) bool {
 }
 
 // Helper function to convert policy placement to policyset placement
-func plcPlacementToSetPlacement(plcPlacement policyv1.Placement) policyv1.PolicySetStatusPlacement {
-	return policyv1.PolicySetStatusPlacement{
+func plcPlacementToSetPlacement(plcPlacement policyv1.Placement) policyv1beta1.PolicySetStatusPlacement {
+	return policyv1beta1.PolicySetStatusPlacement{
 		PlacementBinding: plcPlacement.PlacementBinding,
 		Placement:        plcPlacement.Placement,
 		PlacementRule:    plcPlacement.PlacementRule,
