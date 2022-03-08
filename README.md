@@ -83,5 +83,5 @@ The following environment variables can be set to configure the controller:
 - The `governance-policy-propagator` is part of the `open-cluster-management` community. For more information, visit: [open-cluster-management.io](https://open-cluster-management.io).
 
 <!---
-Date: 9/24/2021
+Date: 2022-03-08
 -->
