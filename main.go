@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/spf13/pflag"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
@@ -71,35 +72,34 @@ func init() {
 }
 
 func main() {
+	opts := zap.Options{}
+	opts.BindFlags(flag.CommandLine)
+	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
+
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
 	var keyRotationDays, keyRotationMaxConcurrency uint
 
-	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8383", "The address the metric endpoint binds to.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", true,
+	pflag.StringVar(&metricsAddr, "metrics-bind-address", ":8383", "The address the metric endpoint binds to.")
+	pflag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	pflag.BoolVar(&enableLeaderElection, "leader-elect", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	flag.UintVar(
+	pflag.UintVar(
 		&keyRotationDays,
 		"encryption-key-rotation",
 		30,
 		"The number of days until the policy encryption key is rotated",
 	)
-	flag.UintVar(
+	pflag.UintVar(
 		&keyRotationMaxConcurrency,
 		"key-rotation-max-concurrency",
 		10,
 		"The maximum number of concurrent reconciles for the policy-encryption-keys controller",
 	)
 
-	opts := zap.Options{
-		Development: true,
-	}
-
-	opts.BindFlags(flag.CommandLine)
-	flag.Parse()
+	pflag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
