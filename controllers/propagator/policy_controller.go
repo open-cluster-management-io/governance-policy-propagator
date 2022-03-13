@@ -102,41 +102,19 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 			// Owned objects are automatically garbage collected.
 			log.Info("Policy not found, so it may have been deleted. Deleting the replicated policies.")
 
-			replicatedPlcList := &policiesv1.PolicyList{}
-
-			err := r.List(ctx, replicatedPlcList,
-				client.MatchingLabels(common.LabelsForRootPolicy(&policiesv1.Policy{
-					TypeMeta: metav1.TypeMeta{
-						Kind:       policiesv1.Kind,
-						APIVersion: policiesv1.SchemeGroupVersion.Group,
-					},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      request.Name,
-						Namespace: request.Namespace,
-					},
-				})))
+			err := r.cleanUpPolicy(&policiesv1.Policy{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       policiesv1.Kind,
+					APIVersion: policiesv1.SchemeGroupVersion.Group,
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      request.Name,
+					Namespace: request.Namespace,
+				},
+			})
 			if err != nil {
-				// there was an error, requeue
-				log.Error(err, "Failed to list the replicated policies")
-
 				return reconcile.Result{}, err
 			}
-
-			for _, plc := range replicatedPlcList.Items {
-				log := log.WithValues("name", plc.GetName(), "namespace", plc.GetNamespace())
-
-				log.V(1).Info("Deleting the replicated policy")
-
-				// #nosec G601 -- no memory addresses are stored in collections
-				err := r.Delete(ctx, &plc)
-				if err != nil && !errors.IsNotFound(err) {
-					log.Error(err, "Failed to delete the replicated policy")
-
-					return reconcile.Result{}, err
-				}
-			}
-
-			log.Info("The policy clean up completed. Reconciliation complete.")
 
 			return reconcile.Result{}, nil
 		}

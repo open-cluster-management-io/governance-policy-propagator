@@ -107,10 +107,47 @@ func getRetryOptions(logger logr.Logger, retryMsg string) []retry.Option {
 	return common.GetRetryOptions(logger, retryMsg, uint(attempts))
 }
 
+func (r *PolicyReconciler) deletePolicy(plc *policiesv1.Policy) error {
+	// #nosec G601 -- no memory addresses are stored in collections
+	err := r.Delete(context.TODO(), plc)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		log.Error(
+			err,
+			"Failed to delete the replicated policy",
+			"name", plc.GetName(),
+			"namespace", plc.GetNamespace(),
+		)
+
+		return err
+	}
+
+	return nil
+}
+
+type policyDeleter interface {
+	deletePolicy(instance *policiesv1.Policy) error
+}
+
+type deletionResult struct {
+	Identifier string
+	Err        error
+}
+
+func plcDeletionWrapper(
+	deletionHandler policyDeleter,
+	policies <-chan policiesv1.Policy,
+	results chan<- deletionResult,
+) {
+	for policy := range policies {
+		identifier := fmt.Sprintf("%s/%s", policy.GetNamespace(), policy.GetName())
+		err := deletionHandler.deletePolicy(&policy)
+		results <- deletionResult{identifier, err}
+	}
+}
+
 // cleanUpPolicy will delete all replicated policies associated with provided policy.
 func (r *PolicyReconciler) cleanUpPolicy(instance *policiesv1.Policy) error {
 	log := log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
-	successful := true
 	replicatedPlcList := &policiesv1.PolicyList{}
 
 	err := r.List(
@@ -122,22 +159,53 @@ func (r *PolicyReconciler) cleanUpPolicy(instance *policiesv1.Policy) error {
 		return err
 	}
 
-	for _, plc := range replicatedPlcList.Items {
-		// #nosec G601 -- no memory addresses are stored in collections
-		err := r.Delete(context.TODO(), &plc)
-		if err != nil && !k8serrors.IsNotFound(err) {
-			log.Error(
-				err,
-				"Failed to delete the replicated policy",
-				"name", plc.GetName(),
-				"namespace", plc.GetNamespace(),
-			)
+	if len(replicatedPlcList.Items) == 0 {
+		log.V(2).Info("No replicated policies to delete.")
 
-			successful = false
+		return nil
+	}
+
+	log.V(2).Info("Deleting %d replicated policies because root policy was deleted", len(replicatedPlcList.Items))
+
+	policiesChan := make(chan policiesv1.Policy, len(replicatedPlcList.Items))
+	deletionResultsChan := make(chan deletionResult, len(replicatedPlcList.Items))
+
+	numWorkers := common.GetNumWorkers(len(replicatedPlcList.Items), concurrencyPerPolicy)
+
+	for i := 0; i < numWorkers; i++ {
+		go plcDeletionWrapper(r, policiesChan, deletionResultsChan)
+	}
+
+	log.V(2).Info("Scheduling work to handle deleting replicated policies")
+
+	for _, plc := range replicatedPlcList.Items {
+		policiesChan <- plc
+	}
+
+	// Wait for all the deletions to be processed.
+	log.V(1).Info("Waiting for the result of deleting the replicated policies", "count", len(policiesChan))
+
+	processedResults := 0
+	failures := 0
+
+	for result := range deletionResultsChan {
+		if result.Err != nil {
+			log.V(2).Info("Failed to delete replicated policy " + result.Identifier)
+			failures++
+		}
+
+		processedResults++
+
+		// Once all the deletions have been processed, it's safe to close
+		// the channels and stop blocking in this goroutine.
+		if processedResults == len(replicatedPlcList.Items) {
+			close(policiesChan)
+			close(deletionResultsChan)
+			log.V(2).Info("All replicated policy deletions have been handled", "count", len(replicatedPlcList.Items))
 		}
 	}
 
-	if !successful {
+	if failures > 0 {
 		return errors.New("failed to delete one or more replicated policies")
 	}
 
@@ -263,13 +331,7 @@ func (r *PolicyReconciler) handleDecisions(
 			// the results from the decisions being processed.
 			decisionsChan := make(chan appsv1.PlacementDecision, len(decisions))
 			resultsChan := make(chan decisionResult, len(decisions))
-			var numWorkers int
-
-			if len(decisions) > concurrencyPerPolicy {
-				numWorkers = concurrencyPerPolicy
-			} else {
-				numWorkers = len(decisions)
-			}
+			numWorkers := common.GetNumWorkers(len(decisions), concurrencyPerPolicy)
 
 			for i := 0; i < numWorkers; i++ {
 				go handleDecisionWrapper(r, instance, decisionsChan, resultsChan)
