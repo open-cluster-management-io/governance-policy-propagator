@@ -189,3 +189,15 @@ func GetApplicationPlacementDecisions(
 
 	return plr.Status.Decisions, nil
 }
+
+// GetNumWorkers is a helper function to return the number of workers to handle concurrent tasks
+func GetNumWorkers(listLength int, concurrencyPerPolicy int) int {
+	var numWorkers int
+	if listLength > concurrencyPerPolicy {
+		numWorkers = concurrencyPerPolicy
+	} else {
+		numWorkers = listLength
+	}
+
+	return numWorkers
+}

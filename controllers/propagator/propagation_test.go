@@ -233,3 +233,89 @@ func TestHandleDecisionWrapper(t *testing.T) {
 		close(resultsChan)
 	}
 }
+
+func (r MockPolicyReconciler) deletePolicy(
+	instance *policiesv1.Policy,
+) error {
+	return r.Err
+}
+
+func TestPlcDeletionWrapper(t *testing.T) {
+	tests := []struct {
+		Error         error
+		ExpectedError bool
+	}{
+		{nil, false},
+		{errors.New("some error"), true},
+	}
+
+	for _, test := range tests {
+		// Simulate three replicated policies
+		policies := []policiesv1.Policy{
+			{
+				ObjectMeta: metav1.ObjectMeta{Name: "laws.gambling-age", Namespace: "cluster1"},
+			},
+			{
+				ObjectMeta: metav1.ObjectMeta{Name: "laws.gambling-age", Namespace: "cluster2"},
+			},
+			{
+				ObjectMeta: metav1.ObjectMeta{Name: "laws.gambling-age", Namespace: "cluster3"},
+			},
+		}
+
+		// Load up the plcChan channel with all the decisions so that plcDeletionWrapper
+		// will call deletePolicy with each.
+		plcChan := make(chan policiesv1.Policy, len(policies))
+
+		for _, policy := range policies {
+			plcChan <- policy
+		}
+
+		resultsChan := make(chan deletionResult, len(policies))
+
+		// Instantiate the mock PolicyReconciler to pass to plcDeletionWrapper
+		reconciler := MockPolicyReconciler{Err: test.Error}
+
+		go func() {
+			start := time.Now()
+			// Wait until plcDeletionWrapper has completed its work. Then close
+			// the channel so that plcDeletionWrapper returns. This times out
+			// after five seconds.
+			for len(resultsChan) != len(policies) {
+				if time.Since(start) > (time.Second * 5) {
+					close(plcChan)
+				}
+			}
+			close(plcChan)
+		}()
+
+		plcDeletionWrapper(reconciler, plcChan, resultsChan)
+
+		// Expect a 1x1 mapping of results to replicated policies.
+		if len(resultsChan) != len(policies) {
+			t.Fatalf(
+				"Expected the results channel length of %d, got %d", len(policies), len(resultsChan),
+			)
+		}
+
+		// Ensure all the results from the channel are as expected.
+		for i := 0; i < len(policies); i++ {
+			result := <-resultsChan
+			if test.ExpectedError {
+				if result.Err == nil {
+					t.Fatal("Expected an error but didn't get one")
+				} else if result.Err != test.Error { // nolint: errorlint
+					t.Fatalf("Expected the error %v but got: %v", test.Error, result.Err)
+				}
+			} else if result.Err != nil {
+				t.Fatalf("Didn't expect but got: %v", result.Err)
+			}
+
+			expectedIdentifier := fmt.Sprintf("cluster%d/laws.gambling-age", i+1)
+			if result.Identifier != expectedIdentifier {
+				t.Fatalf("Expected the identifier %s, got %s", result.Identifier, expectedIdentifier)
+			}
+		}
+		close(resultsChan)
+	}
+}
