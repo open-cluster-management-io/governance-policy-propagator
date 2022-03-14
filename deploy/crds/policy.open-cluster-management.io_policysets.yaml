@@ -73,32 +73,6 @@ spec:
                       type: string
                   type: object
                 type: array
-              results:
-                items:
-                  description: PolicySetStatusResult shows the compliance status of
-                    a policy in the set
-                  properties:
-                    clusters:
-                      items:
-                        description: PolicySetResultCluster shows the compliance status
-                          of a policy for a specific cluster
-                        properties:
-                          clusterName:
-                            type: string
-                          clusterNamespace:
-                            type: string
-                          compliant:
-                            type: string
-                        type: object
-                      type: array
-                    compliant:
-                      type: string
-                    message:
-                      type: string
-                    policy:
-                      type: string
-                  type: object
-                type: array
             type: object
         required:
         - spec

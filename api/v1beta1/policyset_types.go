@@ -24,7 +24,6 @@ type PolicySetSpec struct {
 type PolicySetStatus struct {
 	Placement []PolicySetStatusPlacement `json:"placement,omitempty"`
 	Compliant string                     `json:"compliant,omitempty"`
-	Results   []PolicySetStatusResult    `json:"results,omitempty"`
 }
 
 // PolicySetStatusPlacement defines a placement object for the status
@@ -32,21 +31,6 @@ type PolicySetStatusPlacement struct {
 	PlacementBinding string `json:"placementBinding,omitempty"`
 	Placement        string `json:"placement,omitempty"`
 	PlacementRule    string `json:"placementRule,omitempty"`
-}
-
-// PolicySetResultCluster shows the compliance status of a policy for a specific cluster
-type PolicySetResultCluster struct {
-	ClusterName      string `json:"clusterName,omitempty"`
-	ClusterNamespace string `json:"clusterNamespace,omitempty"`
-	Compliant        string `json:"compliant,omitempty"`
-}
-
-// PolicySetStatusResult shows the compliance status of a policy in the set
-type PolicySetStatusResult struct {
-	Policy    string                   `json:"policy,omitempty"`
-	Compliant string                   `json:"compliant,omitempty"`
-	Clusters  []PolicySetResultCluster `json:"clusters,omitempty"`
-	Message   string                   `json:"message,omitempty"`
 }
 
 // +kubebuilder:object:root=true
