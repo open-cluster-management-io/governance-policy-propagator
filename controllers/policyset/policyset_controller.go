@@ -103,8 +103,7 @@ func processPolicySet(ctx context.Context, c client.Client, plcSet *policyv1beta
 	needsUpdate := false
 
 	// compile results and compliance state from policy statuses
-	generatedResults := []policyv1beta1.PolicySetStatusResult{}
-	complianceFound := false
+	allCompliancesFound := true
 	aggregatedCompliance := "Compliant"
 	placementsByBinding := map[string]policyv1beta1.PolicySetStatusPlacement{}
 
@@ -119,7 +118,7 @@ func processPolicySet(ctx context.Context, c client.Client, plcSet *policyv1beta
 
 		err := c.Get(ctx, childNamespacedName, childPlc)
 		if err != nil {
-			// policy does not exist, return error message
+			// policy does not exist, log error message
 			var errMessage string
 			if errors.IsNotFound(err) {
 				errMessage = string(childPlcName) + " not found"
@@ -127,19 +126,11 @@ func processPolicySet(ctx context.Context, c client.Client, plcSet *policyv1beta
 				errMessage = strings.Split(err.Error(), "Policy.policy.open-cluster-management.io ")[1]
 			}
 
-			generatedResults = append(generatedResults, policyv1beta1.PolicySetStatusResult{
-				Policy:  string(childPlcName),
-				Message: errMessage,
-			})
+			log.V(2).Info(errMessage)
+
+			allCompliancesFound = false
 		} else {
 			// policy exists - can use it to calculate status data
-			// aggregate compliance state
-			if string(childPlc.Status.ComplianceState) != "" {
-				complianceFound = true
-			}
-			if string(childPlc.Status.ComplianceState) == "NonCompliant" {
-				aggregatedCompliance = "NonCompliant"
-			}
 
 			// aggregate placements
 			for _, placement := range childPlc.Status.Placement {
@@ -174,18 +165,12 @@ func processPolicySet(ctx context.Context, c client.Client, plcSet *policyv1beta
 				}
 			}
 
-			log.V(1).Info("Evaluating changes in policy " + string(childPlcName))
-			if childPlc.Spec.Disabled {
-				generatedResults = append(generatedResults, policyv1beta1.PolicySetStatusResult{
-					Policy:  string(childPlcName),
-					Message: string(childPlcName) + " is disabled",
-				})
-			} else {
-				generatedResults = append(generatedResults, policyv1beta1.PolicySetStatusResult{
-					Policy:    string(childPlcName),
-					Compliant: complianceInRelevantClusters(childPlc.Status.Status, clusters),
-					Clusters:  statusToClusters(childPlc.Status.Status, clusters),
-				})
+			// aggregate compliance state
+			plcComplianceState := complianceInRelevantClusters(childPlc.Status.Status, clusters)
+			if plcComplianceState == "" {
+				allCompliancesFound = false
+			} else if plcComplianceState == "NonCompliant" {
+				aggregatedCompliance = "NonCompliant"
 			}
 		}
 	}
@@ -196,10 +181,9 @@ func processPolicySet(ctx context.Context, c client.Client, plcSet *policyv1beta
 	}
 
 	builtStatus := policyv1beta1.PolicySetStatus{
-		Results:   generatedResults,
 		Placement: generatedPlacements,
 	}
-	if complianceFound {
+	if allCompliancesFound {
 		builtStatus.Compliant = aggregatedCompliance
 	}
 
@@ -257,24 +241,6 @@ func (r *PolicySetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&source.Kind{Type: &clusterv1beta1.PlacementDecision{}},
 			handler.EnqueueRequestsFromMapFunc(placementDecisionMapper(mgr.GetClient()))).
 		Complete(r)
-}
-
-// Helper function to convert policy.status.status to policyset.status.results.clusters
-func statusToClusters(status []*policyv1.CompliancePerClusterStatus,
-	relevantClusters []string) []policyv1beta1.PolicySetResultCluster {
-	clusters := []policyv1beta1.PolicySetResultCluster{}
-
-	for i := range status {
-		if clusterInList(relevantClusters, status[i].ClusterName) {
-			clusters = append(clusters, policyv1beta1.PolicySetResultCluster{
-				ClusterName:      status[i].ClusterName,
-				ClusterNamespace: status[i].ClusterNamespace,
-				Compliant:        string(status[i].ComplianceState),
-			})
-		}
-	}
-
-	return clusters
 }
 
 // Helper function to filter out compliance statuses that are not in scope

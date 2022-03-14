@@ -109,6 +109,12 @@ var _ = Describe("Test policyset controller status updates", func() {
 
 				return rootPlcSet.Object["status"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
+			utils.Kubectl(
+				"apply",
+				"-f",
+				"../resources/case11_policyset_controller/case11-reset-plcset.yaml", "-n",
+				testNamespace,
+			)
 		})
 		It("should update to compliant if all its child policy violations have been remediated", func() {
 			opt := metav1.ListOptions{
