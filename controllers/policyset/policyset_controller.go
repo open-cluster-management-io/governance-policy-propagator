@@ -70,7 +70,7 @@ func (r *PolicySetReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 	log.V(1).Info("Policy set was found, processing it")
 
 	originalInstance := instance.DeepCopy()
-	setNeedsUpdate := processPolicySet(ctx, r.Client, instance)
+	setNeedsUpdate := r.processPolicySet(ctx, instance)
 
 	if setNeedsUpdate {
 		log.Info("Status update needed")
@@ -97,7 +97,7 @@ func (r *PolicySetReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 }
 
 // processPolicySet compares the status of a policyset to its desired state and determines whether an update is needed
-func processPolicySet(ctx context.Context, c client.Client, plcSet *policyv1beta1.PolicySet) bool {
+func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *policyv1beta1.PolicySet) bool {
 	log.V(1).Info("Processing policy sets")
 
 	needsUpdate := false
@@ -116,9 +116,9 @@ func processPolicySet(ctx context.Context, c client.Client, plcSet *policyv1beta
 
 		childPlc := &policyv1.Policy{}
 
-		err := c.Get(ctx, childNamespacedName, childPlc)
+		err := r.Client.Get(ctx, childNamespacedName, childPlc)
 		if err != nil {
-			// policy does not exist, log error message
+			// policy does not exist, log error message and generate event
 			var errMessage string
 			if errors.IsNotFound(err) {
 				errMessage = string(childPlcName) + " not found"
@@ -127,6 +127,15 @@ func processPolicySet(ctx context.Context, c client.Client, plcSet *policyv1beta
 			}
 
 			log.V(2).Info(errMessage)
+
+			r.Recorder.Event(plcSet, "Warning", "PolicyNotFound",
+				fmt.Sprintf(
+					"Policy %s is in PolicySet %s but could not be found in namespace %s",
+					childPlcName,
+					plcSet.GetName(),
+					plcSet.GetNamespace(),
+				),
+			)
 
 			allCompliancesFound = false
 		} else {
@@ -149,13 +158,13 @@ func processPolicySet(ctx context.Context, c client.Client, plcSet *policyv1beta
 
 				pb := &policyv1.PlacementBinding{}
 
-				err := c.Get(ctx, pbNamespacedName, pb)
+				err := r.Client.Get(ctx, pbNamespacedName, pb)
 				if err != nil {
 					log.V(1).Info("Error getting placement binding " + pbName)
 				}
 
 				var decisions []appsv1.PlacementDecision
-				decisions, err = getDecisions(c, *pb, childPlc)
+				decisions, err = getDecisions(r.Client, *pb, childPlc)
 				if err != nil {
 					log.Error(err, "Error getting placement decisions for binding "+pbName)
 				}
