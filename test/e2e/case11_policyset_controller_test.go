@@ -20,11 +20,13 @@ const (
 	case11PolicySetName         string = "case11-test-policyset"
 	case11PolicySetNameManaged1 string = "test-plcset-managed1"
 	case11PolicyNameManaged2    string = "case11-multiple-placements-rule"
+	case11PolicySetEmpty        string = "case11-empty-policyset"
 	case11PolicyYaml            string = "../resources/case11_policyset_controller/case11-test-policy.yaml"
 	case11PolicySetPatchYaml    string = "../resources/case11_policyset_controller/case11-patch-plcset.yaml"
 	case11DisablePolicyYaml     string = "../resources/case11_policyset_controller/case11-disable-plc.yaml"
 	case11PolicySetManaged1Yaml string = "../resources/case11_policyset_controller/case11-plcset-managed1.yaml"
 	case11PolicyManaged2Yaml    string = "../resources/case11_policyset_controller/case11-plc-managed2.yaml"
+	case11PolicySetEmptyYaml    string = "../resources/case11_policyset_controller/case11-empty-plcset.yaml"
 )
 
 var _ = Describe("Test policyset controller status updates", func() {
@@ -252,9 +254,30 @@ var _ = Describe("Test policyset controller status updates", func() {
 				return rootPlcSet.Object["status"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
 		})
+		It("should have no status if no policies are contained in the policySet", func() {
+			By("Creating " + case11PolicySetEmpty)
+			utils.Kubectl("apply",
+				"-f", case11PolicySetEmptyYaml,
+				"-n", testNamespace)
+			plcSet := utils.GetWithTimeout(
+				clientHubDynamic, gvrPolicySet, case11PolicySetEmpty, testNamespace, true, defaultTimeoutSeconds,
+			)
+			Expect(plcSet).NotTo(BeNil())
+			By("Checking the status of policy set")
+			Eventually(func() interface{} {
+				rootPlcSet := utils.GetWithTimeout(
+					clientHubDynamic, gvrPolicySet, case11PolicySetEmpty, testNamespace, true, defaultTimeoutSeconds,
+				)
+
+				return rootPlcSet.Object["status"]
+			}, defaultTimeoutSeconds, 1).Should(BeNil())
+		})
 		It("should clean up", func() {
 			utils.Kubectl("delete",
 				"-f", "../resources/case11_policyset_controller/case11-test-policy.yaml",
+				"-n", testNamespace)
+			utils.Kubectl("delete",
+				"-f", "../resources/case11_policyset_controller/case11-empty-plcset.yaml",
 				"-n", testNamespace)
 			utils.Kubectl("delete",
 				"-f", case11PolicySetManaged1Yaml,
