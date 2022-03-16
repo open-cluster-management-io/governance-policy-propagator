@@ -107,6 +107,19 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 	aggregatedCompliance := "Compliant"
 	placementsByBinding := map[string]policyv1beta1.PolicySetStatusPlacement{}
 
+	// if there are no policies in the policyset, status should be empty
+	if len(plcSet.Spec.Policies) == 0 {
+		builtStatus := policyv1beta1.PolicySetStatus{}
+
+		if !equality.Semantic.DeepEqual(plcSet.Status, builtStatus) {
+			plcSet.Status = *builtStatus.DeepCopy()
+
+			return true
+		}
+
+		return false
+	}
+
 	for i := range plcSet.Spec.Policies {
 		childPlcName := plcSet.Spec.Policies[i]
 		childNamespacedName := types.NamespacedName{
