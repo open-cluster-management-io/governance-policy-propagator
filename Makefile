@@ -27,7 +27,7 @@ GIT_HOST ?= github.com/open-cluster-management
 
 PWD := $(shell pwd)
 BASE_DIR := $(shell basename $(PWD))
-export PATH=$(shell echo $$PATH):$(PWD)/bin
+export PATH := $(PWD)/bin:$(PATH)
 
 # Keep an existing GOPATH, make a private one if it is undefined
 GOPATH_DEFAULT := $(PWD)/.go
@@ -153,7 +153,7 @@ build-images:
 	@docker tag ${IMAGE_NAME_AND_VERSION} $(REGISTRY)/$(IMG):$(TAG)
 
 run:
-	WATCH_NAMESPACE="" go run main.go --leader-elect=false --zap-log-level=2
+	WATCH_NAMESPACE="" go run main.go --leader-elect=false --log-level=2
 
 ############################################################
 # clean section
