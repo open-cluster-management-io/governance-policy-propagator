@@ -21,7 +21,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -48,7 +48,6 @@ func TestE2e(t *testing.T) {
 
 func init() {
 	klog.SetOutput(GinkgoWriter)
-	klog.InitFlags(nil)
 }
 
 var _ = BeforeSuite(func() {

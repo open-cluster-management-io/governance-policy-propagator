@@ -12,7 +12,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-logr/zapr"
 	"github.com/spf13/pflag"
+	"github.com/stolostron/go-log-utils/zaputil"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
@@ -21,8 +23,9 @@ import (
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 
-	// to ensure that exec-entrypoint and run can make use of them.
+	// Import all auth plugins so exec-entrypoint and run can use them
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"k8s.io/klog/v2"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
@@ -31,7 +34,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	//+kubebuilder:scaffold:imports
 	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
@@ -72,8 +74,13 @@ func init() {
 }
 
 func main() {
-	opts := zap.Options{}
-	opts.BindFlags(flag.CommandLine)
+	zflags := zaputil.FlagConfig{
+		LevelName:   "log-level",
+		EncoderName: "log-encoder",
+	}
+
+	zflags.Bind(flag.CommandLine)
+
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 
 	var metricsAddr string
@@ -101,7 +108,27 @@ func main() {
 
 	pflag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	ctrlZap, err := zflags.BuildForCtrl()
+	if err != nil {
+		panic(fmt.Sprintf("Failed to build zap logger for controller: %v", err))
+	}
+
+	ctrl.SetLogger(zapr.NewLogger(ctrlZap))
+
+	klogFlags := flag.NewFlagSet("klog", flag.ExitOnError)
+	klog.InitFlags(klogFlags)
+
+	err = zaputil.SyncWithGlogFlags(klogFlags)
+	if err != nil {
+		log.Error(err, "Failed to synchronize klog and glog flags, continuing with what succeeded")
+	}
+
+	klogZap, err := zaputil.BuildForKlog(zflags.GetConfig(), klogFlags)
+	if err != nil {
+		log.Error(err, "Failed to build zap logger for klog, those logs will not go through zap")
+	} else {
+		klog.SetLogger(zapr.NewLogger(klogZap).WithName("klog"))
+	}
 
 	printVersion()
 
