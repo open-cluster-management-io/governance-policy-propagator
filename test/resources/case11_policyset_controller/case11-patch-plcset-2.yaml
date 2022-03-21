@@ -1,0 +1,8 @@
+apiVersion: policy.open-cluster-management.io/v1beta1
+kind: PolicySet
+metadata:
+  name: case11-test-policyset
+spec:
+  policies:
+  - case11-test-policy
+  - case11-compliant-plc

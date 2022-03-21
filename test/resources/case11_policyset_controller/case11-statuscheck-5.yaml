@@ -1,12 +1,13 @@
 apiVersion: policy.open-cluster-management.io/v1beta1
 kind: PolicySet
 metadata:
-  name: test-plcset-managed1
+  name: case11-test-policyset
 spec:
   policies:
-  - case11-multiple-placements-rule
+  - case11-test-policy
+  - case11-compliant-plc
 status:
-  compliant: NonCompliant
+  compliant: Compliant
   placement:
-  - placementBinding: test-plcset-managed1-pb
-    placementRule: test-plcset-managed1-plr
+  - placementBinding: case11-test-policyset-pb
+    placementRule: case11-test-policyset-plr
