@@ -103,7 +103,7 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 	needsUpdate := false
 
 	// compile results and compliance state from policy statuses
-	allCompliancesFound := true
+	compliancesFound := []string{}
 	aggregatedCompliance := "Compliant"
 	placementsByBinding := map[string]policyv1beta1.PolicySetStatusPlacement{}
 
@@ -150,15 +150,20 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 				),
 			)
 
-			allCompliancesFound = false
+			compliancesFound = append(compliancesFound, "notfound")
 		} else {
-			// policy exists - can use it to calculate status data
-
 			// aggregate placements
 			for _, placement := range childPlc.Status.Placement {
 				if placement.PolicySet == plcSet.GetName() {
 					placementsByBinding[placement.PlacementBinding] = plcPlacementToSetPlacement(*placement)
 				}
+			}
+
+			if childPlc.Spec.Disabled {
+				// policy is disabled, do not process compliance
+				compliancesFound = append(compliancesFound, "disabled")
+
+				continue
 			}
 
 			// create list of all relevant clusters
@@ -190,9 +195,12 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 			// aggregate compliance state
 			plcComplianceState := complianceInRelevantClusters(childPlc.Status.Status, clusters)
 			if plcComplianceState == "" {
-				allCompliancesFound = false
-			} else if plcComplianceState == "NonCompliant" {
-				aggregatedCompliance = "NonCompliant"
+				compliancesFound = append(compliancesFound, "notfound")
+			} else {
+				compliancesFound = append(compliancesFound, "found")
+				if plcComplianceState == "NonCompliant" {
+					aggregatedCompliance = "NonCompliant"
+				}
 			}
 		}
 	}
@@ -205,7 +213,7 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 	builtStatus := policyv1beta1.PolicySetStatus{
 		Placement: generatedPlacements,
 	}
-	if allCompliancesFound {
+	if showCompliance(compliancesFound) {
 		builtStatus.Compliant = aggregatedCompliance
 	}
 
@@ -215,6 +223,21 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 	}
 
 	return needsUpdate
+}
+
+// showCompliance only if all policies in the set can be found and one or more are enabled
+func showCompliance(compliancesFound []string) bool {
+	show := false
+
+	for _, policy := range compliancesFound {
+		if policy == "notfound" {
+			return false
+		} else if policy == "found" {
+			show = true
+		}
+	}
+
+	return show
 }
 
 // getDecisions gets the PlacementDecisions for a PlacementBinding
