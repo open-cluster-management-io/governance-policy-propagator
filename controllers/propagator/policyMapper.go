@@ -4,9 +4,11 @@
 package propagator
 
 import (
+	"context"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/types"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -32,6 +34,20 @@ func policyMapper(c client.Client) handler.MapFunc {
 
 			name = strings.Split(rootPlcName, ".")[1]
 			namespace = strings.Split(rootPlcName, ".")[0]
+			clusterList := &clusterv1.ManagedClusterList{}
+
+			err := c.List(context.TODO(), clusterList, &client.ListOptions{})
+			if err != nil {
+				log.Error(err, "failed to list ManagedCluster objects")
+
+				return nil
+			}
+			// do not handle a replicated policy which does not belong to the current cluster
+			if !common.IsInClusterNamespace(object.GetNamespace(), clusterList.Items) {
+				log.V(2).Info("Found a replicated policy in non-cluster namespace, skipping it")
+
+				return nil
+			}
 		} else {
 			// policy.open-cluster-management.io/root-policy doesn't exist, should be a root policy
 			log.V(2).Info("Found reconciliation request from root policy")

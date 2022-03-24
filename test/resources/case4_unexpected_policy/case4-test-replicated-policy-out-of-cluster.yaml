@@ -1,12 +1,17 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: leaf-hub1
+---
 apiVersion: policy.open-cluster-management.io/v1
 kind: Policy
 metadata:
   labels:
-    policy.open-cluster-management.io/cluster-name: managed1
-    policy.open-cluster-management.io/cluster-namespace: managed1
+    policy.open-cluster-management.io/cluster-name: leaf-hub1
+    policy.open-cluster-management.io/cluster-namespace: leaf-hub1
     policy.open-cluster-management.io/root-policy: policy-propagator-test.case4-test-policy
   name: policy-propagator-test.case4-test-policy
-  namespace: managed1
+  namespace: leaf-hub1
 spec:
   disabled: false
   policy-templates:
