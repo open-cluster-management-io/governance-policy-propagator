@@ -11,3 +11,4 @@ status:
   placement:
   - placementBinding: case11-test-policyset-pb
     placementRule: case11-test-policyset-plr
+  statusMessage: "Disabled policies: case11-test-policy"

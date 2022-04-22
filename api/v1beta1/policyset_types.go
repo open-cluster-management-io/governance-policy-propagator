@@ -22,8 +22,9 @@ type PolicySetSpec struct {
 
 // PolicySetStatus defines the observed state of PolicySet
 type PolicySetStatus struct {
-	Placement []PolicySetStatusPlacement `json:"placement,omitempty"`
-	Compliant string                     `json:"compliant,omitempty"`
+	Placement     []PolicySetStatusPlacement `json:"placement,omitempty"`
+	Compliant     string                     `json:"compliant,omitempty"`
+	StatusMessage string                     `json:"statusMessage,omitempty"`
 }
 
 // PolicySetStatusPlacement defines a placement object for the status
