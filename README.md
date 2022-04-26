@@ -18,10 +18,11 @@ Every reconcile does the following:
 1. Creates/updates/deletes replicated policies in cluster namespaces based on PlacementBinding/PlacementRule results.
 2. Creates/updates/deletes the policy status to show aggregated cluster compliance results.
 
-
-Go to the [Contributing guide](CONTRIBUTING.md) to learn how to get involved.
-
 ## Getting started
+
+Go to the
+[Contributing guide](https://github.com/open-cluster-management-io/community/blob/main/sig-policy/contribution-guidelines.md)
+to learn how to get involved.
 
 Check the [Security guide](SECURITY.md) if you need to report a security issue.
 
