@@ -13,33 +13,19 @@
 # limitations under the License.
 # Copyright Contributors to the Open Cluster Management project
 
-PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
-
-# Image URL to use all building/pushing image targets;
-# Use your own docker registry and image name for dev/test by overridding the IMG and REGISTRY environment variable.
-IMG ?= $(shell cat COMPONENT_NAME 2> /dev/null)
-REGISTRY ?= quay.io/open-cluster-management
-TAG ?= latest
-
-# Github host to use for checking the source tree;
-# Override this variable ue with your own value if you're working on forked repo.
-GIT_HOST ?= github.com/open-cluster-management
-
 PWD := $(shell pwd)
-BASE_DIR := $(shell basename $(PWD))
-export PATH := $(PWD)/bin:$(PATH)
+LOCAL_BIN ?= $(PWD)/bin
 
 # Keep an existing GOPATH, make a private one if it is undefined
 GOPATH_DEFAULT := $(PWD)/.go
 export GOPATH ?= $(GOPATH_DEFAULT)
 GOBIN_DEFAULT := $(GOPATH)/bin
 export GOBIN ?= $(GOBIN_DEFAULT)
-export PATH := $(PATH):$(GOBIN)
+export PATH := $(LOCAL_BIN):$(GOBIN):$(PATH)
 GOARCH = $(shell go env GOARCH)
 GOOS = $(shell go env GOOS)
 TESTARGS_DEFAULT := "-v"
 export TESTARGS ?= $(TESTARGS_DEFAULT)
-DEST ?= $(GOPATH)/src/$(GIT_HOST)/$(BASE_DIR)
 VERSION ?= $(shell cat COMPONENT_VERSION 2> /dev/null)
 IMAGE_NAME_AND_VERSION ?= $(REGISTRY)/$(IMG)
 # Handle KinD configuration
@@ -51,26 +37,21 @@ ifneq ($(KIND_VERSION), latest)
 else
 	KIND_ARGS =
 endif
-# Fetch Ginkgo/Gomega versions from go.mod
-GINKGO_VERSION := $(shell awk '/github.com\/onsi\/ginkgo\/v2/ {print $$2}' go.mod)
-GOMEGA_VERSION := $(shell awk '/github.com\/onsi\/gomega/ {print $$2}' go.mod)
-# KubeBuilder configuration
-KUBEBUILDER_DIR = /usr/local/kubebuilder/bin
-KBVERSION = 3.2.0
-K8S_VERSION = 1.21.2
+# Test coverage threshold
+export COVERAGE_MIN ?= 75
 
-LOCAL_OS := $(shell uname)
-ifeq ($(LOCAL_OS),Linux)
-    TARGET_OS ?= linux
-    XARGS_FLAGS="-r"
-else ifeq ($(LOCAL_OS),Darwin)
-    TARGET_OS ?= darwin
-    XARGS_FLAGS=
-else
-    $(error "This system's OS $(LOCAL_OS) isn't recognized/supported")
-endif
+# Image URL to use all building/pushing image targets;
+# Use your own docker registry and image name for dev/test by overridding the IMG and REGISTRY environment variable.
+IMG ?= $(shell cat COMPONENT_NAME 2> /dev/null)
+REGISTRY ?= quay.io/open-cluster-management
+TAG ?= latest
 
-.PHONY: fmt lint test coverage build build-images fmt-dependencies lint-dependencies
+# go-get-tool will 'go install' any package $1 and install it to LOCAL_BIN.
+define go-get-tool
+@set -e ;\
+echo "Checking installation of $(1)" ;\
+GOBIN=$(LOCAL_BIN) go install $(1)
+endef
 
 include build/common/Makefile.common.mk
 
@@ -81,15 +62,30 @@ $(GOBIN):
 	@echo "create gobin"
 	@mkdir -p $(GOBIN)
 
-work: $(GOBIN)
+$(LOCAL_BIN):
+	@mkdir -p $(LOCAL_BIN)
+
+############################################################
+# clean section
+############################################################
+
+.PHONY: clean
+clean:
+	-rm bin/*
+	-rm build/_output/bin/*
+	-rm coverage*.out
+	-rm report*.json
+	-rm kubeconfig_managed
+	-rm -r vendor/
 
 ############################################################
 # format section
 ############################################################
 
+.PHONY: fmt-dependencies
 fmt-dependencies:
-	$(call go-get-tool,$(PWD)/bin/gci,github.com/daixiang0/gci@v0.2.9)
-	$(call go-get-tool,$(PWD)/bin/gofumpt,mvdan.cc/gofumpt@v0.2.0)
+	$(call go-get-tool,github.com/daixiang0/gci@v0.2.9)
+	$(call go-get-tool,mvdan.cc/gofumpt@v0.2.0)
 
 # All available format: format-go format-protos format-python
 # Default value will run all formats, override these make target with your requirements:
@@ -103,10 +99,12 @@ fmt: fmt-dependencies
 # check section
 ############################################################
 
+.PHONY: check
 check: lint
 
+.PHONY: lint-dependencies
 lint-dependencies:
-	$(call go-get-tool,$(PWD)/bin/golangci-lint,github.com/golangci/golangci-lint/cmd/golangci-lint@v1.41.1)
+	$(call go-get-tool,github.com/golangci/golangci-lint/cmd/golangci-lint@v1.41.1)
 
 # All available linters: lint-dockerfiles lint-scripts lint-yaml lint-copyright-banner lint-go lint-python lint-helm lint-markdown lint-sass lint-typescript lint-protos
 # Default value will run all linters, override these make target with your requirements:
@@ -116,31 +114,55 @@ lint: lint-dependencies lint-all
 ############################################################
 # test section
 ############################################################
-KUBEBUILDER_DIR = /usr/local/kubebuilder/bin
+GOSEC = $(LOCAL_BIN)/gosec
+KUBEBUILDER = $(LOCAL_BIN)/kubebuilder
 KBVERSION = 3.2.0
 K8S_VERSION = 1.21.2
 
-test: manifests generate fmt
-	go test ${TESTARGS} `go list ./... | grep -v test/e2e`
+.PHONY: test
+test: test-dependencies
+	KUBEBUILDER_ASSETS=$(LOCAL_BIN) go test $(TESTARGS) `go list ./... | grep -v test/e2e`
 
-test-dependencies:
-	@if (ls $(KUBEBUILDER_DIR)/*); then \
-		echo "^^^ Files found in $(KUBEBUILDER_DIR). Skipping installation."; exit 1; \
-	else \
-		echo "^^^ Kubebuilder binaries not found. Installing Kubebuilder binaries."; \
+.PHONY: test-coverage
+test-coverage: TESTARGS = -json -cover -covermode=atomic -coverprofile=coverage_unit.out
+test-coverage: test
+
+.PHONY: test-dependencies
+test-dependencies: kubebuilder-dependencies kubebuilder
+
+.PHONY: kubebuilder
+kubebuilder:
+	@if [ "$$($(KUBEBUILDER) version 2>/dev/null | grep -o KubeBuilderVersion:\"[0-9]*\.[0-9]\.[0-9]*\")" != "KubeBuilderVersion:\"$(KBVERSION)\"" ]; then \
+		echo "Installing Kubebuilder"; \
+		curl -L https://github.com/kubernetes-sigs/kubebuilder/releases/download/v$(KBVERSION)/kubebuilder_$(GOOS)_$(GOARCH) -o $(KUBEBUILDER); \
+		chmod +x $(KUBEBUILDER); \
 	fi
-	sudo mkdir -p $(KUBEBUILDER_DIR)
-	sudo curl -L https://github.com/kubernetes-sigs/kubebuilder/releases/download/v$(KBVERSION)/kubebuilder_$(GOOS)_$(GOARCH) -o $(KUBEBUILDER_DIR)/kubebuilder
-	sudo chmod +x $(KUBEBUILDER_DIR)/kubebuilder
-	curl -L "https://go.kubebuilder.io/test-tools/$(K8S_VERSION)/$(GOOS)/$(GOARCH)" | sudo tar xz --strip-components=2 -C $(KUBEBUILDER_DIR)/
+
+.PHONY: kubebuilder-dependencies
+kubebuilder-dependencies: $(LOCAL_BIN)
+	@if [ ! -f $(LOCAL_BIN)/etcd ] || [ ! -f $(LOCAL_BIN)/kube-apiserver ] || [ ! -f $(LOCAL_BIN)/kubectl ] || \
+	[ "$$($(KUBEBUILDER) version 2>/dev/null | grep -o KubeBuilderVersion:\"[0-9]*\.[0-9]\.[0-9]*\")" != "KubeBuilderVersion:\"$(KBVERSION)\"" ]; then \
+		echo "Installing envtest Kubebuilder assets"; \
+		curl -L "https://go.kubebuilder.io/test-tools/$(K8S_VERSION)/$(GOOS)/$(GOARCH)" | tar xz --strip-components=2 -C $(LOCAL_BIN); \
+	fi
+
+.PHONY: gosec
+gosec:
+	$(call go-get-tool,github.com/securego/gosec/v2/cmd/gosec@v2.9.6)
+
+.PHONY: gosec-scan
+gosec-scan: gosec
+	$(GOSEC) -fmt sonarqube -out gosec.json -no-fail -exclude-dir=.go ./...
 
 ############################################################
 # build section
 ############################################################
 
+.PHONY: build
 build:
 	@build/common/scripts/gobuild.sh build/_output/bin/$(IMG) main.go
 
+.PHONY: local
 local: generate fmt
 	@GOOS=darwin build/common/scripts/gobuild.sh build/_output/bin/$(IMG) main.go
 
@@ -148,98 +170,20 @@ local: generate fmt
 # images section
 ############################################################
 
+.PHONY: build-images
 build-images:
 	@docker build -t ${IMAGE_NAME_AND_VERSION} -f build/Dockerfile .
 	@docker tag ${IMAGE_NAME_AND_VERSION} $(REGISTRY)/$(IMG):$(TAG)
 
+.PHONY: run
 run:
 	WATCH_NAMESPACE="" go run main.go --leader-elect=false --log-level=2
 
 ############################################################
-# clean section
+# Generate manifests
 ############################################################
-clean::
-	rm -f build/_output/bin/$(IMG)
-
-############################################################
-# e2e test section
-############################################################
-.PHONY: kind-bootstrap-cluster
-kind-bootstrap-cluster: kind-create-cluster install-crds kind-deploy-controller install-resources
-
-.PHONY: kind-bootstrap-cluster-dev
-kind-bootstrap-cluster-dev: kind-create-cluster install-crds install-resources
-
-kind-deploy-controller: manifests
-	@echo installing policy-propagator
-	kubectl get ns $(KIND_NAMESPACE) ; if [ $$? -ne 0 ] ; then kubectl create ns $(KIND_NAMESPACE) ; fi
-	kubectl apply -f deploy/operator.yaml -n $(KIND_NAMESPACE)
-
-kind-deploy-controller-dev: manifests
-	@echo Pushing image to KinD cluster
-	kind load docker-image $(REGISTRY)/$(IMG):$(TAG) --name $(KIND_NAME)
-	@echo Installing $(IMG)
-	kubectl get ns $(KIND_NAMESPACE) ; if [ $$? -ne 0 ] ; then kubectl create ns $(KIND_NAMESPACE) ; fi
-	kubectl apply -f deploy/operator.yaml -n $(KIND_NAMESPACE)
-	@echo "Patch deployment image"
-	kubectl patch deployment $(IMG) -n $(KIND_NAMESPACE) -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"$(IMG)\",\"imagePullPolicy\":\"Never\"}]}}}}"
-	kubectl patch deployment $(IMG) -n $(KIND_NAMESPACE) -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"$(IMG)\",\"image\":\"$(REGISTRY)/$(IMG):$(TAG)\"}]}}}}"
-	kubectl rollout status -n $(KIND_NAMESPACE) deployment $(IMG) --timeout=180s
-
-# Specify KIND_VERSION to indicate the version tag of the KinD image
-kind-create-cluster:
-	@echo "creating cluster"
-	kind create cluster --name $(KIND_NAME) $(KIND_ARGS)
-
-kind-delete-cluster:
-	kind delete cluster --name $(KIND_NAME)
-
-install-crds: manifests
-	@echo installing crds
-	kubectl apply -f deploy/crds/policy.open-cluster-management.io_placementbindings.yaml
-	kubectl apply -f deploy/crds/policy.open-cluster-management.io_policies.yaml
-	kubectl apply -f deploy/crds/policy.open-cluster-management.io_policyautomations.yaml
-	kubectl apply -f deploy/crds/policy.open-cluster-management.io_policysets.yaml
-	kubectl apply -f https://raw.githubusercontent.com/open-cluster-management-io/multicloud-operators-subscription/main/deploy/hub-common/apps.open-cluster-management.io_placementrules_crd.yaml
-	kubectl apply -f https://raw.githubusercontent.com/open-cluster-management-io/api/main/cluster/v1/0000_00_clusters.open-cluster-management.io_managedclusters.crd.yaml
-	kubectl apply -f https://raw.githubusercontent.com/open-cluster-management-io/api/main/cluster/v1beta1/0000_02_clusters.open-cluster-management.io_placements.crd.yaml --validate=false
-	kubectl apply -f https://raw.githubusercontent.com/open-cluster-management-io/api/main/cluster/v1beta1/0000_03_clusters.open-cluster-management.io_placementdecisions.crd.yaml --validate=false
-	kubectl apply -f deploy/crds/external/tower.ansible.com_joblaunch_crd.yaml
-
-install-resources:
-	@echo creating namespaces
-	kubectl create ns policy-propagator-test
-	kubectl create ns managed1
-	kubectl create ns managed2
-	@echo creating cluster resources
-	kubectl apply -f test/resources/managed1-cluster.yaml
-	kubectl apply -f test/resources/managed2-cluster.yaml
-
-e2e-dependencies:
-	go get github.com/onsi/ginkgo/v2/ginkgo@$(GINKGO_VERSION)
-	go get github.com/onsi/gomega/...@$(GOMEGA_VERSION)
-
-e2e-test:
-	ginkgo -v --slowSpecThreshold=10 test/e2e
-
-e2e-debug:
-	kubectl get all -n $(KIND_NAMESPACE)
-	kubectl get Policy.policy.open-cluster-management.io --all-namespaces
-	kubectl describe pods -n $(KIND_NAMESPACE)
-	kubectl logs $$(kubectl get pods -n $(KIND_NAMESPACE) -o name | grep $(IMG)) -n $(KIND_NAMESPACE) -c governance-policy-propagator
-
-############################################################
-# e2e test coverage
-############################################################
-build-instrumented:
-	go test -covermode=atomic -coverpkg=open-cluster-management.io/$(IMG)... -c -tags e2e ./cmd/manager -o build/_output/bin/$(IMG)-instrumented
-
-run-instrumented:
-	WATCH_NAMESPACE="" ./build/_output/bin/$(IMG)-instrumented -test.run "^TestRunMain$$" -test.coverprofile=coverage.out &>/dev/null &
-
-stop-instrumented:
-	ps -ef | grep 'govern' | grep -v grep | awk '{print $$2}' | xargs kill
-
+CONTROLLER_GEN = $(LOCAL_BIN)/controller-gen
+KUSTOMIZE = $(LOCAL_BIN)/kustomize
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
 
@@ -255,23 +199,119 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 generate-operator-yaml: kustomize manifests
 	$(KUSTOMIZE) build deploy/manager > deploy/operator.yaml
 
-CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
+.PHONY: controller-gen
 controller-gen: ## Download controller-gen locally if necessary.
-	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.6.1)
+	$(call go-get-tool,sigs.k8s.io/controller-tools/cmd/controller-gen@v0.6.1)
 
-KUSTOMIZE = $(shell pwd)/bin/kustomize
+.PHONY: kustomize
 kustomize: ## Download kustomize locally if necessary.
-	$(call go-get-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v3@v3.8.7)
+	$(call go-get-tool,sigs.k8s.io/kustomize/kustomize/v4@v4.5.4)
 
-# go-get-tool will 'go get' any package $2 and install it to $1.
-define go-get-tool
-@[ -f $(1) ] || { \
-set -e ;\
-TMP_DIR=$$(mktemp -d) ;\
-cd $$TMP_DIR ;\
-go mod init tmp ;\
-echo "Downloading $(2)" ;\
-GOBIN=$(PROJECT_DIR)/bin go get $(2) ;\
-rm -rf $$TMP_DIR ;\
-}
-endef
+############################################################
+# e2e test section
+############################################################
+GINKGO = $(LOCAL_BIN)/ginkgo
+
+.PHONY: kind-bootstrap-cluster
+kind-bootstrap-cluster: kind-create-cluster install-crds kind-deploy-controller install-resources
+
+.PHONY: kind-bootstrap-cluster-dev
+kind-bootstrap-cluster-dev: kind-create-cluster install-crds install-resources
+
+.PHONY: kind-deploy-controller
+kind-deploy-controller: manifests
+	@echo installing $(IMG)
+	kubectl create ns $(KIND_NAMESPACE)
+	kubectl apply -f deploy/operator.yaml -n $(KIND_NAMESPACE)
+
+.PHONY: kind-deploy-controller-dev
+kind-deploy-controller-dev: kind-deploy-controller
+	@echo Pushing image to KinD cluster
+	kind load docker-image $(REGISTRY)/$(IMG):$(TAG) --name $(KIND_NAME)
+	@echo "Patch deployment image"
+	kubectl patch deployment $(IMG) -n $(KIND_NAMESPACE) -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"$(IMG)\",\"imagePullPolicy\":\"Never\"}]}}}}"
+	kubectl patch deployment $(IMG) -n $(KIND_NAMESPACE) -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"$(IMG)\",\"image\":\"$(REGISTRY)/$(IMG):$(TAG)\"}]}}}}"
+	kubectl rollout status -n $(KIND_NAMESPACE) deployment $(IMG) --timeout=180s
+
+# Specify KIND_VERSION to indicate the version tag of the KinD image
+.PHONY: kind-create-cluster
+kind-create-cluster:
+	@echo "creating cluster"
+	kind create cluster --name $(KIND_NAME) $(KIND_ARGS)
+
+.PHONY: kind-delete-cluster
+kind-delete-cluster:
+	kind delete cluster --name $(KIND_NAME)
+
+.PHONY: install-crds
+install-crds: manifests
+	@echo installing crds
+	kubectl apply -f deploy/crds/policy.open-cluster-management.io_placementbindings.yaml
+	kubectl apply -f deploy/crds/policy.open-cluster-management.io_policies.yaml
+	kubectl apply -f deploy/crds/policy.open-cluster-management.io_policyautomations.yaml
+	kubectl apply -f deploy/crds/policy.open-cluster-management.io_policysets.yaml
+	kubectl apply -f https://raw.githubusercontent.com/open-cluster-management-io/multicloud-operators-subscription/main/deploy/hub-common/apps.open-cluster-management.io_placementrules_crd.yaml
+	kubectl apply -f https://raw.githubusercontent.com/open-cluster-management-io/api/main/cluster/v1/0000_00_clusters.open-cluster-management.io_managedclusters.crd.yaml
+	kubectl apply -f https://raw.githubusercontent.com/open-cluster-management-io/api/main/cluster/v1beta1/0000_02_clusters.open-cluster-management.io_placements.crd.yaml --validate=false
+	kubectl apply -f https://raw.githubusercontent.com/open-cluster-management-io/api/main/cluster/v1beta1/0000_03_clusters.open-cluster-management.io_placementdecisions.crd.yaml --validate=false
+	kubectl apply -f deploy/crds/external/tower.ansible.com_joblaunch_crd.yaml
+
+.PHONY: install-resources
+install-resources:
+	@echo creating namespaces
+	kubectl create ns policy-propagator-test
+	kubectl create ns managed1
+	kubectl create ns managed2
+	@echo creating cluster resources
+	kubectl apply -f test/resources/managed1-cluster.yaml
+	kubectl apply -f test/resources/managed2-cluster.yaml
+
+.PHONY: e2e-dependencies
+e2e-dependencies:
+	$(call go-get-tool,github.com/onsi/ginkgo/v2/ginkgo@$(shell awk '/github.com\/onsi\/ginkgo\/v2/ {print $$2}' go.mod))
+
+.PHONY: e2e-test
+e2e-test: e2e-dependencies
+	$(GINKGO) -v --fail-fast --slow-spec-threshold=10s $(E2E_TEST_ARGS) test/e2e
+
+.PHONY: e2e-test-coverage
+e2e-test-coverage: E2E_TEST_ARGS = --json-report=report_e2e.json --output-dir=.
+e2e-test-coverage: e2e-run-instrumented e2e-test e2e-stop-instrumented
+
+.PHONY: e2e-build-instrumented
+e2e-build-instrumented:
+	go test -covermode=atomic -coverpkg=$(shell cat go.mod | head -1 | cut -d ' ' -f 2)/... -c -tags e2e ./ -o build/_output/bin/$(IMG)-instrumented
+
+.PHONY: e2e-run-instrumented
+e2e-run-instrumented: e2e-build-instrumented
+	WATCH_NAMESPACE="$(WATCH_NAMESPACE)" ./build/_output/bin/$(IMG)-instrumented -test.run "^TestRunMain$$" -test.coverprofile=coverage_e2e.out &>build/_output/controller.log &
+
+.PHONY: e2e-stop-instrumented
+e2e-stop-instrumented:
+	ps -ef | grep '$(IMG)' | grep -v grep | awk '{print $$2}' | xargs kill
+
+.PHONY: e2e-debug
+e2e-debug:
+	@echo local controller log:
+	-cat build/_output/controller.log
+	@echo remote controller log:
+	-kubectl logs $$(kubectl get pods -n $(KIND_NAMESPACE) -o name | grep $(IMG)) -n $(KIND_NAMESPACE) -c governance-policy-propagator
+
+############################################################
+# test coverage
+############################################################
+GOCOVMERGE = $(LOCAL_BIN)/gocovmerge
+.PHONY: coverage-dependencies
+coverage-dependencies:
+	$(call go-get-tool,github.com/wadey/gocovmerge@v0.0.0-20160331181800-b5bfa59ec0ad)
+
+
+COVERAGE_FILE = coverage.out
+.PHONY: coverage-merge
+coverage-merge: coverage-dependencies
+	@echo Merging the coverage reports into $(COVERAGE_FILE)
+	$(GOCOVMERGE) $(PWD)/coverage_* > $(COVERAGE_FILE)
+
+.PHONY: coverage-verify
+coverage-verify:
+	./build/common/scripts/coverage_calc.sh
