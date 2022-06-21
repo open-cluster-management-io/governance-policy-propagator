@@ -10,3 +10,4 @@ status:
   placement:
   - placementBinding: test-plcset-managed1-pb
     placementRule: test-plcset-managed1-plr
+  statusMessage: All policies are reporting status

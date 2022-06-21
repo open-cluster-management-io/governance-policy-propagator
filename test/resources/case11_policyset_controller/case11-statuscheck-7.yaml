@@ -1,0 +1,17 @@
+apiVersion: policy.open-cluster-management.io/v1beta1
+kind: PolicySet
+metadata:
+  name: case11-multistatus-policyset
+spec:
+  policies:
+  - case11-test-message-policy
+  - case11-does-not-exist
+  - case11-deleted-policy
+  - case11-test-disabled
+status:
+  placement:
+  - placementBinding: case11-multistatus-policyset-pb
+    placementRule: case11-multistatus-policyset-plr
+  statusMessage: "Disabled policies: case11-test-disabled; No status provided while
+    policies are pending: case11-test-message-policy; Deleted policies: case11-does-not-exist,
+    case11-deleted-policy"

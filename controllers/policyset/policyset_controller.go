@@ -104,6 +104,9 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 
 	// compile results and compliance state from policy statuses
 	compliancesFound := []string{}
+	deletedPolicies := []string{}
+	pendingPolicies := []string{}
+	disabledPolicies := []string{}
 	aggregatedCompliance := "Compliant"
 	placementsByBinding := map[string]policyv1beta1.PolicySetStatusPlacement{}
 
@@ -150,7 +153,7 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 				),
 			)
 
-			compliancesFound = append(compliancesFound, "notfound")
+			deletedPolicies = append(deletedPolicies, string(childPlcName))
 		} else {
 			// aggregate placements
 			for _, placement := range childPlc.Status.Placement {
@@ -161,7 +164,7 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 
 			if childPlc.Spec.Disabled {
 				// policy is disabled, do not process compliance
-				compliancesFound = append(compliancesFound, "disabled")
+				disabledPolicies = append(disabledPolicies, string(childPlcName))
 
 				continue
 			}
@@ -195,9 +198,9 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 			// aggregate compliance state
 			plcComplianceState := complianceInRelevantClusters(childPlc.Status.Status, clusters)
 			if plcComplianceState == "" {
-				compliancesFound = append(compliancesFound, "notfound")
+				pendingPolicies = append(pendingPolicies, string(childPlcName))
 			} else {
-				compliancesFound = append(compliancesFound, "found")
+				compliancesFound = append(compliancesFound, string(childPlcName))
 				if plcComplianceState == "NonCompliant" {
 					aggregatedCompliance = "NonCompliant"
 				}
@@ -211,9 +214,10 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 	}
 
 	builtStatus := policyv1beta1.PolicySetStatus{
-		Placement: generatedPlacements,
+		Placement:     generatedPlacements,
+		StatusMessage: getStatusMessage(disabledPolicies, pendingPolicies, deletedPolicies),
 	}
-	if showCompliance(compliancesFound) {
+	if showCompliance(compliancesFound, pendingPolicies) {
 		builtStatus.Compliant = aggregatedCompliance
 	}
 
@@ -225,19 +229,48 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 	return needsUpdate
 }
 
-// showCompliance only if all policies in the set can be found and one or more are enabled
-func showCompliance(compliancesFound []string) bool {
-	show := false
+// getStatusMessage returns a message listing disabled, deleted and pending policies
+func getStatusMessage(disabledPolicies []string, pendingPolicies []string, deletedPolicies []string) string {
+	statusMessage := "All policies are reporting status"
+	separator := ""
 
-	for _, policy := range compliancesFound {
-		if policy == "notfound" {
-			return false
-		} else if policy == "found" {
-			show = true
-		}
+	if len(disabledPolicies) > 0 {
+		statusMessage = fmt.Sprintf("Disabled policies: %s", strings.Join(disabledPolicies, ", "))
+		separator = "; "
 	}
 
-	return show
+	if len(pendingPolicies) > 0 {
+		if separator == "" {
+			statusMessage = ""
+		}
+
+		statusMessage = fmt.Sprintf(statusMessage+separator+
+			"No status provided while policies are pending: %s", strings.Join(pendingPolicies, ", "))
+		separator = "; "
+	}
+
+	if len(deletedPolicies) > 0 {
+		if separator == "" {
+			statusMessage = ""
+		}
+
+		statusMessage = fmt.Sprintf(statusMessage+separator+"Deleted policies: %s", strings.Join(deletedPolicies, ", "))
+	}
+
+	return statusMessage
+}
+
+// showCompliance only if there are policies with compliance and none are pending
+func showCompliance(compliancesFound []string, pending []string) bool {
+	if len(pending) > 0 {
+		return false
+	}
+
+	if len(compliancesFound) > 0 {
+		return true
+	}
+
+	return false
 }
 
 // getDecisions gets the PlacementDecisions for a PlacementBinding

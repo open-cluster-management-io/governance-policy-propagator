@@ -7,6 +7,8 @@ spec:
   - case11-test-policy
   - policyset-does-not-exist
 status:
+  compliant: NonCompliant
   placement:
   - placementBinding: case11-test-policyset-pb
     placementRule: case11-test-policyset-plr
+  statusMessage: "Deleted policies: policyset-does-not-exist"

@@ -16,20 +16,22 @@ import (
 )
 
 const (
-	case11PolicyName            string = "case11-test-policy"
-	case11PolicySetName         string = "case11-test-policyset"
-	case11PolicySetNameManaged1 string = "test-plcset-managed1"
-	case11PolicyNameManaged2    string = "case11-multiple-placements-rule"
-	case11PolicySetEmpty        string = "case11-empty-policyset"
-	case11PolicyCompliant       string = "case11-compliant-plc"
-	case11PolicyYaml            string = "../resources/case11_policyset_controller/case11-test-policy.yaml"
-	case11PolicySetPatchYaml    string = "../resources/case11_policyset_controller/case11-patch-plcset.yaml"
-	case11PolicySetPatch2Yaml   string = "../resources/case11_policyset_controller/case11-patch-plcset-2.yaml"
-	case11DisablePolicyYaml     string = "../resources/case11_policyset_controller/case11-disable-plc.yaml"
-	case11PolicySetManaged1Yaml string = "../resources/case11_policyset_controller/case11-plcset-managed1.yaml"
-	case11PolicyManaged2Yaml    string = "../resources/case11_policyset_controller/case11-plc-managed2.yaml"
-	case11PolicySetEmptyYaml    string = "../resources/case11_policyset_controller/case11-empty-plcset.yaml"
-	case11PolicyCompliantYaml   string = "../resources/case11_policyset_controller/case11-compliant-plc.yaml"
+	case11PolicyName               string = "case11-test-policy"
+	case11PolicySetName            string = "case11-test-policyset"
+	case11PolicySetNameManaged1    string = "test-plcset-managed1"
+	case11PolicyNameManaged2       string = "case11-multiple-placements-rule"
+	case11PolicySetEmpty           string = "case11-empty-policyset"
+	case11PolicySetMultiStatus     string = "case11-multistatus-policyset"
+	case11PolicyCompliant          string = "case11-compliant-plc"
+	case11PolicyYaml               string = "../resources/case11_policyset_controller/case11-test-policy.yaml"
+	case11PolicySetPatchYaml       string = "../resources/case11_policyset_controller/case11-patch-plcset.yaml"
+	case11PolicySetPatch2Yaml      string = "../resources/case11_policyset_controller/case11-patch-plcset-2.yaml"
+	case11DisablePolicyYaml        string = "../resources/case11_policyset_controller/case11-disable-plc.yaml"
+	case11PolicySetManaged1Yaml    string = "../resources/case11_policyset_controller/case11-plcset-managed1.yaml"
+	case11PolicyManaged2Yaml       string = "../resources/case11_policyset_controller/case11-plc-managed2.yaml"
+	case11PolicySetEmptyYaml       string = "../resources/case11_policyset_controller/case11-empty-plcset.yaml"
+	case11PolicySetMultiStatusYaml string = "../resources/case11_policyset_controller/case11-plcset-multistatus.yaml"
+	case11PolicyCompliantYaml      string = "../resources/case11_policyset_controller/case11-compliant-plc.yaml"
 )
 
 var _ = Describe("Test policyset controller status updates", func() {
@@ -341,6 +343,26 @@ var _ = Describe("Test policyset controller status updates", func() {
 				return rootPlcSet.Object["status"]
 			}, defaultTimeoutSeconds, 1).Should(BeNil())
 		})
+		It("must have combined statusMessage when disabled/deleted policies are contained in the policySet", func() {
+			By("Creating " + case11PolicySetMultiStatus)
+			utils.Kubectl("apply",
+				"-f", case11PolicySetMultiStatusYaml,
+				"-n", testNamespace)
+			plcSet := utils.GetWithTimeout(
+				clientHubDynamic, gvrPolicySet, case11PolicySetMultiStatus, testNamespace, true, defaultTimeoutSeconds,
+			)
+			Expect(plcSet).NotTo(BeNil())
+			By("Checking the status of policy set")
+			yamlPlc := utils.ParseYaml("../resources/case11_policyset_controller/case11-statuscheck-7.yaml")
+			Eventually(func() interface{} {
+				rootPlcSet := utils.GetWithTimeout(
+					clientHubDynamic, gvrPolicySet, case11PolicySetMultiStatus,
+					testNamespace, true, defaultTimeoutSeconds,
+				)
+
+				return rootPlcSet.Object["status"]
+			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
+		})
 		It("should clean up", func() {
 			utils.Kubectl("delete",
 				"-f", "../resources/case11_policyset_controller/case11-test-policy.yaml",
@@ -356,6 +378,9 @@ var _ = Describe("Test policyset controller status updates", func() {
 				"-n", testNamespace)
 			utils.Kubectl("delete",
 				"-f", case11PolicyCompliantYaml,
+				"-n", testNamespace)
+			utils.Kubectl("delete",
+				"-f", case11PolicySetMultiStatusYaml,
 				"-n", testNamespace)
 			opt := metav1.ListOptions{}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, defaultTimeoutSeconds)

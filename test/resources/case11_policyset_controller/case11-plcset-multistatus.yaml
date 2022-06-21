@@ -1,0 +1,108 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: case11-test-disabled
+spec:
+  remediationAction: inform
+  disabled: true
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: policy-pod-case11
+        spec:
+          remediationAction: inform
+          severity: low
+          namespaceSelector:
+            exclude:
+              - kube-*
+            include:
+              - default
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: v1
+                kind: Pod
+                metadata:
+                  name: pod-that-does-not-exist
+                spec:
+                  containers:
+                    - image: nginx:1.18.0
+                      name: nginx
+                      ports:
+                        - containerPort: 80
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: case11-test-message-policy
+spec:
+  remediationAction: inform
+  disabled: false
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: policy-pod-case11
+        spec:
+          remediationAction: inform
+          severity: low
+          namespaceSelector:
+            exclude:
+              - kube-*
+            include:
+              - default
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: v1
+                kind: Pod
+                metadata:
+                  name: pod-that-does-not-exist
+                spec:
+                  containers:
+                    - image: nginx:1.18.0
+                      name: nginx
+                      ports:
+                        - containerPort: 80
+---
+apiVersion: policy.open-cluster-management.io/v1beta1
+kind: PolicySet
+metadata:
+  name: case11-multistatus-policyset
+spec:
+  policies:
+  - case11-test-message-policy
+  - case11-does-not-exist
+  - case11-deleted-policy
+  - case11-test-disabled
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: case11-multistatus-policyset-pb
+placementRef:
+  apiGroup: apps.open-cluster-management.io
+  kind: PlacementRule
+  name: case11-multistatus-policyset-plr
+subjects:
+- apiGroup: policy.open-cluster-management.io
+  kind: PolicySet
+  name: case11-multistatus-policyset
+---
+apiVersion: apps.open-cluster-management.io/v1
+kind: PlacementRule
+metadata:
+  name: case11-multistatus-policyset-plr
+spec:
+  clusterConditions:
+  - status: "True"
+    type: ManagedClusterConditionAvailable
+  clusterSelector:
+    matchExpressions:
+      - key: name
+        operator: In
+        values:
+          - managed1
