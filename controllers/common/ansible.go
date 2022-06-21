@@ -16,7 +16,8 @@ import (
 
 // CreateAnsibleJob creates ansiblejob with given PolicyAutomation
 func CreateAnsibleJob(policyAutomation *policyv1beta1.PolicyAutomation,
-	dynamicClient dynamic.Interface, mode string, targetClusters []string) error {
+	dynamicClient dynamic.Interface, mode string, targetClusters []string,
+) error {
 	ansibleJob := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "tower.ansible.com/v1alpha1",
