@@ -242,7 +242,8 @@ func showCompliance(compliancesFound []string) bool {
 
 // getDecisions gets the PlacementDecisions for a PlacementBinding
 func getDecisions(c client.Client, pb policyv1.PlacementBinding,
-	instance *policyv1.Policy) ([]appsv1.PlacementDecision, error) {
+	instance *policyv1.Policy,
+) ([]appsv1.PlacementDecision, error) {
 	if pb.PlacementRef.APIGroup == appsv1.SchemeGroupVersion.Group &&
 		pb.PlacementRef.Kind == "PlacementRule" {
 		d, err := common.GetApplicationPlacementDecisions(c, pb, instance, log)

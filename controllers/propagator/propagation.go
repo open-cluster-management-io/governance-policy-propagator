@@ -782,7 +782,8 @@ func getClusterPlacements(
 
 // getPlacementDecisions gets the PlacementDecisions for a PlacementBinding
 func getPlacementDecisions(c client.Client, pb policiesv1.PlacementBinding,
-	instance *policiesv1.Policy) ([]appsv1.PlacementDecision, []*policiesv1.Placement, error) {
+	instance *policiesv1.Policy,
+) ([]appsv1.PlacementDecision, []*policiesv1.Placement, error) {
 	if pb.PlacementRef.APIGroup == appsv1.SchemeGroupVersion.Group &&
 		pb.PlacementRef.Kind == "PlacementRule" {
 		d, err := common.GetApplicationPlacementDecisions(c, pb, instance, log)
