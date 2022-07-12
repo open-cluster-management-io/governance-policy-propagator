@@ -112,7 +112,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 		}
 
 		return reconcile.Result{}, nil
-	} else if policyAutomation.Spec.Mode == "disabled" {
+	} else if policyAutomation.Spec.Mode == policyv1beta1.Disabled {
 		log.Info("Automation is disabled, doing nothing")
 
 		return reconcile.Result{}, nil
@@ -175,20 +175,26 @@ func (r *PolicyAutomationReconciler) Reconcile(
 			)
 
 			return reconcile.Result{RequeueAfter: requeueAfter}, nil
-		} else if policyAutomation.Spec.Mode == "once" {
-			log := log.WithValues("mode", "once")
+		} else if policyAutomation.Spec.Mode == policyv1beta1.Once {
+			log := log.WithValues("mode", string(policyv1beta1.Once))
 			targetList := common.FindNonCompliantClustersForPolicy(policy)
 			if len(targetList) > 0 {
 				log.Info("Creating an Ansible job", "targetList", targetList)
 
-				err = common.CreateAnsibleJob(policyAutomation, r.DynamicClient, "once", targetList)
+				err = common.CreateAnsibleJob(
+					policyAutomation,
+					r.DynamicClient,
+					string(policyv1beta1.Once),
+					targetList,
+				)
+
 				if err != nil {
 					log.Error(err, "Failed to create the Ansible job")
 
 					return reconcile.Result{}, err
 				}
 
-				policyAutomation.Spec.Mode = "disabled"
+				policyAutomation.Spec.Mode = policyv1beta1.Disabled
 
 				err = r.Update(ctx, policyAutomation, &client.UpdateOptions{})
 				if err != nil {
@@ -198,6 +204,131 @@ func (r *PolicyAutomationReconciler) Reconcile(
 				}
 			} else {
 				log.Info("All clusters are compliant. Doing nothing.")
+			}
+		} else if policyAutomation.Spec.Mode == policyv1beta1.EveryEvent {
+			log := log.WithValues("mode", string(policyv1beta1.EveryEvent))
+			targetList := common.FindNonCompliantClustersForPolicy(policy)
+			// Convert slice targetList to map for search efficiency
+			targetListMap := map[string]bool{}
+			for _, target := range targetList {
+				targetListMap[target] = true
+			}
+			// The final clusters list that the new ansible job will target
+			trimmedTargetList := []string{}
+			// delayAfterRunSeconds and requeueDuration default value = zero
+			delayAfterRunSeconds := policyAutomation.Spec.DelayAfterRunSeconds
+			requeueDuration := 0
+			requeueFlag := false
+			// Automation event time grouped by the cluster name
+			eventMap := map[string]policyv1beta1.ClusterEvent{}
+			if len(policyAutomation.Status.ClustersWithEvent) > 0 {
+				eventMap = policyAutomation.Status.ClustersWithEvent
+			}
+
+			now := time.Now().UTC()
+			nowStr := now.Format(time.RFC3339)
+
+			for clusterName, clusterEvent := range eventMap {
+				originalStartTime, err := time.Parse(time.RFC3339, clusterEvent.AutomationStartTime)
+				if err != nil {
+					log.Error(err, "Failed to retrieve AutomationStartTime in ClustersWithEvent")
+					delete(eventMap, clusterName)
+				}
+
+				preEventTime, err := time.Parse(time.RFC3339, clusterEvent.EventTime)
+				if err != nil {
+					log.Error(err, "Failed to retrieve EventTime in ClustersWithEvent")
+					delete(eventMap, clusterName)
+				}
+
+				// The time that delayAfterRunSeconds setting expires
+				delayUntil := originalStartTime.Add(time.Duration(delayAfterRunSeconds) * time.Second)
+
+				// The policy is non-compliant with the target cluster
+				if targetListMap[clusterName] {
+					// Policy status changed from non-compliant to compliant
+					// then back to non-compliant during the delay period
+					if delayAfterRunSeconds > 0 && preEventTime.After(originalStartTime) {
+						if now.After(delayUntil) {
+							// The delay period passed so remove the previous event
+							delete(eventMap, clusterName)
+							// Add the cluster name to create a new ansible job
+							trimmedTargetList = append(trimmedTargetList, clusterName)
+						} else {
+							requeueFlag = true
+							// Within the delay period and use the earliest requeueDuration to requeue
+							if (requeueDuration == 0) || (requeueDuration > int(delayUntil.Sub(now)+1)) {
+								requeueDuration = int(delayUntil.Sub(now) + 1)
+							}
+							// keep the event and update eventTime
+							clusterEvent.EventTime = nowStr
+							// new event from compliant to non-compliant
+							eventMap[clusterName] = clusterEvent
+						}
+					} // Otherwise, the policy keeps non-compliant since originalStartTime, do nothing
+				} else { // The policy is compliant with the target cluster
+					if delayAfterRunSeconds > 0 && now.Before(delayUntil) {
+						// Within the delay period, keep the event and update eventTime
+						clusterEvent.EventTime = nowStr
+						// new event from non-compliant to compliant
+						eventMap[clusterName] = clusterEvent
+					} else { // No delay period or it is expired, remove the event
+						delete(eventMap, clusterName)
+					}
+				}
+			}
+
+			for _, clusterName := range targetList {
+				if _, ok := eventMap[clusterName]; !ok {
+					// Add the non-compliant clusters without previous automation event
+					trimmedTargetList = append(trimmedTargetList, clusterName)
+				}
+			}
+
+			if len(trimmedTargetList) > 0 {
+				log.Info("Creating An Ansible job", "trimmedTargetList", trimmedTargetList)
+				err = common.CreateAnsibleJob(
+					policyAutomation,
+					r.DynamicClient,
+					string(policyv1beta1.EveryEvent),
+					trimmedTargetList,
+				)
+
+				if err != nil {
+					log.Error(err, "Failed to create the Ansible job")
+
+					return reconcile.Result{}, err
+				}
+
+				automationStartTimeStr := time.Now().UTC().Format(time.RFC3339)
+
+				for _, clusterName := range trimmedTargetList {
+					eventMap[clusterName] = policyv1beta1.ClusterEvent{
+						AutomationStartTime: automationStartTimeStr,
+						EventTime:           nowStr,
+					}
+				}
+			} else {
+				log.Info("All clusters are compliant. No new Ansible job. Just update ClustersWithEvent.")
+			}
+
+			policyAutomation.Status.ClustersWithEvent = eventMap
+			// use StatusWriter to update status subresource of a Kubernetes object
+			err = r.Status().Update(ctx, policyAutomation, &client.UpdateOptions{})
+			if err != nil {
+				log.Error(err, "Failed to update ClustersWithEvent in policyAutomation status")
+
+				return reconcile.Result{}, err
+			}
+
+			if requeueFlag {
+				log.Info(
+					"Requeue for the new non-compliant event during the delay period",
+					"Delay in seconds", delayAfterRunSeconds,
+					"Requeue After", requeueDuration,
+				)
+
+				return reconcile.Result{RequeueAfter: time.Duration(requeueDuration)}, nil
 			}
 		}
 	}

@@ -5,7 +5,7 @@ metadata:
 spec:
   policyRef: case5-test-policy
   eventHook: noncompliant
-  mode: disabled # once, disabled
+  mode: everyEvent # once, everyEvent, disabled
   automationDef:
     name: Demo Job Template
     secret: toweraccess
