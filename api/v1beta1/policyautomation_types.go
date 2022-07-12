@@ -14,17 +14,27 @@ type PolicyAutomationSpec struct {
 	// +kubebuilder:validation:Required
 	PolicyRef string `json:"policyRef"`
 	// Mode decides how automation is going to be triggered
-	// +kubebuilder:validation:Enum={once,disabled}
-	// +kubebuilder:validation:Required
-	Mode string `json:"mode"`
+	Mode PolicyAutomationMode `json:"mode"`
 	// EventHook decides when automation is going to be triggered
 	// +kubebuilder:validation:Enum={noncompliant}
 	// +kubebuilder:validation:Required
 	EventHook   string `json:"eventHook,omitempty"`
 	RescanAfter string `json:"rescanAfter,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	DelayAfterRunSeconds uint `json:"delayAfterRunSeconds,omitempty"`
 	// +kubebuilder:validation:Required
 	Automation AutomationDef `json:"automationDef"`
 }
+
+// +kubebuilder:validation:Enum={once,everyEvent,disabled}
+// +kubebuilder:validation:Required
+type PolicyAutomationMode string
+
+const (
+	Once       PolicyAutomationMode = "once"
+	EveryEvent PolicyAutomationMode = "everyEvent"
+	Disabled   PolicyAutomationMode = "disabled"
+)
 
 // AutomationDef defines the automation to invoke
 type AutomationDef struct {
@@ -43,7 +53,10 @@ type AutomationDef struct {
 }
 
 // PolicyAutomationStatus defines the observed state of PolicyAutomation
-type PolicyAutomationStatus struct{}
+// The string key of ClustersWithEvent is each cluster name
+type PolicyAutomationStatus struct {
+	ClustersWithEvent map[string]ClusterEvent `json:"clustersWithEvent,omitempty"`
+}
 
 //+kubebuilder:object:root=true
 
@@ -66,6 +79,14 @@ type PolicyAutomationList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []PolicyAutomation `json:"items"`
+}
+
+// PolicyAutomation event on each target cluster
+type ClusterEvent struct {
+	// Policy automation original start time
+	AutomationStartTime string `json:"automationStartTime"`
+	// The last time policy status from non-compliance to compliance
+	EventTime string `json:"eventTime"`
 }
 
 func init() {
