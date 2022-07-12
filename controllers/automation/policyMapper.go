@@ -41,9 +41,11 @@ func policyMapper(c client.Client) handler.MapFunc {
 		}
 
 		if found {
-			if policyAutomation.Spec.Mode == "scan" {
+			modeType := policyAutomation.Spec.Mode
+			if modeType == "scan" {
 				// scan mode, do not queue
-			} else if policyAutomation.Spec.Mode == "once" {
+			} else if modeType == policyv1beta1.Once || modeType == policyv1beta1.EveryEvent {
+				// The same policyAutomation mapping logic for once and everyEvent mode
 				request := reconcile.Request{NamespacedName: types.NamespacedName{
 					Name:      policyAutomation.GetName(),
 					Namespace: policyAutomation.GetNamespace(),

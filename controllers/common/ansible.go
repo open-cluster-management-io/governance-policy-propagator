@@ -5,6 +5,7 @@ package common
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -53,7 +54,8 @@ func CreateAnsibleJob(policyAutomation *policyv1beta1.PolicyAutomation,
 		Resource: "ansiblejobs",
 	}
 
-	ansibleJob.SetGenerateName(policyAutomation.GetName() + "-" + mode + "-")
+	// Ansible tower API requires the lower case naming
+	ansibleJob.SetGenerateName(strings.ToLower(policyAutomation.GetName() + "-" + mode + "-"))
 	ansibleJob.SetOwnerReferences([]metav1.OwnerReference{
 		*metav1.NewControllerRef(policyAutomation, policyAutomation.GroupVersionKind()),
 	})
