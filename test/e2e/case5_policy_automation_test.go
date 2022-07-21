@@ -157,12 +157,13 @@ var _ = Describe("Test policy automation", func() {
 			}
 
 			By("Waiting until the status on each cluster is updated to Compliant")
+			replicatedPlcList = utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 			for _, replicatedPlc := range replicatedPlcList.Items {
 				Eventually(func() interface{} {
-					status := replicatedPlc.Object["status"].(*policiesv1.PolicyStatus)
+					status := replicatedPlc.Object["status"]
 
-					return status.ComplianceState
-				}, 30, 1).Should(Equal(policiesv1.Compliant))
+					return status.(map[string]interface{})["compliant"]
+				}, 30, 1).Should(Equal(string(policiesv1.Compliant)))
 			}
 
 			By("Patching policyAutomation with mode=everyEvent")
@@ -202,12 +203,13 @@ var _ = Describe("Test policy automation", func() {
 			}
 
 			By("Waiting until the status on each cluster is updated to NonCompliant")
+			replicatedPlcList = utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 			for _, replicatedPlc := range replicatedPlcList.Items {
 				Eventually(func() interface{} {
-					status := replicatedPlc.Object["status"].(*policiesv1.PolicyStatus)
+					status := replicatedPlc.Object["status"]
 
-					return status.ComplianceState
-				}, 30, 1).Should(Equal(policiesv1.NonCompliant))
+					return status.(map[string]interface{})["compliant"]
+				}, 30, 1).Should(Equal(string(policiesv1.NonCompliant)))
 			}
 
 			By("Should only create the second new ansiblejob as once-mode test created the first ansiblejob")
@@ -248,12 +250,13 @@ var _ = Describe("Test policy automation", func() {
 			}
 
 			By("Waiting until the status on each cluster is updated to Compliant")
+			replicatedPlcList = utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 			for _, replicatedPlc := range replicatedPlcList.Items {
 				Eventually(func() interface{} {
-					status := replicatedPlc.Object["status"].(*policiesv1.PolicyStatus)
+					status := replicatedPlc.Object["status"]
 
-					return status.ComplianceState
-				}, 30, 1).Should(Equal(policiesv1.Compliant))
+					return status.(map[string]interface{})["compliant"]
+				}, 30, 1).Should(Equal(string(policiesv1.Compliant)))
 			}
 
 			By("Should not create any new ansiblejob")
@@ -282,12 +285,13 @@ var _ = Describe("Test policy automation", func() {
 			}
 
 			By("Waiting until the status on each cluster is updated to NonCompliant")
+			replicatedPlcList = utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 			for _, replicatedPlc := range replicatedPlcList.Items {
 				Eventually(func() interface{} {
-					status := replicatedPlc.Object["status"].(*policiesv1.PolicyStatus)
+					status := replicatedPlc.Object["status"]
 
-					return status.ComplianceState
-				}, 30, 1).Should(Equal(policiesv1.NonCompliant))
+					return status.(map[string]interface{})["compliant"]
+				}, 30, 1).Should(Equal(string(policiesv1.NonCompliant)))
 			}
 
 			By("Should only create the third new ansiblejob")
@@ -328,12 +332,13 @@ var _ = Describe("Test policy automation", func() {
 			}
 
 			By("Waiting until the status on each cluster is updated to Compliant")
+			replicatedPlcList = utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 			for _, replicatedPlc := range replicatedPlcList.Items {
 				Eventually(func() interface{} {
-					status := replicatedPlc.Object["status"].(*policiesv1.PolicyStatus)
+					status := replicatedPlc.Object["status"]
 
-					return status.ComplianceState
-				}, 30, 1).Should(Equal(policiesv1.Compliant))
+					return status.(map[string]interface{})["compliant"]
+				}, 30, 1).Should(Equal(string(policiesv1.Compliant)))
 			}
 
 			By("Should not create any new ansiblejob")
@@ -346,12 +351,12 @@ var _ = Describe("Test policy automation", func() {
 				return len(ansiblejobList.Items)
 			}, 15, 1).Should(Equal(3))
 
-			By("Patching policyAutomation with mode=everyEvent and delayAfterRunSeconds = 60")
+			By("Patching policyAutomation with mode=everyEvent and delayAfterRunSeconds = 240")
 			policyAutomation, err = clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).Get(
 				context.TODO(), "create-service-now-ticket", metav1.GetOptions{},
 			)
 			Expect(err).To(BeNil())
-			policyAutomation.Object["spec"].(map[string]interface{})["delayAfterRunSeconds"] = 200
+			policyAutomation.Object["spec"].(map[string]interface{})["delayAfterRunSeconds"] = 240
 			_, err = clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).Update(
 				context.TODO(), policyAutomation, metav1.UpdateOptions{},
 			)
@@ -383,12 +388,13 @@ var _ = Describe("Test policy automation", func() {
 			}
 
 			By("Waiting until the status on each cluster is updated to NonCompliant")
+			replicatedPlcList = utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 			for _, replicatedPlc := range replicatedPlcList.Items {
 				Eventually(func() interface{} {
-					status := replicatedPlc.Object["status"].(*policiesv1.PolicyStatus)
+					status := replicatedPlc.Object["status"]
 
-					return status.ComplianceState
-				}, 30, 1).Should(Equal(policiesv1.NonCompliant))
+					return status.(map[string]interface{})["compliant"]
+				}, 30, 1).Should(Equal(string(policiesv1.NonCompliant)))
 			}
 
 			By("Should only create the fourth new ansiblejob")
@@ -429,12 +435,13 @@ var _ = Describe("Test policy automation", func() {
 			}
 
 			By("Waiting until the status on each cluster is updated to Compliant")
+			replicatedPlcList = utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 			for _, replicatedPlc := range replicatedPlcList.Items {
 				Eventually(func() interface{} {
-					status := replicatedPlc.Object["status"].(*policiesv1.PolicyStatus)
+					status := replicatedPlc.Object["status"]
 
-					return status.ComplianceState
-				}, 30, 1).Should(Equal(policiesv1.Compliant))
+					return status.(map[string]interface{})["compliant"]
+				}, 30, 1).Should(Equal(string(policiesv1.Compliant)))
 			}
 
 			By("Should not create any new ansiblejob")
@@ -462,12 +469,13 @@ var _ = Describe("Test policy automation", func() {
 				Expect(err).To(BeNil())
 			}
 			By("Waiting until the status on each cluster is updated to NonCompliant")
+			replicatedPlcList = utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 			for _, replicatedPlc := range replicatedPlcList.Items {
 				Eventually(func() interface{} {
-					status := replicatedPlc.Object["status"].(*policiesv1.PolicyStatus)
+					status := replicatedPlc.Object["status"]
 
-					return status.ComplianceState
-				}, 30, 1).Should(Equal(policiesv1.NonCompliant))
+					return status.(map[string]interface{})["compliant"]
+				}, 30, 1).Should(Equal(string(policiesv1.NonCompliant)))
 			}
 
 			By("Should not create any new ansiblejob within delayAfterRunSeconds period")
@@ -478,7 +486,7 @@ var _ = Describe("Test policy automation", func() {
 				Expect(err).To(BeNil())
 
 				return len(ansiblejobList.Items)
-			}, 10, 1).Should(Equal(4))
+			}, 30, 1).Should(Equal(4))
 
 			By("Should only create the fifth new ansiblejob after delayAfterRunSeconds period passed")
 			Eventually(func() interface{} {
@@ -490,7 +498,7 @@ var _ = Describe("Test policy automation", func() {
 				Expect(err).Should(BeNil())
 
 				return len(ansiblejobList.Items)
-			}, 150, 1).Should(Equal(5))
+			}, 240, 1).Should(Equal(5))
 			Consistently(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
 					context.TODO(), metav1.ListOptions{},

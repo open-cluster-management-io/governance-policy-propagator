@@ -206,7 +206,9 @@ func (r *PolicyAutomationReconciler) Reconcile(
 				log.Info("All clusters are compliant. Doing nothing.")
 			}
 		} else if policyAutomation.Spec.Mode == policyv1beta1.EveryEvent {
+			originalPolicyAutomation := policyAutomation.DeepCopy()
 			log := log.WithValues("mode", string(policyv1beta1.EveryEvent))
+			log.Info("This is policyAutomation", "policyAutomation", policyAutomation)
 			targetList := common.FindNonCompliantClustersForPolicy(policy)
 			log.Info("Non-compliance clusters list", "targetList", targetList)
 			// convert slice targetList to map for search efficiency
@@ -219,16 +221,14 @@ func (r *PolicyAutomationReconciler) Reconcile(
 			// delayAfterRunSeconds and requeueDuration default value is zero
 			delayAfterRunSeconds := policyAutomation.Spec.DelayAfterRunSeconds
 			requeueDuration := 0
-			log.Info("delayAfterRunSeconds", delayAfterRunSeconds)
 			// automation event time grouped by the cluster name
 			eventMap := map[string]policyv1beta1.ClusterEvent{}
-			if policyAutomation.Status.ClustersWithEvent != nil {
+			if len(policyAutomation.Status.ClustersWithEvent) > 0 {
 				eventMap = policyAutomation.Status.ClustersWithEvent
 			}
 
 			now := time.Now().UTC()
 			nowStr := now.Format(time.RFC3339)
-
 			requeueFlag := false
 
 			for clusterName, clusterEvent := range eventMap {
@@ -300,7 +300,8 @@ func (r *PolicyAutomationReconciler) Reconcile(
 					return reconcile.Result{}, err
 				}
 
-				automationStartTimeStr := time.Now().UTC().Format(time.RFC3339)
+				automationStartTimeStr := time.Now().UTC().
+					Add(time.Second * time.Duration(1)).Format(time.RFC3339)
 
 				for _, clusterName := range trimmedTargetList {
 					// update policyAutomation.Status.ClustersWithEvent
@@ -310,7 +311,10 @@ func (r *PolicyAutomationReconciler) Reconcile(
 					}
 				}
 
-				err = r.Update(ctx, policyAutomation, &client.UpdateOptions{})
+				policyAutomation.Status.ClustersWithEvent = eventMap
+
+				log.Info("This is the final policyAutomation", "policyAutomation", policyAutomation)
+				err = r.Patch(ctx, policyAutomation, client.MergeFrom(originalPolicyAutomation))
 				if err != nil {
 					log.Error(err, "Failed to update clusters event time in policyAutomation status")
 
