@@ -61,6 +61,9 @@ spec:
                 - name
                 - secret
                 type: object
+              delayAfterRunSeconds:
+                minimum: 0
+                type: integer
               eventHook:
                 description: EventHook decides when automation is going to be triggered
                 enum:
@@ -70,6 +73,7 @@ spec:
                 description: Mode decides how automation is going to be triggered
                 enum:
                 - once
+                - everyEvent
                 - disabled
                 type: string
               policyRef:
@@ -85,6 +89,24 @@ spec:
             type: object
           status:
             description: PolicyAutomationStatus defines the observed state of PolicyAutomation
+              The string key of ClustersWithEvent is each cluster name
+            properties:
+              clustersWithEvent:
+                additionalProperties:
+                  description: PolicyAutomation event on each target cluster
+                  properties:
+                    automationStartTime:
+                      description: Policy automation original start time
+                      type: string
+                    eventTime:
+                      description: The last time policy status from non-compliance
+                        to compliance
+                      type: string
+                  required:
+                  - automationStartTime
+                  - eventTime
+                  type: object
+                type: object
             type: object
         required:
         - spec
