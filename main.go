@@ -187,13 +187,14 @@ func main() {
 
 	// Set default manager options
 	options := ctrl.Options{
-		Namespace:              namespace,
-		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "policy-propagator.open-cluster-management.io",
-		NewCache:               newCacheFunc,
+		Namespace:                  namespace,
+		Scheme:                     scheme,
+		MetricsBindAddress:         metricsAddr,
+		HealthProbeBindAddress:     probeAddr,
+		LeaderElection:             enableLeaderElection,
+		LeaderElectionID:           "policy-propagator.open-cluster-management.io",
+		LeaderElectionResourceLock: "leases",
+		NewCache:                   newCacheFunc,
 	}
 
 	// Add support for MultiNamespace set in WATCH_NAMESPACE (e.g ns1,ns2)
