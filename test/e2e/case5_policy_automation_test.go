@@ -5,6 +5,7 @@ package e2e
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -595,6 +596,22 @@ var _ = Describe("Test policy automation", func() {
 				return len(ansiblejobList.Items)
 			}, 15, 1).Should(Equal(1))
 
+			By("Patching automationStartTime to an earlier time and let delayAfterRunSeconds expire immediately")
+			policyAutomation, err = clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).Get(
+				context.TODO(), "create-service-now-ticket", metav1.GetOptions{},
+			)
+			Expect(err).To(BeNil())
+			status := policyAutomation.Object["status"].(map[string]interface{})
+			clustersWithEvent := status["clustersWithEvent"].(map[string]interface{})
+			for _, ClusterEvent := range clustersWithEvent {
+				updateStartTime := time.Now().UTC().Add(-241 * time.Second).Format(time.RFC3339)
+				ClusterEvent.(map[string]interface{})["automationStartTime"] = updateStartTime
+			}
+			_, err = clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).UpdateStatus(
+				context.TODO(), policyAutomation, metav1.UpdateOptions{},
+			)
+			Expect(err).To(BeNil())
+
 			By("Patching policy to make both clusters back to NonCompliant")
 			opt = metav1.ListOptions{
 				LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case5PolicyName,
@@ -625,17 +642,6 @@ var _ = Describe("Test policy automation", func() {
 				return allUpdated
 			}, 30, 1).Should(BeTrue())
 
-			By("Should not create any new ansiblejob for the third Non-Compliant event" +
-				" within delayAfterRunSeconds period")
-			Consistently(func() interface{} {
-				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).List(
-					context.TODO(), metav1.ListOptions{},
-				)
-				Expect(err).To(BeNil())
-
-				return len(ansiblejobList.Items)
-			}, 30, 1).Should(Equal(1))
-
 			By("After delayAfterRunSeconds is expired, should only create the second ansiblejob")
 			Eventually(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
@@ -646,7 +652,7 @@ var _ = Describe("Test policy automation", func() {
 				Expect(err).Should(BeNil())
 
 				return len(ansiblejobList.Items)
-			}, 150, 1).Should(Equal(2))
+			}, 30, 1).Should(Equal(2))
 			Consistently(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
 					context.TODO(), metav1.ListOptions{},
