@@ -22,8 +22,6 @@ jobs:
       REGISTRY: localhost:5000
     strategy:
       matrix:
-        go:
-          - '1.18'
         # Run tests on oldest and newest supported OCP Kubernetes
         # - OCP 4.5 runs Kubernetes v1.18
         # KinD tags: https://hub.docker.com/r/kindest/node/tags
@@ -38,11 +36,11 @@ jobs:
         path: governance-policy-propagator
         fetch-depth: 0 # Fetch all history for all tags and branches
 
-    - name: Set up Go - ${{ matrix.go }}
-      uses: actions/setup-go@v2
+    - name: Set up Go
+      uses: actions/setup-go@v3
       id: go
       with:
-        go-version: ${{ matrix.go }}
+        go-version-file: governance-policy-propagator/go.mod
 
     - name: Verify modules
       run: |
