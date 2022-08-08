@@ -9,7 +9,9 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	policyv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
@@ -76,10 +78,15 @@ var _ = Describe("Test policy automation", func() {
 			)
 			Expect(err).To(BeNil())
 			policyAutomation.Object["spec"].(map[string]interface{})["mode"] = string(policyv1beta1.Once)
-			_, err = clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).Update(
+			policyAutomation, err = clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).Update(
 				context.TODO(), policyAutomation, metav1.UpdateOptions{},
 			)
 			Expect(err).To(BeNil())
+
+			By("Verifying the added owner reference")
+			Expect(len(policyAutomation.GetOwnerReferences())).To(Equal(1))
+			Expect(policyAutomation.GetOwnerReferences()[0].Name).To(Equal(case5PolicyName))
+
 			By("Should still not create any ansiblejob when mode = once and policy is pending")
 			Consistently(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).List(
@@ -407,15 +414,21 @@ var _ = Describe("Test policy automation", func() {
 			Expect(err).Should(BeNil())
 
 			By("Patching everyEvent mode policyAutomation with delayAfterRunSeconds = 240")
-			policyAutomation, err := clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).Get(
-				context.TODO(), "create-service-now-ticket", metav1.GetOptions{},
-			)
-			Expect(err).To(BeNil())
-			policyAutomation.Object["spec"].(map[string]interface{})["delayAfterRunSeconds"] = 240
-			_, err = clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).Update(
-				context.TODO(), policyAutomation, metav1.UpdateOptions{},
-			)
-			Expect(err).To(BeNil())
+			var policyAutomation *unstructured.Unstructured
+			// Use Eventually since there can be a race condition for when the owner reference is added by the
+			// controller.
+			Eventually(func(g Gomega) {
+				policyAutomation, err = clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).Get(
+					context.TODO(), "create-service-now-ticket", metav1.GetOptions{},
+				)
+				g.Expect(err).To(BeNil())
+
+				policyAutomation.Object["spec"].(map[string]interface{})["delayAfterRunSeconds"] = 240
+				_, err = clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).Update(
+					context.TODO(), policyAutomation, metav1.UpdateOptions{},
+				)
+				g.Expect(err).To(BeNil())
+			}).Should(Succeed())
 
 			By("Should not create any new ansiblejob when Compliant")
 			Consistently(func() interface{} {
@@ -767,11 +780,22 @@ var _ = Describe("Test policy automation", func() {
 	})
 	Describe("Clean up", func() {
 		It("Test AnsibleJob clean up", func() {
-			By("Removing config map")
-			_, err := utils.KubectlWithOutput(
-				"delete", "policyautomation", "-n", testNamespace, "create-service-now-ticket",
-			)
+			By("Removing policy")
+			_, err := utils.KubectlWithOutput("delete", "policy", "-n", testNamespace, case5PolicyName)
 			Expect(err).Should(BeNil())
+
+			By("PolicyAutomation should also be removed")
+			Eventually(func() *unstructured.Unstructured {
+				policyAutomation, err := clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).Get(
+					context.TODO(), "create-service-now-ticket", metav1.GetOptions{},
+				)
+				if !k8serrors.IsNotFound(err) {
+					Expect(err).To(BeNil())
+				}
+
+				return policyAutomation
+			}).Should(BeNil())
+
 			By("Ansiblejob should also be removed")
 			Eventually(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
@@ -781,9 +805,6 @@ var _ = Describe("Test policy automation", func() {
 
 				return len(ansiblejobList.Items)
 			}, 30, 1).Should(Equal(0))
-			By("Removing policy")
-			_, err = utils.KubectlWithOutput("delete", "policy", "-n", testNamespace, case5PolicyName)
-			Expect(err).Should(BeNil())
 		})
 	})
 })
