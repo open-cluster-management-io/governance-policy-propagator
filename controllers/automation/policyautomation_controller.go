@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
@@ -59,6 +60,35 @@ type PolicyAutomationReconciler struct {
 	counter       int
 }
 
+// setOwnerReferences will set the input policy as the sole owner of the input policyAutomation and make the update
+// with the API. In practice, this will cause the input policyAutomation to be deleted when the policy is deleted.
+func (r *PolicyAutomationReconciler) setOwnerReferences(
+	ctx context.Context,
+	policyAutomation *policyv1beta1.PolicyAutomation,
+	policy *policyv1.Policy,
+) error {
+	var policyOwnerRefFound bool
+
+	for _, ownerRef := range policyAutomation.GetOwnerReferences() {
+		if ownerRef.UID == policy.UID {
+			policyOwnerRefFound = true
+
+			break
+		}
+	}
+
+	if !policyOwnerRefFound {
+		log.V(3).Info(fmt.Sprintf("Setting the owner reference on the PolicyAutomation %s", policyAutomation.GetName()))
+		policyAutomation.SetOwnerReferences([]metav1.OwnerReference{
+			*metav1.NewControllerRef(policy, policy.GroupVersionKind()),
+		})
+
+		return r.Update(ctx, policyAutomation)
+	}
+
+	return nil
+}
+
 // Reconcile reads that state of the cluster for a Policy object and makes changes based on the state read
 // and what is in the Policy.Spec
 // Note:
@@ -92,6 +122,31 @@ func (r *PolicyAutomationReconciler) Reconcile(
 
 	log = log.WithValues("policyRef", policyAutomation.Spec.PolicyRef)
 
+	policy := &policyv1.Policy{}
+
+	err = r.Get(ctx, types.NamespacedName{
+		Name:      policyAutomation.Spec.PolicyRef,
+		Namespace: policyAutomation.GetNamespace(),
+	}, policy)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("Policy specified in policyRef field not found, may have been deleted, doing nothing")
+
+			return reconcile.Result{}, nil
+		}
+
+		log.Error(err, "Failed to retrieve the policy specified in the policyRef field")
+
+		return reconcile.Result{}, err
+	}
+
+	err = r.setOwnerReferences(ctx, policyAutomation, policy)
+	if err != nil {
+		log.Error(err, "Failed to set the owner reference. Will requeue.")
+
+		return reconcile.Result{}, err
+	}
+
 	if policyAutomation.Annotations["policy.open-cluster-management.io/rerun"] == "true" {
 		log.Info("Creating an Ansible job", "mode", "manual")
 
@@ -117,26 +172,6 @@ func (r *PolicyAutomationReconciler) Reconcile(
 
 		return reconcile.Result{}, nil
 	} else {
-		policy := &policyv1.Policy{}
-
-		err := r.Get(ctx, types.NamespacedName{
-			Name:      policyAutomation.Spec.PolicyRef,
-			Namespace: policyAutomation.GetNamespace(),
-		}, policy)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				// policy is gone, need to delete automation
-				log.Info("Policy specified in policyRef field not found, may have been deleted, doing nothing")
-
-				return reconcile.Result{}, nil
-			}
-
-			// Error reading the object - requeue the request.
-			log.Error(err, "Failed to retrieve the policy specified in the policyRef field")
-
-			return reconcile.Result{}, err
-		}
-
 		if policy.Spec.Disabled {
 			log.Info("The policy is disabled. Doing nothing.")
 
