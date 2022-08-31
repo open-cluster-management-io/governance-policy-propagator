@@ -248,8 +248,8 @@ func (r *PolicyAutomationReconciler) Reconcile(
 			for _, target := range targetList {
 				targetListMap[target] = true
 			}
-			// The final clusters list that the new ansible job will target
-			trimmedTargetList := []string{}
+			// The clusters map that the new ansible job will target
+			trimmedTargetMap := map[string]bool{}
 			// delayAfterRunSeconds and requeueDuration default value = zero
 			delayAfterRunSeconds := policyAutomation.Spec.DelayAfterRunSeconds
 			requeueDuration := 0
@@ -288,7 +288,9 @@ func (r *PolicyAutomationReconciler) Reconcile(
 							// The delay period passed so remove the previous event
 							delete(eventMap, clusterName)
 							// Add the cluster name to create a new ansible job
-							trimmedTargetList = append(trimmedTargetList, clusterName)
+							if !trimmedTargetMap[clusterName] {
+								trimmedTargetMap[clusterName] = true
+							}
 						} else {
 							requeueFlag = true
 							// Within the delay period and use the earliest requeueDuration to requeue
@@ -316,11 +318,17 @@ func (r *PolicyAutomationReconciler) Reconcile(
 			for _, clusterName := range targetList {
 				if _, ok := eventMap[clusterName]; !ok {
 					// Add the non-compliant clusters without previous automation event
-					trimmedTargetList = append(trimmedTargetList, clusterName)
+					if !trimmedTargetMap[clusterName] {
+						trimmedTargetMap[clusterName] = true
+					}
 				}
 			}
 
-			if len(trimmedTargetList) > 0 {
+			if len(trimmedTargetMap) > 0 {
+				trimmedTargetList := []string{}
+				for clusterName := range trimmedTargetMap {
+					trimmedTargetList = append(trimmedTargetList, clusterName)
+				}
 				log.Info("Creating An Ansible job", "trimmedTargetList", trimmedTargetList)
 				err = common.CreateAnsibleJob(
 					policyAutomation,
