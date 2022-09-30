@@ -1,7 +1,7 @@
 # Stage 1: Use image builder to build the target binaries
 # Copyright Contributors to the Open Cluster Management project
 
-FROM golang:1.18 AS builder
+FROM golang:1.19 AS builder
 
 ENV COMPONENT=governance-policy-propagator
 ENV REPO_PATH=/go/src/github.com/open-cluster-management/${COMPONENT}
@@ -13,9 +13,6 @@ RUN if [ -x "$(command -v dnf)" ] ; then \
     fi
 WORKDIR ${REPO_PATH}
 COPY . .
-# TODO: Remove this patch when updating to Go 1.19
-# https://go-review.googlesource.com/c/go/+/398475
-RUN patch -p1 /usr/local/go/src/text/template/parse/lex.go build/template-delimiter.patch
 RUN make build
 
 # Stage 2: Copy the binaries from the image builder to the base image
