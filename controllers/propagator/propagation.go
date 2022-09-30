@@ -268,12 +268,12 @@ func handleDecisionWrapper(
 // handleDecisions will get all the placement decisions based on the input policy and placement
 // binding list and propagate the policy. Note that this method performs concurrent operations.
 // It returns the following:
-// * placements - a slice of all the placement decisions discovered
-// * allDecisions - a set of all the placement decisions encountered in the format of
-//   <namespace>/<name>
-// * failedClusters - a set of all the clusters that encountered an error during propagation in the
-//   format of <namespace>/<name>
-// * allFailed - a bool that determines if all clusters encountered an error during propagation
+//   - placements - a slice of all the placement decisions discovered
+//   - allDecisions - a set of all the placement decisions encountered in the format of
+//     <namespace>/<name>
+//   - failedClusters - a set of all the clusters that encountered an error during propagation in the
+//     format of <namespace>/<name>
+//   - allFailed - a bool that determines if all clusters encountered an error during propagation
 func (r *PolicyReconciler) handleDecisions(
 	instance *policiesv1.Policy, pbList *policiesv1.PlacementBindingList,
 ) (

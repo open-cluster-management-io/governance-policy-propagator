@@ -2,8 +2,8 @@
 // Copyright Contributors to the Open Cluster Management project
 
 // Package v1beta1 contains API Schema definitions for the policy v1beta1 API group
-//+kubebuilder:object:generate=true
-//+groupName=policy.open-cluster-management.io
+// +kubebuilder:object:generate=true
+// +groupName=policy.open-cluster-management.io
 package v1beta1
 
 import (

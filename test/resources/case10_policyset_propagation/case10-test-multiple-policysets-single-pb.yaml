@@ -72,7 +72,7 @@ subjects:
   kind: PolicySet
   name: case10-test-policyset2
 ---
-apiVersion: cluster.open-cluster-management.io/v1alpha1
+apiVersion: cluster.open-cluster-management.io/v1beta1
 kind: Placement
 metadata:
   name: case10-test-policyset-plm
@@ -82,7 +82,7 @@ spec:
       labelSelector:
         matchExpressions: []
 ---
-apiVersion: cluster.open-cluster-management.io/v1alpha1
+apiVersion: cluster.open-cluster-management.io/v1beta1
 kind: PlacementDecision
 metadata:
   name: case10-test-policyset-plm-decision

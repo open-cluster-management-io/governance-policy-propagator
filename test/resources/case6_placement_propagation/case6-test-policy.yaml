@@ -32,7 +32,7 @@ subjects:
   kind: Policy
   name: case6-test-policy
 ---
-apiVersion: cluster.open-cluster-management.io/v1alpha1
+apiVersion: cluster.open-cluster-management.io/v1beta1
 kind: Placement
 metadata:
   name: case6-test-policy-plr
@@ -42,7 +42,7 @@ spec:
       labelSelector:
         matchExpressions: []
 ---
-apiVersion: cluster.open-cluster-management.io/v1alpha1
+apiVersion: cluster.open-cluster-management.io/v1beta1
 kind: PlacementDecision
 metadata:
   name: case6-test-policy-plr-1
