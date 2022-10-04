@@ -50,6 +50,8 @@ type AutomationDef struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	TowerSecret string `json:"secret"`
+	// JobTTL sets the time to live for the Kubernetes AnsibleJob object after the Ansible job run has finished.
+	JobTTL *int `json:"jobTtl,omitempty"`
 }
 
 // PolicyAutomationStatus defines the observed state of PolicyAutomation

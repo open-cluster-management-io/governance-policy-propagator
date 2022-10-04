@@ -27,6 +27,7 @@ func CreateAnsibleJob(policyAutomation *policyv1beta1.PolicyAutomation,
 				"job_template_name": policyAutomation.Spec.Automation.Name,
 				"tower_auth_secret": policyAutomation.Spec.Automation.TowerSecret,
 				"extra_vars":        map[string]interface{}{},
+				"job_ttl":           86400, // default TTL is 24 hours
 			},
 		},
 	}
@@ -47,6 +48,10 @@ func CreateAnsibleJob(policyAutomation *policyv1beta1.PolicyAutomation,
 		// nolint: forcetypeassert
 		extravars := ansibleJob.Object["spec"].(map[string]interface{})["extra_vars"].(map[string]interface{})
 		extravars["target_clusters"] = targetClusters
+	}
+
+	if policyAutomation.Spec.Automation.JobTTL != nil {
+		ansibleJob.Object["spec"].(map[string]interface{})["job_ttl"] = *policyAutomation.Spec.Automation.JobTTL
 	}
 
 	ansibleJobRes := schema.GroupVersionResource{
