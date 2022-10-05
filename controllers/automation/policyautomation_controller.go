@@ -89,6 +89,100 @@ func (r *PolicyAutomationReconciler) setOwnerReferences(
 	return nil
 }
 
+// getTargetListMap will convert slice targetList to map for search efficiency
+func getTargetListMap(targetList []string) map[string]bool {
+	targetListMap := map[string]bool{}
+	for _, target := range targetList {
+		targetListMap[target] = true
+	}
+
+	return targetListMap
+}
+
+// getViolationContext will put the root policy information into violationContext
+// It also put the status of the non-compliance replicated policies into violationContext
+func (r *PolicyAutomationReconciler) getViolationContext(
+	policy *policyv1.Policy,
+	targetList []string,
+	policyAutomation *policyv1beta1.PolicyAutomation,
+) (policyv1beta1.ViolationContext, error) {
+	log.V(3).Info("Get the violation context from the root policy %s", policy.ObjectMeta.Name)
+
+	violationContext := policyv1beta1.ViolationContext{}
+	// 1) get the target cluster list
+	violationContext.TargetClusters = targetList
+	// 2) get the root policy name
+	violationContext.PolicyName = policy.ObjectMeta.Name
+	// 3) get the root policy namespace
+	violationContext.Namespace = policy.GetNamespace()
+	// 4) get the root policy hub cluster name
+	violationContext.HubCluster = policy.GetClusterName()
+
+	// 5) get the latest violation message from the root policy
+	statusDetails := policy.Status.Details
+	if len(statusDetails) > 0 && len(statusDetails[0].History) > 0 {
+		violationContext.ViolationMessage = statusDetails[0].History[0].Message
+	}
+
+	// 6) get the policy set of the root policy
+	plcPlacement := policy.Status.Placement
+	policySet := []string{}
+
+	for _, placement := range plcPlacement {
+		if placement.PolicySet != "" {
+			policySet = append(policySet, placement.PolicySet)
+		}
+	}
+
+	if len(policySet) > 0 {
+		violationContext.PolicySet = policySet
+	}
+
+	replicatedPlcList := &policyv1.PolicyList{}
+
+	err := r.List(
+		context.TODO(),
+		replicatedPlcList,
+		client.MatchingLabels(common.LabelsForRootPolicy(policy)),
+	)
+	if err != nil {
+		log.Error(err, "Failed to list the replicated policies")
+
+		return violationContext, err
+	}
+
+	if len(replicatedPlcList.Items) == 0 {
+		log.V(2).Info("The replicated policies can not be found.")
+	} else {
+		policyViolationContextLimit := policyAutomation.Spec.Automation.PolicyViolationContextLimit
+		if policyViolationContextLimit == 0 {
+			policyViolationContextLimit = 1000
+		}
+		targetListMap := getTargetListMap(targetList)
+		violationContext.PolicyViolationContext = make(map[string]policyv1.ReplicatedPolicyStatus)
+		for _, rPlc := range replicatedPlcList.Items {
+			clusterName := rPlc.GetLabels()[common.ClusterNameLabel]
+			// 7) get the status of the non-compliance replicated policies
+			if targetListMap[clusterName] {
+				rPlcStatus := policyv1.ReplicatedPolicyStatus{}
+				// Convert PolicyStatus to ReplicatedPolicyStatus and skip the unnecessary items
+				err := common.TypeConverter(rPlc.Status, &rPlcStatus)
+				if err != nil {
+					log.Error(err, "The PolicyStatus can not be convert to type of ReplicatedPolicyStatus.")
+
+					continue
+				}
+				violationContext.PolicyViolationContext[clusterName] = rPlcStatus
+				if len(violationContext.PolicyViolationContext) == int(policyViolationContextLimit) {
+					break
+				}
+			}
+		}
+	}
+
+	return violationContext, nil
+}
+
 // Reconcile reads that state of the cluster for a Policy object and makes changes based on the state read
 // and what is in the Policy.Spec
 // Note:
@@ -150,7 +244,12 @@ func (r *PolicyAutomationReconciler) Reconcile(
 	if policyAutomation.Annotations["policy.open-cluster-management.io/rerun"] == "true" {
 		log.Info("Creating an Ansible job", "mode", "manual")
 
-		err = common.CreateAnsibleJob(policyAutomation, r.DynamicClient, "manual", nil)
+		err = common.CreateAnsibleJob(
+			policyAutomation,
+			r.DynamicClient,
+			"manual",
+			policyv1beta1.ViolationContext{},
+		)
 		if err != nil {
 			log.Error(err, "Failed to create the Ansible job", "mode", "manual")
 
@@ -194,8 +293,8 @@ func (r *PolicyAutomationReconciler) Reconcile(
 			targetList := common.FindNonCompliantClustersForPolicy(policy)
 			if len(targetList) > 0 {
 				log.Info("Creating An Ansible job", "targetList", targetList)
-
-				err = common.CreateAnsibleJob(policyAutomation, r.DynamicClient, "scan", targetList)
+				violationContext, _ := r.getViolationContext(policy, targetList, policyAutomation)
+				err = common.CreateAnsibleJob(policyAutomation, r.DynamicClient, "scan", violationContext)
 				if err != nil {
 					return reconcile.Result{RequeueAfter: requeueAfter}, err
 				}
@@ -216,11 +315,12 @@ func (r *PolicyAutomationReconciler) Reconcile(
 			if len(targetList) > 0 {
 				log.Info("Creating an Ansible job", "targetList", targetList)
 
+				violationContext, _ := r.getViolationContext(policy, targetList, policyAutomation)
 				err = common.CreateAnsibleJob(
 					policyAutomation,
 					r.DynamicClient,
 					string(policyv1beta1.Once),
-					targetList,
+					violationContext,
 				)
 
 				if err != nil {
@@ -243,11 +343,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 		} else if policyAutomation.Spec.Mode == policyv1beta1.EveryEvent {
 			log := log.WithValues("mode", string(policyv1beta1.EveryEvent))
 			targetList := common.FindNonCompliantClustersForPolicy(policy)
-			// Convert slice targetList to map for search efficiency
-			targetListMap := map[string]bool{}
-			for _, target := range targetList {
-				targetListMap[target] = true
-			}
+			targetListMap := getTargetListMap(targetList)
 			// The clusters map that the new ansible job will target
 			trimmedTargetMap := map[string]bool{}
 			// delayAfterRunSeconds and requeueDuration default value = zero
@@ -330,11 +426,12 @@ func (r *PolicyAutomationReconciler) Reconcile(
 					trimmedTargetList = append(trimmedTargetList, clusterName)
 				}
 				log.Info("Creating An Ansible job", "trimmedTargetList", trimmedTargetList)
+				violationContext, _ := r.getViolationContext(policy, trimmedTargetList, policyAutomation)
 				err = common.CreateAnsibleJob(
 					policyAutomation,
 					r.DynamicClient,
 					string(policyv1beta1.EveryEvent),
-					trimmedTargetList,
+					violationContext,
 				)
 
 				if err != nil {

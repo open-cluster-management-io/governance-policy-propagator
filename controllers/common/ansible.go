@@ -5,6 +5,7 @@ package common
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,7 +18,7 @@ import (
 
 // CreateAnsibleJob creates ansiblejob with given PolicyAutomation
 func CreateAnsibleJob(policyAutomation *policyv1beta1.PolicyAutomation,
-	dynamicClient dynamic.Interface, mode string, targetClusters []string,
+	dynamicClient dynamic.Interface, mode string, violationContext policyv1beta1.ViolationContext,
 ) error {
 	ansibleJob := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -43,10 +44,19 @@ func CreateAnsibleJob(policyAutomation *policyv1beta1.PolicyAutomation,
 		ansibleJob.Object["spec"].(map[string]interface{})["extra_vars"] = mapExtraVars
 	}
 
-	if targetClusters != nil {
-		// nolint: forcetypeassert
+	if violationContext.TargetClusters != nil {
 		extravars := ansibleJob.Object["spec"].(map[string]interface{})["extra_vars"].(map[string]interface{})
-		extravars["target_clusters"] = targetClusters
+		values := reflect.ValueOf(violationContext)
+		typesOf := values.Type()
+		// add every violationContext fields into extravars
+		// here use the snake key to match the design and
+		// don't need to set target_clusters specifically
+		for i := 0; i < values.NumField(); i++ {
+			key := typesOf.Field(i).Name
+			snakeKey := ToSnakeCase(key)
+			value := values.Field(i).Interface()
+			extravars[snakeKey] = value
+		}
 	}
 
 	ansibleJobRes := schema.GroupVersionResource{

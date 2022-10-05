@@ -75,11 +75,24 @@ type DetailsPerTemplate struct {
 	History         []ComplianceHistory `json:"history,omitempty"`
 }
 
+// ReplicatedDetailsPerTemplate defines the replicated policy compliance details and history
+type ReplicatedDetailsPerTemplate struct {
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ComplianceState ComplianceState               `json:"compliant,omitempty"`
+	History         []ReplicatedComplianceHistory `json:"history,omitempty"`
+}
+
 // ComplianceHistory defines compliance details history
 type ComplianceHistory struct {
 	LastTimestamp metav1.Time `json:"lastTimestamp,omitempty" protobuf:"bytes,7,opt,name=lastTimestamp"`
 	Message       string      `json:"message,omitempty" protobuf:"bytes,4,opt,name=message"`
 	EventName     string      `json:"eventName,omitempty"`
+}
+
+// ReplicatedComplianceHistory defines the replicated policy compliance details history
+type ReplicatedComplianceHistory struct {
+	LastTimestamp metav1.Time `json:"lastTimestamp,omitempty" protobuf:"bytes,7,opt,name=lastTimestamp"`
+	Message       string      `json:"message,omitempty" protobuf:"bytes,4,opt,name=message"`
 }
 
 // PolicyStatus defines the observed state of Policy
@@ -90,6 +103,13 @@ type PolicyStatus struct {
 	// +kubebuilder:validation:Enum=Compliant;NonCompliant
 	ComplianceState ComplianceState       `json:"compliant,omitempty"` // used by replicated policy
 	Details         []*DetailsPerTemplate `json:"details,omitempty"`   // used by replicated policy
+}
+
+// ReplicatedPolicyStatus defines the replicated policy status
+type ReplicatedPolicyStatus struct {
+	// +kubebuilder:validation:Enum=Compliant;NonCompliant
+	ComplianceState ComplianceState                 `json:"compliant,omitempty"` // used by replicated policy
+	Details         []*ReplicatedDetailsPerTemplate `json:"details,omitempty"`   // used by replicated policy
 }
 
 //+kubebuilder:object:root=true
