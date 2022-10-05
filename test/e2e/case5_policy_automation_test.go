@@ -38,9 +38,14 @@ var _ = Describe("Test policy automation", func() {
 			Expect(plc).NotTo(BeNil())
 		})
 		It("should propagate to cluster ns managed1 and managed2", func() {
-			By("Patching test-policy-plr with decision of both managed1 and managed2")
+			By("Patching test-policyset-plr with decision of both managed1 and managed2")
 			plr := utils.GetWithTimeout(
-				clientHubDynamic, gvrPlacementRule, case5PolicyName+"-plr", testNamespace, true, defaultTimeoutSeconds,
+				clientHubDynamic,
+				gvrPlacementRule,
+				case5PolicyName+"set-plr",
+				testNamespace,
+				true,
+				defaultTimeoutSeconds,
 			)
 			plr.Object["status"] = utils.GeneratePlrStatus("managed1", "managed2")
 			_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
@@ -137,18 +142,29 @@ var _ = Describe("Test policy automation", func() {
 				Expect(err).To(BeNil())
 				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n", testNamespace)
 				Expect(err).Should(BeNil())
+				spec := ansiblejobList.Items[0].Object["spec"]
+				extraVars := spec.(map[string]interface{})["extra_vars"].(map[string]interface{})
 
-				return len(ansiblejobList.Items)
-			}, 30, 1).Should(Equal(1))
-			By("Job TTL should match default (1 day)")
-			Eventually(func(g Gomega) interface{} {
-				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-					context.TODO(), metav1.ListOptions{},
-				)
-				g.Expect(err).To(BeNil())
+				return extraVars
+			}, 30, 1).Should(Equal(9))
 
-				return ansiblejobList.Items[0].Object["spec"].(map[string]interface{})["job_ttl"]
-			}, 10, 1).Should(Equal(int64(86400)))
+			By("Check each violation context field in extraVars")
+			ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
+				context.TODO(), metav1.ListOptions{},
+			)
+			Expect(err).To(BeNil())
+			spec := ansiblejobList.Items[0].Object["spec"]
+			extraVars := spec.(map[string]interface{})["extra_vars"].(map[string]interface{})
+			Expect(extraVars["policy_name"]).To(Equal("case5-test-policy"))
+			Expect(extraVars["namespace"]).To(Equal("policy-propagator-test"))
+			Expect(len(extraVars["target_clusters"].([]interface{}))).To(Equal(1))
+			Expect(extraVars["target_clusters"].([]interface{})[0]).To(Equal("managed1"))
+			Expect(len(extraVars["policy_set"].([]interface{}))).To(Equal(1))
+			Expect(extraVars["policy_set"].([]interface{})[0]).To(Equal("case5-test-policyset"))
+			managed1 := extraVars["policy_violation_context"].(map[string]interface{})["managed1"]
+			compliant := managed1.(map[string]interface{})["compliant"]
+			Expect(compliant).To(Equal(string(policiesv1.NonCompliant)))
+
 			By("Mode should be set to disabled after ansiblejob is created")
 			policyAutomation, err = clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).Get(
 				context.TODO(), "create-service-now-ticket", metav1.GetOptions{},
@@ -273,16 +289,6 @@ var _ = Describe("Test policy automation", func() {
 
 				return len(ansiblejobList.Items)
 			}, 30, 1).Should(Equal(1))
-
-			By("Job TTL should match patch (1 hour)")
-			Eventually(func(g Gomega) interface{} {
-				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-					context.TODO(), metav1.ListOptions{},
-				)
-				g.Expect(err).To(BeNil())
-
-				return ansiblejobList.Items[0].Object["spec"].(map[string]interface{})["job_ttl"]
-			}, 10, 1).Should(Equal(int64(3600)))
 
 			By("Patching policy to make both clusters back to Compliant")
 			opt = metav1.ListOptions{

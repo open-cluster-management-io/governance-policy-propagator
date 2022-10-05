@@ -5,6 +5,9 @@ package common
 
 import (
 	"context"
+	"encoding/json"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/avast/retry-go/v3"
@@ -200,4 +203,26 @@ func GetNumWorkers(listLength int, concurrencyPerPolicy int) int {
 	}
 
 	return numWorkers
+}
+
+// TypeConverter is a helper function to converter type struct a to b
+func TypeConverter(a, b interface{}) error {
+	js, err := json.Marshal(a)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(js, b)
+}
+
+var (
+	matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
+	matchAllCap   = regexp.MustCompile("([a-z0-9])([A-Z])")
+)
+
+func ToSnakeCase(str string) string {
+	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
+	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
+
+	return strings.ToLower(snake)
 }
