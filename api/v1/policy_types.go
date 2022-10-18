@@ -24,58 +24,25 @@ const (
 // PolicyTemplate template for custom security policy
 type PolicyTemplate struct {
 	// +kubebuilder:pruning:PreserveUnknownFields
-	// A Kubernetes object defining the policy to apply to a managed cluster
 	ObjectDefinition runtime.RawExtension `json:"objectDefinition"`
-
-	// Additional PolicyDependencies that only apply to this template
-	ExtraDependencies []PolicyDependency `json:"extraDependencies,omitempty"`
-
-	// Ignore this template's Pending status when calculating the overall Policy status
-	IgnorePending bool `json:"ignorePending,omitempty"`
 }
 
 // ComplianceState shows the state of enforcement
 type ComplianceState string
 
 const (
-	// Compliant is a ComplianceState
+	// Compliant is an ComplianceState
 	Compliant ComplianceState = "Compliant"
 
-	// NonCompliant is a ComplianceState
+	// NonCompliant is an ComplianceState
 	NonCompliant ComplianceState = "NonCompliant"
-
-	// Pending is a ComplianceState
-	Pending ComplianceState = "Pending"
 )
-
-// Each PolicyDepenency defines an object reference which must be in a certain compliance
-// state before the policy should be created.
-type PolicyDependency struct {
-	metav1.TypeMeta `json:",inline"`
-
-	// The name of the object to be checked
-	Name string `json:"name"`
-
-	// The namespace of the object to be checked (optional)
-	Namespace string `json:"namespace,omitempty"`
-
-	// The ComplianceState (at path .status.compliant) required before the policy should be created
-	Compliance string `json:"compliance"`
-}
 
 // PolicySpec defines the desired state of Policy
 type PolicySpec struct {
-	// This provides the ability to enable and disable your policies.
-	Disabled bool `json:"disabled"`
-
-	// This value (Enforce or Inform) will override the remediationAction on each template
-	RemediationAction RemediationAction `json:"remediationAction,omitempty"`
-
-	// Used to create one or more policies to apply to a managed cluster
-	PolicyTemplates []*PolicyTemplate `json:"policy-templates"`
-
-	// PolicyDependencies that apply to each template in this Policy
-	Dependencies []PolicyDependency `json:"dependencies,omitempty"`
+	Disabled          bool              `json:"disabled"`
+	RemediationAction RemediationAction `json:"remediationAction,omitempty"` // Enforce, Inform
+	PolicyTemplates   []*PolicyTemplate `json:"policy-templates"`
 }
 
 // PlacementDecision defines the decision made by controller

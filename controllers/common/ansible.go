@@ -28,7 +28,6 @@ func CreateAnsibleJob(policyAutomation *policyv1beta1.PolicyAutomation,
 				"job_template_name": policyAutomation.Spec.Automation.Name,
 				"tower_auth_secret": policyAutomation.Spec.Automation.TowerSecret,
 				"extra_vars":        map[string]interface{}{},
-				"job_ttl":           86400, // default TTL is 24 hours
 			},
 		},
 	}
