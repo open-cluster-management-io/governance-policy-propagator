@@ -9,6 +9,7 @@ spec:
   automationDef:
     name: Demo Job Template
     secret: toweraccess
+    jobTtl: 3600
     extra_vars: 
       sn_severity: 1
       sn_priority: 1
