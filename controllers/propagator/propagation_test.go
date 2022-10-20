@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -145,8 +146,10 @@ type MockPolicyReconciler struct {
 
 func (r MockPolicyReconciler) handleDecision(
 	instance *policiesv1.Policy, decision appsv1.PlacementDecision,
-) error {
-	return r.Err
+) (
+	map[k8sdepwatches.ObjectIdentifier]bool, error,
+) {
+	return map[k8sdepwatches.ObjectIdentifier]bool{}, r.Err
 }
 
 func TestHandleDecisionWrapper(t *testing.T) {

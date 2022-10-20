@@ -15,6 +15,7 @@ import (
 	"github.com/go-logr/zapr"
 	"github.com/spf13/pflag"
 	"github.com/stolostron/go-log-utils/zaputil"
+	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
@@ -214,11 +215,30 @@ func main() {
 
 	log.Info("Registering components")
 
+	controllerCtx := ctrl.SetupSignalHandler()
+
+	dynamicWatcherReconciler, dynamicWatcherSource := k8sdepwatches.NewControllerRuntimeSource()
+
+	dynamicWatcher, err := k8sdepwatches.New(cfg, dynamicWatcherReconciler, nil)
+	if err != nil {
+		log.Error(err, "Unable to create the dynamic watcher", "controller", propagatorctrl.ControllerName)
+		os.Exit(1)
+	}
+
+	go func() {
+		err := dynamicWatcher.Start(controllerCtx)
+		if err != nil {
+			log.Error(err, "Unable to start the dynamic watcher", "controller", propagatorctrl.ControllerName)
+			os.Exit(1)
+		}
+	}()
+
 	if err = (&propagatorctrl.PolicyReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor(propagatorctrl.ControllerName),
-	}).SetupWithManager(mgr); err != nil {
+		Client:         mgr.GetClient(),
+		Scheme:         mgr.GetScheme(),
+		Recorder:       mgr.GetEventRecorderFor(propagatorctrl.ControllerName),
+		DynamicWatcher: dynamicWatcher,
+	}).SetupWithManager(mgr, dynamicWatcherSource); err != nil {
 		log.Error(err, "Unable to create the controller", "controller", propagatorctrl.ControllerName)
 		os.Exit(1)
 	}
@@ -293,9 +313,13 @@ func main() {
 		panic(err)
 	}
 
+	log.Info("Waiting for the dynamic watcher to start")
+	// This is important to avoid adding watches before the dynamic watcher is ready
+	<-dynamicWatcher.Started()
+
 	log.Info("Starting manager")
 
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(controllerCtx); err != nil {
 		log.Error(err, "Problem running manager")
 		os.Exit(1)
 	}

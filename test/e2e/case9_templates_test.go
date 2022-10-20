@@ -11,6 +11,7 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
@@ -25,6 +26,7 @@ const (
 	case9PolicyYamlEncryptedRepl = "../resources/case9_templates/case9-test-replpolicy_encrypted-"
 	case9EncryptionSecret        = "../resources/case9_templates/case9-test-encryption-secret.yaml"
 	case9EncryptionSecretName    = "policy-encryption-key"
+	case9SecretName              = "case9-secret"
 	IVAnnotation                 = "policy.open-cluster-management.io/encryption-iv"
 )
 
@@ -113,20 +115,22 @@ var _ = Describe("Test policy templates", func() {
 })
 
 var _ = Describe("Test encrypted policy templates", func() {
-	Describe("Create policy, placement and referenced resource in ns: "+testNamespace, func() {
-		It("should be created in user ns", func() {
-			By("Creating " + case9PolicyYamlEncrypted)
-			utils.Kubectl("apply",
-				"-f", case9PolicyYamlEncrypted,
-				"-n", testNamespace)
-			plc := utils.GetWithTimeout(
-				clientHubDynamic, gvrPolicy, case9PolicyNameEncrypted, testNamespace,
-				true, defaultTimeoutSeconds,
-			)
-			Expect(plc).NotTo(BeNil())
-		})
+	Describe("Create policy, placement and referenced resource in ns: "+testNamespace, Ordered, func() {
 		for i := 1; i <= 2; i++ {
 			managedCluster := "managed" + fmt.Sprint(i)
+
+			It("should be created in user ns", func() {
+				By("Creating " + case9PolicyYamlEncrypted)
+				utils.Kubectl("apply",
+					"-f", case9PolicyYamlEncrypted,
+					"-n", testNamespace)
+				plc := utils.GetWithTimeout(
+					clientHubDynamic, gvrPolicy, case9PolicyNameEncrypted, testNamespace,
+					true, defaultTimeoutSeconds,
+				)
+				Expect(plc).NotTo(BeNil())
+			})
+
 			It("should resolve templates and propagate to cluster ns "+managedCluster, func() {
 				By("Initializing AES Encryption Secret")
 				_, err := utils.KubectlWithOutput("apply",
@@ -187,6 +191,57 @@ var _ = Describe("Test encrypted policy templates", func() {
 				}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
 			})
 
+			It("should reconcile when the secret referenced in the template is updated", func() {
+				By("Updating the secret " + case9SecretName)
+				newToken := "THVrZS4gSSBhbSB5b3VyIGZhdGhlci4="
+				patch := []byte(`{"data": {"token": "` + newToken + `"}}`)
+				_, err := clientHub.CoreV1().Secrets(testNamespace).Patch(
+					context.TODO(), case9SecretName, types.StrategicMergePatchType, patch, metav1.PatchOptions{},
+				)
+				Expect(err).To(BeNil())
+
+				By("Verifying the replicated policy was updated")
+				expected := "$ocm_encrypted:dbHPzG98PxV7RXcAx25mMGPBAUbfjJTEMyFc7kE2W7U3FW5+X31LkidHu/25ic4m"
+				Eventually(func() string {
+					replicatedPlc := utils.GetWithTimeout(
+						clientHubDynamic,
+						gvrPolicy,
+						testNamespace+"."+case9PolicyNameEncrypted,
+						managedCluster,
+						true,
+						defaultTimeoutSeconds,
+					)
+
+					templates, _, _ := unstructured.NestedSlice(replicatedPlc.Object, "spec", "policy-templates")
+					if len(templates) < 1 {
+						return ""
+					}
+
+					template, ok := templates[0].(map[string]interface{})
+					if !ok {
+						return ""
+					}
+
+					objectTemplates, _, _ := unstructured.NestedSlice(
+						template, "objectDefinition", "spec", "object-templates",
+					)
+					if len(objectTemplates) < 1 {
+						return ""
+					}
+
+					objectTemplate, ok := objectTemplates[0].(map[string]interface{})
+					if !ok {
+						return ""
+					}
+
+					secretValue, _, _ := unstructured.NestedString(
+						objectTemplate, "objectDefinition", "data", "someTopSecretThing",
+					)
+
+					return secretValue
+				}, defaultTimeoutSeconds, 1).Should(Equal(expected))
+			})
+
 			It("should clean up the encryption key", func() {
 				utils.Kubectl("delete", "secret",
 					case9EncryptionSecretName,
@@ -196,13 +251,12 @@ var _ = Describe("Test encrypted policy templates", func() {
 					false, defaultTimeoutSeconds,
 				)
 			})
+
+			It("should clean up", func() {
+				utils.Kubectl("delete", "-f", case9PolicyYamlEncrypted, "-n", testNamespace)
+				opt := metav1.ListOptions{}
+				utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, defaultTimeoutSeconds)
+			})
 		}
-		It("should clean up", func() {
-			utils.Kubectl("delete",
-				"-f", case9PolicyYamlEncrypted,
-				"-n", testNamespace)
-			opt := metav1.ListOptions{}
-			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, defaultTimeoutSeconds)
-		})
 	})
 })

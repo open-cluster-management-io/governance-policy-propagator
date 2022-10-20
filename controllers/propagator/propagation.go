@@ -16,6 +16,7 @@ import (
 	retry "github.com/avast/retry-go/v3"
 	"github.com/go-logr/logr"
 	templates "github.com/stolostron/go-template-utils/v2/pkg/templates"
+	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -150,7 +151,29 @@ func (r *PolicyReconciler) cleanUpPolicy(instance *policiesv1.Policy) error {
 	log := log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
 	replicatedPlcList := &policiesv1.PolicyList{}
 
-	err := r.List(
+	instanceGVK := instance.GroupVersionKind()
+
+	err := r.DynamicWatcher.RemoveWatcher(k8sdepwatches.ObjectIdentifier{
+		Group:     instanceGVK.Group,
+		Version:   instanceGVK.Version,
+		Kind:      instanceGVK.Kind,
+		Namespace: instance.Namespace,
+		Name:      instance.Name,
+	})
+	if err != nil {
+		log.Error(
+			err,
+			fmt.Sprintf(
+				"Failed to remove watches for the policy %s/%s from the dynamic watcher",
+				instance.Namespace,
+				instance.Name,
+			),
+		)
+
+		return err
+	}
+
+	err = r.List(
 		context.TODO(), replicatedPlcList, client.MatchingLabels(common.LabelsForRootPolicy(instance)),
 	)
 	if err != nil {
@@ -212,19 +235,21 @@ func (r *PolicyReconciler) cleanUpPolicy(instance *policiesv1.Policy) error {
 	return nil
 }
 
-// handleDecision(instance *policiesv1.Policy, decision appsv1.PlacementDecision)
 type decisionHandler interface {
-	handleDecision(instance *policiesv1.Policy, decision appsv1.PlacementDecision) error
+	handleDecision(instance *policiesv1.Policy, decision appsv1.PlacementDecision) (
+		templateRefObjs map[k8sdepwatches.ObjectIdentifier]bool, err error,
+	)
 }
 
 // decisionResult contains the result of handling a placement decision of a policy. It is intended
 // to be sent in a channel by handleDecisionWrapper for the calling Go routine to determine if the
 // processing was successful. Identifier is a string in the format of
-// <cluster namespace>/<cluster name>. Err is the error associated with handling the decision. This
-// can be nil to denote success.
+// <cluster namespace>/<cluster name>. TemplateRefObjs is a set of identifiers of objects accessed by hub policy
+// templates. Err is the error associated with handling the decision. This can be nil to denote success.
 type decisionResult struct {
-	Identifier string
-	Err        error
+	Identifier      string
+	TemplateRefObjs map[k8sdepwatches.ObjectIdentifier]bool
+	Err             error
 }
 
 // handleDecisionWrapper wraps the handleDecision method for concurrency. decisionHandler is an
@@ -247,10 +272,15 @@ func handleDecisionWrapper(
 		identifier := fmt.Sprintf("%s/%s", decision.ClusterNamespace, decision.ClusterName)
 		log.Info("Handling the decision", "identifier", identifier)
 
+		templateRefObjs := map[k8sdepwatches.ObjectIdentifier]bool{}
+
 		instanceCopy := *instance.DeepCopy()
 		err := retry.Do(
 			func() error {
-				return decisionHandler.handleDecision(&instanceCopy, decision)
+				var err error
+				templateRefObjs, err = decisionHandler.handleDecision(&instanceCopy, decision)
+
+				return err
 			},
 			getRetryOptions(log.V(1), "Retrying to replicate the policy")...,
 		)
@@ -261,7 +291,7 @@ func handleDecisionWrapper(
 			log.Info("Gave up on replicating the policy after too many retries")
 		}
 
-		results <- decisionResult{identifier, err}
+		results <- decisionResult{identifier, templateRefObjs, err}
 	}
 }
 
@@ -282,6 +312,8 @@ func (r *PolicyReconciler) handleDecisions(
 	log := log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
 	allDecisions = map[string]bool{}
 	failedClusters = map[string]bool{}
+
+	allTemplateRefObjs := map[k8sdepwatches.ObjectIdentifier]bool{}
 
 	for _, pb := range pbList.Items {
 		subjects := pb.Subjects
@@ -361,6 +393,10 @@ func (r *PolicyReconciler) handleDecisions(
 
 				processedResults++
 
+				for refObject := range result.TemplateRefObjs {
+					allTemplateRefObjs[refObject] = true
+				}
+
 				// Once all the decisions have been processed, it's safe to close
 				// the channels and stop blocking in this goroutine.
 				if processedResults == len(decisions) {
@@ -372,6 +408,52 @@ func (r *PolicyReconciler) handleDecisions(
 
 			// Only handle the first match in pb.spec.subjects
 			break
+		}
+	}
+
+	instanceGVK := instance.GroupVersionKind()
+	instanceObjID := k8sdepwatches.ObjectIdentifier{
+		Group:     instanceGVK.Group,
+		Version:   instanceGVK.Version,
+		Kind:      instanceGVK.Kind,
+		Namespace: instance.Namespace,
+		Name:      instance.Name,
+	}
+	refObjs := make([]k8sdepwatches.ObjectIdentifier, 0, len(allTemplateRefObjs))
+
+	for refObj := range allTemplateRefObjs {
+		refObjs = append(refObjs, refObj)
+	}
+
+	if len(refObjs) != 0 {
+		err := r.DynamicWatcher.AddOrUpdateWatcher(instanceObjID, refObjs...)
+		if err != nil {
+			log.Error(
+				err,
+				fmt.Sprintf(
+					"Failed to update the dynamic watches for the policy %s/%s on objects referenced by hub policy "+
+						"templates",
+					instance.Namespace,
+					instance.Name,
+				),
+			)
+
+			allFailed = true
+		}
+	} else {
+		err := r.DynamicWatcher.RemoveWatcher(instanceObjID)
+		if err != nil {
+			log.Error(
+				err,
+				fmt.Sprintf(
+					"Failed to remove the dynamic watches for the policy %s/%s on objects referenced by hub policy "+
+						"templates",
+					instance.Namespace,
+					instance.Name,
+				),
+			)
+
+			allFailed = true
 		}
 	}
 
@@ -815,7 +897,11 @@ func getPlacementDecisions(c client.Client, pb policiesv1.PlacementBinding,
 	return nil, nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Name, pb.Namespace)
 }
 
-func (r *PolicyReconciler) handleDecision(instance *policiesv1.Policy, decision appsv1.PlacementDecision) error {
+func (r *PolicyReconciler) handleDecision(
+	instance *policiesv1.Policy, decision appsv1.PlacementDecision,
+) (
+	map[k8sdepwatches.ObjectIdentifier]bool, error,
+) {
 	log := log.WithValues(
 		"policyName", instance.GetName(),
 		"policyNamespace", instance.GetNamespace(),
@@ -824,6 +910,7 @@ func (r *PolicyReconciler) handleDecision(instance *policiesv1.Policy, decision 
 	)
 	// retrieve replicated policy in cluster namespace
 	replicatedPlc := &policiesv1.Policy{}
+	templateRefObjs := map[k8sdepwatches.ObjectIdentifier]bool{}
 
 	err := r.Get(context.TODO(), types.NamespacedName{
 		Namespace: decision.ClusterNamespace,
@@ -858,7 +945,7 @@ func (r *PolicyReconciler) handleDecision(instance *policiesv1.Policy, decision 
 				// #nosec G104 -- any errors are logged and recorded in the processTemplates method,
 				// but the ignored status will be handled appropriately by the policy controllers on
 				// the managed cluster(s).
-				_ = r.processTemplates(replicatedPlc, decision, instance)
+				templateRefObjs, _ = r.processTemplates(replicatedPlc, decision, instance)
 			}
 
 			log.Info("Creating the replicated policy")
@@ -867,7 +954,7 @@ func (r *PolicyReconciler) handleDecision(instance *policiesv1.Policy, decision 
 			if err != nil {
 				log.Error(err, "Failed to create the replicated policy")
 
-				return err
+				return templateRefObjs, err
 			}
 
 			r.Recorder.Event(instance, "Normal", "PolicyPropagation",
@@ -875,13 +962,13 @@ func (r *PolicyReconciler) handleDecision(instance *policiesv1.Policy, decision 
 					instance.GetName(), decision.ClusterNamespace, decision.ClusterName))
 
 			// exit after handling the create path, shouldnt be going to through the update path
-			return nil
+			return templateRefObjs, nil
 		}
 
 		// failed to get replicated object, requeue
 		log.Error(err, "Failed to get the replicated policy")
 
-		return err
+		return templateRefObjs, err
 	}
 
 	// replicated policy already created, need to compare and patch
@@ -907,7 +994,7 @@ func (r *PolicyReconciler) handleDecision(instance *policiesv1.Policy, decision 
 		// #nosec G104 -- any errors are logged and recorded in the processTemplates method,
 		// but the ignored status will be handled appropriately by the policy controllers on
 		// the managed cluster(s).
-		_ = r.processTemplates(tempResolvedPlc, decision, instance)
+		templateRefObjs, _ = r.processTemplates(tempResolvedPlc, decision, instance)
 		comparePlc = tempResolvedPlc
 	}
 
@@ -921,7 +1008,7 @@ func (r *PolicyReconciler) handleDecision(instance *policiesv1.Policy, decision 
 		if err != nil {
 			log.Error(err, "Failed to update the replicated policy")
 
-			return err
+			return templateRefObjs, err
 		}
 
 		r.Recorder.Event(instance, "Normal", "PolicyPropagation",
@@ -929,7 +1016,7 @@ func (r *PolicyReconciler) handleDecision(instance *policiesv1.Policy, decision 
 				instance.GetName(), decision.ClusterNamespace, decision.ClusterName))
 	}
 
-	return nil
+	return templateRefObjs, nil
 }
 
 // a helper to quickly check if there are any templates in any of the policy templates
@@ -949,7 +1036,9 @@ func policyHasTemplates(instance *policiesv1.Policy) bool {
 // this annotation is deleted from the replicated policies and not propagated to the cluster namespaces.
 func (r *PolicyReconciler) processTemplates(
 	replicatedPlc *policiesv1.Policy, decision appsv1.PlacementDecision, rootPlc *policiesv1.Policy,
-) error {
+) (
+	map[k8sdepwatches.ObjectIdentifier]bool, error,
+) {
 	log := log.WithValues(
 		"policyName", rootPlc.GetName(),
 		"policyNamespace", rootPlc.GetNamespace(),
@@ -958,6 +1047,7 @@ func (r *PolicyReconciler) processTemplates(
 	log.V(1).Info("Processing templates")
 
 	annotations := replicatedPlc.GetAnnotations()
+	templateRefObjs := map[k8sdepwatches.ObjectIdentifier]bool{}
 
 	// handle possible nil map
 	if len(annotations) == 0 {
@@ -969,7 +1059,7 @@ func (r *PolicyReconciler) processTemplates(
 		if boolDisable, err := strconv.ParseBool(disable); err == nil && boolDisable {
 			log.Info("Detected the disable-templates annotation. Will not process templates.")
 
-			return nil
+			return templateRefObjs, nil
 		}
 	}
 
@@ -1008,7 +1098,7 @@ func (r *PolicyReconciler) processTemplates(
 				),
 			)
 
-			return err
+			return templateRefObjs, err
 		}
 
 		log.V(1).Info("Found an object definition with templates")
@@ -1031,7 +1121,7 @@ func (r *PolicyReconciler) processTemplates(
 			if err != nil {
 				log.Error(err, "Failed to get/generate the policy encryption key")
 
-				return err
+				return templateRefObjs, err
 			}
 
 			// Get/generate the initialization vector
@@ -1041,7 +1131,7 @@ func (r *PolicyReconciler) processTemplates(
 			if err != nil {
 				log.Error(err, "Failed to get initialization vector")
 
-				return err
+				return templateRefObjs, err
 			}
 
 			// Set the initialization vector in the annotations
@@ -1058,11 +1148,18 @@ func (r *PolicyReconciler) processTemplates(
 			if err != nil {
 				log.Error(err, "Error setting encryption configuration")
 
-				return err
+				return templateRefObjs, err
 			}
 		}
 
-		resolveddata, tplErr := tmplResolver.ResolveTemplate(policyT.ObjectDefinition.Raw, templateContext)
+		templateResult, tplErr := tmplResolver.ResolveTemplate(policyT.ObjectDefinition.Raw, templateContext)
+
+		// Record the referenced objects in the template even if there is an error. This is because a change in the
+		// object could fix the error.
+		for _, refObj := range templateResult.ReferencedObjects {
+			templateRefObjs[refObj] = true
+		}
+
 		if tplErr != nil {
 			log.Error(tplErr, "Failed to resolve templates")
 
@@ -1102,18 +1199,18 @@ func (r *PolicyReconciler) processTemplates(
 				}
 			}
 
-			return tplErr
+			return templateRefObjs, tplErr
 		}
 
-		policyT.ObjectDefinition.Raw = resolveddata
+		policyT.ObjectDefinition.Raw = templateResult.ResolvedJSON
 
 		// Set initialization vector annotation on the ObjectDefinition for the controller's use
 		if usesEncryption {
 			policyTObjectUnstructured := &unstructured.Unstructured{}
 
-			jsonErr := json.Unmarshal(resolveddata, policyTObjectUnstructured)
+			jsonErr := json.Unmarshal(templateResult.ResolvedJSON, policyTObjectUnstructured)
 			if jsonErr != nil {
-				return fmt.Errorf("failed to unmarshal the object definition to JSON: %w", jsonErr)
+				return templateRefObjs, fmt.Errorf("failed to unmarshal the object definition to JSON: %w", jsonErr)
 			}
 
 			policyTAnnotations := policyTObjectUnstructured.GetAnnotations()
@@ -1130,7 +1227,7 @@ func (r *PolicyReconciler) processTemplates(
 
 				updatedPolicyT, jsonErr := json.Marshal(policyTObjectUnstructured)
 				if jsonErr != nil {
-					return fmt.Errorf("failed to marshal the policy template to JSON: %w", jsonErr)
+					return templateRefObjs, fmt.Errorf("failed to marshal the policy template to JSON: %w", jsonErr)
 				}
 
 				policyT.ObjectDefinition.Raw = updatedPolicyT
@@ -1140,7 +1237,7 @@ func (r *PolicyReconciler) processTemplates(
 
 	log.V(1).Info("Successfully processed templates")
 
-	return nil
+	return templateRefObjs, nil
 }
 
 func isConfigurationPolicy(policyT *policiesv1.PolicyTemplate) bool {
