@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -43,8 +44,8 @@ var log = ctrl.Log.WithName(ControllerName)
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *PolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+func (r *PolicyReconciler) SetupWithManager(mgr ctrl.Manager, additionalSources ...source.Source) error {
+	builder := ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerName).
 		For(
 			&policiesv1.Policy{},
@@ -68,8 +69,14 @@ func (r *PolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(placementRuleMapper(mgr.GetClient()))).
 		Watches(
 			&source.Kind{Type: &clusterv1beta1.PlacementDecision{}},
-			handler.EnqueueRequestsFromMapFunc(placementDecisionMapper(mgr.GetClient()))).
-		Complete(r)
+			handler.EnqueueRequestsFromMapFunc(placementDecisionMapper(mgr.GetClient())),
+		)
+
+	for _, source := range additionalSources {
+		builder.Watches(source, &handler.EnqueueRequestForObject{})
+	}
+
+	return builder.Complete(r)
 }
 
 // blank assignment to verify that ReconcilePolicy implements reconcile.Reconciler
@@ -78,8 +85,9 @@ var _ reconcile.Reconciler = &PolicyReconciler{}
 // PolicyReconciler reconciles a Policy object
 type PolicyReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Scheme         *runtime.Scheme
+	Recorder       record.EventRecorder
+	DynamicWatcher k8sdepwatches.DynamicWatcher
 }
 
 // Reconcile reads that state of the cluster for a Policy object and makes changes based on the state read
