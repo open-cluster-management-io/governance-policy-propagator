@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	"open-cluster-management.io/governance-policy-propagator/controllers/common"
@@ -142,7 +143,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 		}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(rootPlc.Object["spec"]))
 	})
 	It("Should recover root policy status if modified", func() {
-		By("Modifiying policy in cluster ns managed2")
+		By("Clearing the status of the root policy")
 		rootPlc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, case3PolicyName, testNamespace, true, defaultTimeoutSeconds,
 		)
@@ -161,5 +162,59 @@ var _ = Describe("Test unexpected policy mutation", func() {
 
 			return rootPlc.Object["status"]
 		}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
+	})
+	It("Should remove labels added to replicated policies", func() {
+		By("Adding a label to the replicated policy in ns managed2")
+		plc := utils.GetWithTimeout(
+			clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds,
+		)
+		Expect(plc).ToNot(BeNil())
+		labels := plc.GetLabels()
+		if labels == nil {
+			labels = make(map[string]string)
+		}
+		labels["test.io/grc-prop-case3-label"] = "caterpie"
+		err := unstructured.SetNestedStringMap(plc.Object, labels, "metadata", "labels")
+		Expect(err).To(BeNil())
+		_, err = clientHubDynamic.Resource(gvrPolicy).Namespace("managed2").Update(
+			context.TODO(), plc, metav1.UpdateOptions{},
+		)
+		Expect(err).To(BeNil())
+
+		By("Checking that the label is removed")
+		Eventually(func() map[string]string {
+			plc := utils.GetWithTimeout(
+				clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds,
+			)
+
+			return plc.GetLabels()
+		}, defaultTimeoutSeconds, 1).ShouldNot(HaveKey("test.io/grc-prop-case3-label"))
+	})
+	It("Should remove annotations added to replicated policies", func() {
+		By("Adding an annotation to the replicated policy in ns managed2")
+		plc := utils.GetWithTimeout(
+			clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds,
+		)
+		Expect(plc).ToNot(BeNil())
+		annos := plc.GetAnnotations()
+		if annos == nil {
+			annos = make(map[string]string)
+		}
+		annos["test.io/grc-prop-case3-annotation"] = "weedle"
+		err := unstructured.SetNestedStringMap(plc.Object, annos, "metadata", "annotations")
+		Expect(err).To(BeNil())
+		_, err = clientHubDynamic.Resource(gvrPolicy).Namespace("managed2").Update(
+			context.TODO(), plc, metav1.UpdateOptions{},
+		)
+		Expect(err).To(BeNil())
+
+		By("Checking that the annotation is removed")
+		Eventually(func() map[string]string {
+			plc := utils.GetWithTimeout(
+				clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds,
+			)
+
+			return plc.GetAnnotations()
+		}, defaultTimeoutSeconds, 1).ShouldNot(HaveKey("test.io/grc-prop-case3-annotation"))
 	})
 })
