@@ -12,7 +12,7 @@ require (
 	github.com/prometheus/client_golang v1.12.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stolostron/go-log-utils v0.1.1
-	github.com/stolostron/go-template-utils/v2 v2.5.2-0.20221020150933-609eb7e36aeb
+	github.com/stolostron/go-template-utils/v3 v3.0.0
 	github.com/stolostron/kubernetes-dependency-watches v0.1.0
 	k8s.io/api v0.23.9
 	k8s.io/apimachinery v0.23.9
@@ -41,7 +41,6 @@ require (
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.2.0 // indirect
-	github.com/golang/glog v1.0.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/go-cmp v0.5.8 // indirect
