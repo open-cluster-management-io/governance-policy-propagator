@@ -49,13 +49,20 @@ func FullNameForPolicy(plc *policiesv1.Policy) string {
 	return plc.GetNamespace() + "." + plc.GetName()
 }
 
-// CompareSpecAndAnnotation compares annotation and spec for given policies
-// true if matches, false if doesn't match
-func CompareSpecAndAnnotation(plc1 *policiesv1.Policy, plc2 *policiesv1.Policy) bool {
-	annotationMatch := equality.Semantic.DeepEqual(plc1.GetAnnotations(), plc2.GetAnnotations())
-	specMatch := equality.Semantic.DeepEqual(plc1.Spec, plc2.Spec)
+// EquivalentReplicatedPolicies compares replicated policies. Returns true if they match.
+func EquivalentReplicatedPolicies(plc1 *policiesv1.Policy, plc2 *policiesv1.Policy) bool {
+	// Compare annotations
+	if !equality.Semantic.DeepEqual(plc1.GetAnnotations(), plc2.GetAnnotations()) {
+		return false
+	}
 
-	return annotationMatch && specMatch
+	// Compare labels
+	if !equality.Semantic.DeepEqual(plc1.GetLabels(), plc2.GetLabels()) {
+		return false
+	}
+
+	// Compare the specs
+	return equality.Semantic.DeepEqual(plc1.Spec, plc2.Spec)
 }
 
 // IsPbForPoicy compares group and kind with policy group and kind for given pb
@@ -200,4 +207,29 @@ func GetNumWorkers(listLength int, concurrencyPerPolicy int) int {
 	}
 
 	return numWorkers
+}
+
+func BuildReplicatedPolicy(root *policiesv1.Policy, decision appsv1.PlacementDecision) *policiesv1.Policy {
+	replicatedName := FullNameForPolicy(root)
+
+	replicated := root.DeepCopy()
+	replicated.SetName(replicatedName)
+	replicated.SetNamespace(decision.ClusterNamespace)
+	replicated.SetResourceVersion("")
+	replicated.SetFinalizers(nil)
+	replicated.SetOwnerReferences(nil)
+
+	labels := root.GetLabels()
+	if labels == nil {
+		labels = map[string]string{}
+	}
+
+	// Extra labels on replicated policies
+	labels[ClusterNameLabel] = decision.ClusterName
+	labels[ClusterNamespaceLabel] = decision.ClusterNamespace
+	labels[RootPolicyLabel] = replicatedName
+
+	replicated.SetLabels(labels)
+
+	return replicated
 }

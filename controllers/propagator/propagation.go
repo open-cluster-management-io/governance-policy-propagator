@@ -898,14 +898,14 @@ func getPlacementDecisions(c client.Client, pb policiesv1.PlacementBinding,
 }
 
 func (r *PolicyReconciler) handleDecision(
-	instance *policiesv1.Policy, decision appsv1.PlacementDecision,
+	rootPlc *policiesv1.Policy, decision appsv1.PlacementDecision,
 ) (
 	map[k8sdepwatches.ObjectIdentifier]bool, error,
 ) {
 	log := log.WithValues(
-		"policyName", instance.GetName(),
-		"policyNamespace", instance.GetNamespace(),
-		"replicatePolicyName", common.FullNameForPolicy(instance),
+		"policyName", rootPlc.GetName(),
+		"policyNamespace", rootPlc.GetNamespace(),
+		"replicatePolicyName", common.FullNameForPolicy(rootPlc),
 		"replicatedPolicyNamespace", decision.ClusterNamespace,
 	)
 	// retrieve replicated policy in cluster namespace
@@ -914,38 +914,20 @@ func (r *PolicyReconciler) handleDecision(
 
 	err := r.Get(context.TODO(), types.NamespacedName{
 		Namespace: decision.ClusterNamespace,
-		Name:      common.FullNameForPolicy(instance),
+		Name:      common.FullNameForPolicy(rootPlc),
 	}, replicatedPlc)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			// not replicated, need to create
-			replicatedPlc = instance.DeepCopy()
-			replicatedPlc.SetName(common.FullNameForPolicy(instance))
-			replicatedPlc.SetNamespace(decision.ClusterNamespace)
-			replicatedPlc.SetResourceVersion("")
-			replicatedPlc.SetFinalizers(nil)
-			labels := replicatedPlc.GetLabels()
-
-			if labels == nil {
-				labels = map[string]string{}
-			}
-
-			labels[common.ClusterNameLabel] = decision.ClusterName
-			labels[common.ClusterNamespaceLabel] = decision.ClusterNamespace
-			labels[common.RootPolicyLabel] = common.FullNameForPolicy(instance)
-
-			replicatedPlc.SetLabels(labels)
-			// Make sure the Owner Reference is cleared
-			replicatedPlc.SetOwnerReferences(nil)
+			replicatedPlc = common.BuildReplicatedPolicy(rootPlc, decision)
 
 			// do a quick check for any template delims in the policy before putting it through
 			// template processor
-			if policyHasTemplates(instance) {
+			if policyHasTemplates(rootPlc) {
 				// resolve hubTemplate before replicating
 				// #nosec G104 -- any errors are logged and recorded in the processTemplates method,
 				// but the ignored status will be handled appropriately by the policy controllers on
 				// the managed cluster(s).
-				templateRefObjs, _ = r.processTemplates(replicatedPlc, decision, instance)
+				templateRefObjs, _ = r.processTemplates(replicatedPlc, decision, rootPlc)
 			}
 
 			log.Info("Creating the replicated policy")
@@ -957,9 +939,9 @@ func (r *PolicyReconciler) handleDecision(
 				return templateRefObjs, err
 			}
 
-			r.Recorder.Event(instance, "Normal", "PolicyPropagation",
-				fmt.Sprintf("Policy %s/%s was propagated to cluster %s/%s", instance.GetNamespace(),
-					instance.GetName(), decision.ClusterNamespace, decision.ClusterName))
+			r.Recorder.Event(rootPlc, "Normal", "PolicyPropagation",
+				fmt.Sprintf("Policy %s/%s was propagated to cluster %s/%s", rootPlc.GetNamespace(),
+					rootPlc.GetName(), decision.ClusterNamespace, decision.ClusterName))
 
 			// exit after handling the create path, shouldnt be going to through the update path
 			return templateRefObjs, nil
@@ -972,37 +954,33 @@ func (r *PolicyReconciler) handleDecision(
 	}
 
 	// replicated policy already created, need to compare and patch
-	comparePlc := instance
+	desiredReplicatedPolicy := common.BuildReplicatedPolicy(rootPlc, decision)
 
-	if policyHasTemplates(comparePlc) {
-		// template delimis detected, build a temp holder policy with templates resolved
-		// before doing a compare with the replicated policy in the cluster namespaces
-		tempResolvedPlc := instance.DeepCopy()
-
+	if policyHasTemplates(desiredReplicatedPolicy) {
 		// If the replicated policy has an initialization vector specified, set it for processing
 		if initializationVector, ok := replicatedPlc.Annotations[IVAnnotation]; ok {
-			tempAnnotations := tempResolvedPlc.GetAnnotations()
+			tempAnnotations := replicatedPlc.GetAnnotations()
 			if tempAnnotations == nil {
 				tempAnnotations = make(map[string]string)
 			}
 
 			tempAnnotations[IVAnnotation] = initializationVector
 
-			tempResolvedPlc.SetAnnotations(tempAnnotations)
+			desiredReplicatedPolicy.SetAnnotations(tempAnnotations)
 		}
 		// resolve hubTemplate before replicating
 		// #nosec G104 -- any errors are logged and recorded in the processTemplates method,
 		// but the ignored status will be handled appropriately by the policy controllers on
 		// the managed cluster(s).
-		templateRefObjs, _ = r.processTemplates(tempResolvedPlc, decision, instance)
-		comparePlc = tempResolvedPlc
+		templateRefObjs, _ = r.processTemplates(desiredReplicatedPolicy, decision, rootPlc)
 	}
 
-	if !common.CompareSpecAndAnnotation(comparePlc, replicatedPlc) {
+	if !common.EquivalentReplicatedPolicies(desiredReplicatedPolicy, replicatedPlc) {
 		// update needed
 		log.Info("Root policy and replicated policy mismatch, updating replicated policy")
-		replicatedPlc.SetAnnotations(comparePlc.GetAnnotations())
-		replicatedPlc.Spec = comparePlc.Spec
+		replicatedPlc.SetAnnotations(desiredReplicatedPolicy.GetAnnotations())
+		replicatedPlc.SetLabels(desiredReplicatedPolicy.GetLabels())
+		replicatedPlc.Spec = desiredReplicatedPolicy.Spec
 
 		err = r.Update(context.TODO(), replicatedPlc)
 		if err != nil {
@@ -1011,9 +989,9 @@ func (r *PolicyReconciler) handleDecision(
 			return templateRefObjs, err
 		}
 
-		r.Recorder.Event(instance, "Normal", "PolicyPropagation",
-			fmt.Sprintf("Policy %s/%s was updated for cluster %s/%s", instance.GetNamespace(),
-				instance.GetName(), decision.ClusterNamespace, decision.ClusterName))
+		r.Recorder.Event(rootPlc, "Normal", "PolicyPropagation",
+			fmt.Sprintf("Policy %s/%s was updated for cluster %s/%s", rootPlc.GetNamespace(),
+				rootPlc.GetName(), decision.ClusterNamespace, decision.ClusterName))
 	}
 
 	return templateRefObjs, nil

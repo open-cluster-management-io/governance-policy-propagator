@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
@@ -476,6 +477,56 @@ var _ = Describe("Test policy propagation", func() {
 
 				return replicatedPlc.Object["spec"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
+		})
+		It("should update labels on replicated policies when added to the root policy", func() {
+			By("Adding a label to the root policy")
+			rootPlc := utils.GetWithTimeout(
+				clientHubDynamic, gvrPolicy, case1PolicyName, testNamespace, true, defaultTimeoutSeconds,
+			)
+			labels := rootPlc.GetLabels()
+			if labels == nil {
+				labels = make(map[string]string)
+			}
+			labels["test.io/grc-prop-case1-label"] = "bellossom"
+			err := unstructured.SetNestedStringMap(rootPlc.Object, labels, "metadata", "labels")
+			Expect(err).To(BeNil())
+			_, err = clientHubDynamic.Resource(gvrPolicy).Namespace(testNamespace).Update(
+				context.TODO(), rootPlc, metav1.UpdateOptions{},
+			)
+			Expect(err).To(BeNil())
+
+			By("Checking the replicated policy for the label")
+			Eventually(func() map[string]string {
+				plc := utils.GetWithTimeout(clientHubDynamic, gvrPolicy, testNamespace+"."+case1PolicyName,
+					"managed1", true, defaultTimeoutSeconds)
+
+				return plc.GetLabels()
+			}, defaultTimeoutSeconds, 1).Should(HaveKey("test.io/grc-prop-case1-label"))
+		})
+		It("should update annotations on replicated policies when added to the root policy", func() {
+			By("Adding an annotation to the root policy")
+			rootPlc := utils.GetWithTimeout(
+				clientHubDynamic, gvrPolicy, case1PolicyName, testNamespace, true, defaultTimeoutSeconds,
+			)
+			annos := rootPlc.GetAnnotations()
+			if annos == nil {
+				annos = make(map[string]string)
+			}
+			annos["test.io/grc-prop-case1-annotation"] = "scizor"
+			err := unstructured.SetNestedStringMap(rootPlc.Object, annos, "metadata", "annotations")
+			Expect(err).To(BeNil())
+			_, err = clientHubDynamic.Resource(gvrPolicy).Namespace(testNamespace).Update(
+				context.TODO(), rootPlc, metav1.UpdateOptions{},
+			)
+			Expect(err).To(BeNil())
+
+			By("Checking the replicated policy for the annotation")
+			Eventually(func() map[string]string {
+				plc := utils.GetWithTimeout(clientHubDynamic, gvrPolicy, testNamespace+"."+case1PolicyName,
+					"managed1", true, defaultTimeoutSeconds)
+
+				return plc.GetAnnotations()
+			}, defaultTimeoutSeconds, 1).Should(HaveKey("test.io/grc-prop-case1-annotation"))
 		})
 		It("should clean up", func() {
 			utils.Kubectl("delete",
