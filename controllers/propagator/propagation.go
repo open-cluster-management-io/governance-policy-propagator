@@ -174,7 +174,7 @@ func (r *PolicyReconciler) cleanUpPolicy(instance *policiesv1.Policy) error {
 	}
 
 	err = r.List(
-		context.TODO(), replicatedPlcList, client.MatchingLabels(common.LabelsForRootPolicy(instance)),
+		context.TODO(), replicatedPlcList, client.MatchingLabels(labelsForRootPolicy(instance)),
 	)
 	if err != nil {
 		log.Error(err, "Failed to list the replicated policies")
@@ -473,7 +473,7 @@ func (r *PolicyReconciler) cleanUpOrphanedRplPolicies(instance *policiesv1.Polic
 			continue
 		}
 		// not found in allDecisions, orphan, delete it
-		name := common.FullNameForPolicy(instance)
+		name := fullNameForPolicy(instance)
 		log := log.WithValues("name", name, "namespace", cluster.ClusterNamespace)
 		log.Info("Deleting the orphaned replicated policy")
 
@@ -606,7 +606,7 @@ func (r *PolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) error {
 				return r.List(
 					context.TODO(),
 					replicatedPlcList,
-					client.MatchingLabels(common.LabelsForRootPolicy(instance)),
+					client.MatchingLabels(labelsForRootPolicy(instance)),
 				)
 			},
 			getRetryOptions(log.V(1), "Retrying to list the replicated policies")...,
@@ -905,7 +905,7 @@ func (r *PolicyReconciler) handleDecision(
 	log := log.WithValues(
 		"policyName", rootPlc.GetName(),
 		"policyNamespace", rootPlc.GetNamespace(),
-		"replicatePolicyName", common.FullNameForPolicy(rootPlc),
+		"replicatePolicyName", fullNameForPolicy(rootPlc),
 		"replicatedPolicyNamespace", decision.ClusterNamespace,
 	)
 	// retrieve replicated policy in cluster namespace
@@ -914,12 +914,11 @@ func (r *PolicyReconciler) handleDecision(
 
 	err := r.Get(context.TODO(), types.NamespacedName{
 		Namespace: decision.ClusterNamespace,
-		Name:      common.FullNameForPolicy(rootPlc),
+		Name:      fullNameForPolicy(rootPlc),
 	}, replicatedPlc)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			replicatedPlc = common.BuildReplicatedPolicy(rootPlc, decision)
-
+			replicatedPlc = buildReplicatedPolicy(rootPlc, decision)
 			// do a quick check for any template delims in the policy before putting it through
 			// template processor
 			if policyHasTemplates(rootPlc) {
@@ -954,7 +953,7 @@ func (r *PolicyReconciler) handleDecision(
 	}
 
 	// replicated policy already created, need to compare and patch
-	desiredReplicatedPolicy := common.BuildReplicatedPolicy(rootPlc, decision)
+	desiredReplicatedPolicy := buildReplicatedPolicy(rootPlc, decision)
 
 	if policyHasTemplates(desiredReplicatedPolicy) {
 		// If the replicated policy has an initialization vector specified, set it for processing
@@ -975,7 +974,7 @@ func (r *PolicyReconciler) handleDecision(
 		templateRefObjs, _ = r.processTemplates(desiredReplicatedPolicy, decision, rootPlc)
 	}
 
-	if !common.EquivalentReplicatedPolicies(desiredReplicatedPolicy, replicatedPlc) {
+	if !equivalentReplicatedPolicies(desiredReplicatedPolicy, replicatedPlc) {
 		// update needed
 		log.Info("Root policy and replicated policy mismatch, updating replicated policy")
 		replicatedPlc.SetAnnotations(desiredReplicatedPolicy.GetAnnotations())
