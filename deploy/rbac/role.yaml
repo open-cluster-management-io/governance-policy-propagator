@@ -7,6 +7,14 @@ metadata:
   name: governance-policy-propagator
 rules:
 - apiGroups:
+  - '*'
+  resources:
+  - '*'
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - apps.open-cluster-management.io
   resources:
   - placementrules
@@ -54,12 +62,6 @@ rules:
   - secrets
   verbs:
   - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
 - apiGroups:
   - ""
   resourceNames:
@@ -68,6 +70,7 @@ rules:
   - secrets
   verbs:
   - get
+  - list
   - update
   - watch
 - apiGroups:
