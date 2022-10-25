@@ -65,7 +65,8 @@ type EncryptionKeysReconciler struct { // nolint:golint,revive
 }
 
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies,verbs=get;list;patch
-//+kubebuilder:rbac:groups=core,resources=secrets,resourceNames=policy-encryption-key,verbs=get;update;watch
+//+kubebuilder:rbac:groups=core,resources=secrets,verbs=create
+//+kubebuilder:rbac:groups=core,resources=secrets,resourceNames=policy-encryption-key,verbs=get;list;update;watch
 
 // Reconcile watches all "policy-encryption-key" Secrets on the Hub cluster. This periodically rotates the keys
 // and resolves invalid modifications made to the Secret.
