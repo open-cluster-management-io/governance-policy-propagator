@@ -120,7 +120,7 @@ type PolicyStatus struct {
 	Placement []*Placement                  `json:"placement,omitempty"` // used by root policy
 	Status    []*CompliancePerClusterStatus `json:"status,omitempty"`    // used by root policy
 
-	// +kubebuilder:validation:Enum=Compliant;NonCompliant
+	// +kubebuilder:validation:Enum=Compliant;Pending;NonCompliant
 	ComplianceState ComplianceState       `json:"compliant,omitempty"` // used by replicated policy
 	Details         []*DetailsPerTemplate `json:"details,omitempty"`   // used by replicated policy
 }
