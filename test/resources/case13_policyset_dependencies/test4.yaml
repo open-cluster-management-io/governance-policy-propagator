@@ -1,0 +1,30 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: case13-test-policy
+spec:
+  remediationAction: inform
+  disabled: false
+  policy-templates:
+    - extraDependencies:
+        - apiVersion: policy.open-cluster-management.io/v1beta1
+          kind: PolicySet
+          name: case13-test-policyset
+          compliance: Compliant
+        - apiVersion: policy.open-cluster-management.io/v1beta1
+          kind: PolicySet
+          name: case13-test-policyset2
+          namespace: case13-namespace
+          compliance: Compliant
+      objectDefinition:
+        apiVersion: policies.ibm.com/v1alpha1
+        kind: TrustedContainerPolicy
+        metadata:
+          name: case13-test-policy-trustedcontainerpolicy
+        spec:
+          severity: low
+          namespaceSelector:
+            include: ["default"]
+            exclude: ["kube-system"]
+          remediationAction: inform
+          imageRegistry: quay.io

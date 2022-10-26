@@ -1,0 +1,14 @@
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: case13-namespace
+---
+apiVersion: policy.open-cluster-management.io/v1beta1
+kind: PolicySet
+metadata:
+  name: case13-test-policyset2
+  namespace: case13-namespace
+spec:
+  policies:
+  - case13-zubat
+  - case13-psyduck
