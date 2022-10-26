@@ -313,7 +313,7 @@ func (r *PolicyReconciler) handleDecisions(
 	allDecisions = map[string]bool{}
 	failedClusters = map[string]bool{}
 
-	allTemplateRefObjs := map[k8sdepwatches.ObjectIdentifier]bool{}
+	allTemplateRefObjs := getPolicySetDependencies(instance)
 
 	for _, pb := range pbList.Items {
 		subjects := pb.Subjects
@@ -918,7 +918,11 @@ func (r *PolicyReconciler) handleDecision(
 	}, replicatedPlc)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			replicatedPlc = buildReplicatedPolicy(rootPlc, decision)
+			replicatedPlc, err = r.buildReplicatedPolicy(rootPlc, decision)
+			if err != nil {
+				return templateRefObjs, err
+			}
+
 			// do a quick check for any template delims in the policy before putting it through
 			// template processor
 			if policyHasTemplates(rootPlc) {
@@ -953,7 +957,10 @@ func (r *PolicyReconciler) handleDecision(
 	}
 
 	// replicated policy already created, need to compare and patch
-	desiredReplicatedPolicy := buildReplicatedPolicy(rootPlc, decision)
+	desiredReplicatedPolicy, err := r.buildReplicatedPolicy(rootPlc, decision)
+	if err != nil {
+		return templateRefObjs, err
+	}
 
 	if policyHasTemplates(desiredReplicatedPolicy) {
 		// If the replicated policy has an initialization vector specified, set it for processing
