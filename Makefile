@@ -221,7 +221,7 @@ kind-bootstrap-cluster-dev: kind-create-cluster install-crds install-resources
 .PHONY: kind-deploy-controller
 kind-deploy-controller: manifests
 	@echo installing $(IMG)
-	kubectl create ns $(KIND_NAMESPACE)
+	-kubectl create ns $(KIND_NAMESPACE)
 	kubectl apply -f deploy/operator.yaml -n $(KIND_NAMESPACE)
 
 .PHONY: kind-deploy-controller-dev
