@@ -10,7 +10,6 @@ import (
 	"os"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	retry "github.com/avast/retry-go/v3"
@@ -243,11 +242,11 @@ type decisionHandler interface {
 
 // decisionResult contains the result of handling a placement decision of a policy. It is intended
 // to be sent in a channel by handleDecisionWrapper for the calling Go routine to determine if the
-// processing was successful. Identifier is a string in the format of
-// <cluster namespace>/<cluster name>. TemplateRefObjs is a set of identifiers of objects accessed by hub policy
+// processing was successful. Identifier is the PlacementDecision, with the ClusterNamespace and
+// the ClusterName. TemplateRefObjs is a set of identifiers of objects accessed by hub policy
 // templates. Err is the error associated with handling the decision. This can be nil to denote success.
 type decisionResult struct {
-	Identifier      string
+	Identifier      appsv1.PlacementDecision
 	TemplateRefObjs map[k8sdepwatches.ObjectIdentifier]bool
 	Err             error
 }
@@ -269,8 +268,7 @@ func handleDecisionWrapper(
 		log := log.WithValues(
 			"policyName", instance.GetName(), "policyNamespace", instance.GetNamespace(),
 		)
-		identifier := fmt.Sprintf("%s/%s", decision.ClusterNamespace, decision.ClusterName)
-		log.Info("Handling the decision", "identifier", identifier)
+		log.Info("Handling the decision", "identifier", decision)
 
 		templateRefObjs := map[k8sdepwatches.ObjectIdentifier]bool{}
 
@@ -291,27 +289,27 @@ func handleDecisionWrapper(
 			log.Info("Gave up on replicating the policy after too many retries")
 		}
 
-		results <- decisionResult{identifier, templateRefObjs, err}
+		results <- decisionResult{decision, templateRefObjs, err}
 	}
 }
+
+type decisionSet map[appsv1.PlacementDecision]bool
 
 // handleDecisions will get all the placement decisions based on the input policy and placement
 // binding list and propagate the policy. Note that this method performs concurrent operations.
 // It returns the following:
 //   - placements - a slice of all the placement decisions discovered
-//   - allDecisions - a set of all the placement decisions encountered in the format of
-//     <namespace>/<name>
-//   - failedClusters - a set of all the clusters that encountered an error during propagation in the
-//     format of <namespace>/<name>
+//   - allDecisions - a set of all the placement decisions encountered
+//   - failedClusters - a set of all the clusters that encountered an error during propagation
 //   - allFailed - a bool that determines if all clusters encountered an error during propagation
 func (r *PolicyReconciler) handleDecisions(
 	instance *policiesv1.Policy, pbList *policiesv1.PlacementBindingList,
 ) (
-	placements []*policiesv1.Placement, allDecisions map[string]bool, failedClusters map[string]bool, allFailed bool,
+	placements []*policiesv1.Placement, allDecisions decisionSet, failedClusters decisionSet, allFailed bool,
 ) {
 	log := log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
-	allDecisions = map[string]bool{}
-	failedClusters = map[string]bool{}
+	allDecisions = map[appsv1.PlacementDecision]bool{}
+	failedClusters = map[appsv1.PlacementDecision]bool{}
 
 	allTemplateRefObjs := getPolicySetDependencies(instance)
 
@@ -463,12 +461,15 @@ func (r *PolicyReconciler) handleDecisions(
 // cleanUpOrphanedRplPolicies compares the status of the input policy against the input placement
 // decisions. If the cluster exists in the status but doesn't exist in the input placement
 // decisions, then it's considered stale and will be removed.
-func (r *PolicyReconciler) cleanUpOrphanedRplPolicies(instance *policiesv1.Policy, allDecisions map[string]bool) error {
+func (r *PolicyReconciler) cleanUpOrphanedRplPolicies(instance *policiesv1.Policy, allDecisions decisionSet) error {
 	log := log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
 	successful := true
 
 	for _, cluster := range instance.Status.Status {
-		key := fmt.Sprintf("%s/%s", cluster.ClusterNamespace, cluster.ClusterName)
+		key := appsv1.PlacementDecision{
+			ClusterName:      cluster.ClusterNamespace,
+			ClusterNamespace: cluster.ClusterNamespace,
+		}
 		if allDecisions[key] {
 			continue
 		}
@@ -620,9 +621,10 @@ func (r *PolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) error {
 
 		// Update the status based on the replicated policies
 		for _, rPlc := range replicatedPlcList.Items {
-			namespace := rPlc.GetLabels()[common.ClusterNamespaceLabel]
-			name := rPlc.GetLabels()[common.ClusterNameLabel]
-			key := fmt.Sprintf("%s/%s", namespace, name)
+			key := appsv1.PlacementDecision{
+				ClusterName:      rPlc.GetLabels()[common.ClusterNameLabel],
+				ClusterNamespace: rPlc.GetLabels()[common.ClusterNamespaceLabel],
+			}
 
 			if failed := failedClusters[key]; failed {
 				// Skip the replicated policies that failed to be properly replicated
@@ -632,27 +634,23 @@ func (r *PolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) error {
 
 			status = append(status, &policiesv1.CompliancePerClusterStatus{
 				ComplianceState:  rPlc.Status.ComplianceState,
-				ClusterName:      name,
-				ClusterNamespace: namespace,
+				ClusterName:      key.ClusterName,
+				ClusterNamespace: key.ClusterNamespace,
 			})
 		}
 
 		// Add cluster statuses for the clusters that did not get their policies properly
 		// replicated. This is not done in the previous loop since some replicated polices may not
 		// have been created at all.
-		for clusterNsName := range failedClusters {
+		for clusterDecision := range failedClusters {
 			log.Info(
-				"Setting the policy to noncompliant since the replication failed", "cluster", clusterNsName,
+				"Setting the policy to noncompliant since the replication failed", "cluster", clusterDecision,
 			)
-			// Since the name and namespace are DNS compliant names, they do not have any slashes,
-			// so this split will always give us what we expect, and not split in the wrong place.
-			// Note: this split is guaranteed to have 2 elements by the `handleDecision` implementation
-			clusterNsNameSl := strings.Split(clusterNsName, "/")
 
 			status = append(status, &policiesv1.CompliancePerClusterStatus{
 				ComplianceState:  policiesv1.NonCompliant,
-				ClusterName:      clusterNsNameSl[1],
-				ClusterNamespace: clusterNsNameSl[0],
+				ClusterName:      clusterDecision.ClusterName,
+				ClusterNamespace: clusterDecision.ClusterNamespace,
 			})
 		}
 
