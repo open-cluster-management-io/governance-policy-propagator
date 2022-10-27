@@ -274,14 +274,22 @@ func (r *EncryptionKeysReconciler) triggerTemplateUpdate(
 			continue
 		}
 
+		name, namespace, err := common.ParseRootPolicyLabel(rootPlcName)
+		if err != nil {
+			log.Error(err, "Unable to parse name and namespace of root policy, ignoring this replicated policy",
+				"rootPlcName", rootPlcName)
+
+			continue
+		}
+
 		rootPolicy := &policyv1.Policy{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: strings.Split(rootPlcName, ".")[0],
-				Name:      strings.Split(rootPlcName, ".")[1],
+				Namespace: namespace,
+				Name:      name,
 			},
 		}
 
-		err := retry.Do(
+		err = retry.Do(
 			func() error {
 				return r.Patch(ctx, rootPolicy, client.RawPatch(types.MergePatchType, patch))
 			},

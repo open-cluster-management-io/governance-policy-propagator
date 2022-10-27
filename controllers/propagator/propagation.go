@@ -644,8 +644,9 @@ func (r *PolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) error {
 			log.Info(
 				"Setting the policy to noncompliant since the replication failed", "cluster", clusterNsName,
 			)
-			// The string split is safe since the namespace and name cannot have slashes in them
-			// since they must be DNS compliant names
+			// Since the name and namespace are DNS compliant names, they do not have any slashes,
+			// so this split will always give us what we expect, and not split in the wrong place.
+			// Note: this split is guaranteed to have 2 elements by the `handleDecision` implementation
 			clusterNsNameSl := strings.Split(clusterNsName, "/")
 
 			status = append(status, &policiesv1.CompliancePerClusterStatus{

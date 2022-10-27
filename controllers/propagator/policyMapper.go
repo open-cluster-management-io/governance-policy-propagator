@@ -5,7 +5,6 @@ package propagator
 
 import (
 	"context"
-	"strings"
 
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -32,11 +31,19 @@ func policyMapper(c client.Client) handler.MapFunc {
 			// policy.open-cluster-management.io/root-policy exists, should be a replicated policy
 			log.V(2).Info("Found reconciliation request from replicated policy")
 
-			name = strings.Split(rootPlcName, ".")[1]
-			namespace = strings.Split(rootPlcName, ".")[0]
+			var err error
+
+			name, namespace, err = common.ParseRootPolicyLabel(rootPlcName)
+			if err != nil {
+				log.Error(err, "Unable to parse name and namespace of root policy, ignoring replicated policy",
+					"rootPlcName", rootPlcName)
+
+				return nil
+			}
+
 			clusterList := &clusterv1.ManagedClusterList{}
 
-			err := c.List(context.TODO(), clusterList, &client.ListOptions{})
+			err = c.List(context.TODO(), clusterList, &client.ListOptions{})
 			if err != nil {
 				log.Error(err, "failed to list ManagedCluster objects")
 

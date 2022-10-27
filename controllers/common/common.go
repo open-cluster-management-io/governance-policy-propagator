@@ -5,6 +5,9 @@ package common
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/avast/retry-go/v3"
@@ -25,6 +28,8 @@ const (
 	ClusterNamespaceLabel string = APIGroup + "/cluster-namespace"
 	RootPolicyLabel       string = APIGroup + "/root-policy"
 )
+
+var ErrInvalidLabelValue = errors.New("unexpected format of label value")
 
 // IsInClusterNamespace check if policy is in cluster namespace
 func IsInClusterNamespace(ns string, allClusters []clusterv1.ManagedCluster) bool {
@@ -179,4 +184,16 @@ func GetNumWorkers(listLength int, concurrencyPerPolicy int) int {
 	}
 
 	return numWorkers
+}
+
+func ParseRootPolicyLabel(rootPlc string) (name, namespace string, err error) {
+	rootSplit := strings.Split(rootPlc, ".")
+	if len(rootSplit) != 2 {
+		err = fmt.Errorf("required exactly one `.` in value of label `%v`: %w",
+			RootPolicyLabel, ErrInvalidLabelValue)
+
+		return "", "", err
+	}
+
+	return rootSplit[1], rootSplit[0], nil
 }
