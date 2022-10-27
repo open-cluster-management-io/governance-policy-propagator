@@ -228,7 +228,10 @@ func TestHandleDecisionWrapper(t *testing.T) {
 				t.Fatalf("Didn't expect but got: %v", result.Err)
 			}
 
-			expectedIdentifier := fmt.Sprintf("cluster%d/cluster%d", i+1, i+1)
+			expectedIdentifier := appsv1.PlacementDecision{
+				ClusterName:      fmt.Sprintf("cluster%d", i+1),
+				ClusterNamespace: fmt.Sprintf("cluster%d", i+1),
+			}
 			if result.Identifier != expectedIdentifier {
 				t.Fatalf("Expected the identifier %s, got %s", result.Identifier, expectedIdentifier)
 			}
