@@ -98,6 +98,14 @@ type PolicyReconciler struct {
 func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	log := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 
+	// Set the hub template watch metric after reconcile
+	defer func() {
+		hubTempWatches := r.DynamicWatcher.GetWatchCount()
+		log.V(3).Info("Setting hub template watch metric", "value", hubTempWatches)
+
+		hubTemplateActiveWatchesMetric.Set(float64(hubTempWatches))
+	}()
+
 	log.Info("Reconciling the policy")
 
 	// Fetch the Policy instance
