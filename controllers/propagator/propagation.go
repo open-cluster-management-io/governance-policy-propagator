@@ -187,7 +187,8 @@ func (r *PolicyReconciler) cleanUpPolicy(instance *policiesv1.Policy) error {
 		return nil
 	}
 
-	log.V(2).Info("Deleting %d replicated policies because root policy was deleted", len(replicatedPlcList.Items))
+	log.V(2).Info(
+		"Deleting replicated policies because root policy was deleted", "count", len(replicatedPlcList.Items))
 
 	policiesChan := make(chan policiesv1.Policy, len(replicatedPlcList.Items))
 	deletionResultsChan := make(chan deletionResult, len(replicatedPlcList.Items))
@@ -532,6 +533,7 @@ func (r *PolicyReconciler) recordWarning(instance *policiesv1.Policy, msgPrefix 
 // method because it makes the retries more targeted and prevents race conditions, such as a
 // placement binding getting updated, from causing inconsistencies.
 func (r *PolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) error {
+	// Generate a metric for elapsed handling time for each policy
 	entryTS := time.Now()
 	defer func() {
 		now := time.Now()
