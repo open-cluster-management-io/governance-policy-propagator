@@ -139,7 +139,12 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 			if errors.IsNotFound(err) {
 				errMessage = string(childPlcName) + " not found"
 			} else {
-				errMessage = strings.Split(err.Error(), "Policy.policy.open-cluster-management.io ")[1]
+				split := strings.Split(err.Error(), "Policy.policy.open-cluster-management.io ")
+				if len(split) < 2 {
+					errMessage = err.Error()
+				} else {
+					errMessage = split[1]
+				}
 			}
 
 			log.V(2).Info(errMessage)
