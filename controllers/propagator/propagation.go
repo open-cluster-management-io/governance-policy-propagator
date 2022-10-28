@@ -267,9 +267,11 @@ func handleDecisionWrapper(
 ) {
 	for decision := range decisions {
 		log := log.WithValues(
-			"policyName", instance.GetName(), "policyNamespace", instance.GetNamespace(),
+			"policyName", instance.GetName(),
+			"policyNamespace", instance.GetNamespace(),
+			"decision", decision,
 		)
-		log.Info("Handling the decision", "identifier", decision)
+		log.Info("Handling the decision")
 
 		templateRefObjs := map[k8sdepwatches.ObjectIdentifier]bool{}
 
@@ -596,90 +598,11 @@ func (r *PolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) error {
 		return errors.New("c" + msg[1:])
 	}
 
-	status := []*policiesv1.CompliancePerClusterStatus{}
+	cpcs, _ := r.calculatePerClusterStatus(instance, failedClusters)
 
-	if !instance.Spec.Disabled {
-		// Get all the replicated policies
-		replicatedPlcList := &policiesv1.PolicyList{}
+	instance.Status.Status = cpcs
+	instance.Status.ComplianceState = calculateRootCompliance(cpcs)
 
-		log.V(1).Info("Getting the replicated policies")
-
-		err := retry.Do(
-			func() error {
-				return r.List(
-					context.TODO(),
-					replicatedPlcList,
-					client.MatchingLabels(LabelsForRootPolicy(instance)),
-				)
-			},
-			getRetryOptions(log.V(1), "Retrying to list the replicated policies")...,
-		)
-		if err != nil {
-			log.Info("Gave up on listing the replicated policies after too many retries")
-			r.recordWarning(instance, "Could not list the replicated policies")
-
-			return err
-		}
-
-		// Update the status based on the replicated policies
-		for _, rPlc := range replicatedPlcList.Items {
-			key := appsv1.PlacementDecision{
-				ClusterName:      rPlc.GetLabels()[common.ClusterNameLabel],
-				ClusterNamespace: rPlc.GetLabels()[common.ClusterNamespaceLabel],
-			}
-
-			if failed := failedClusters[key]; failed {
-				// Skip the replicated policies that failed to be properly replicated
-				// for now. This will be handled later.
-				continue
-			}
-
-			status = append(status, &policiesv1.CompliancePerClusterStatus{
-				ComplianceState:  rPlc.Status.ComplianceState,
-				ClusterName:      key.ClusterName,
-				ClusterNamespace: key.ClusterNamespace,
-			})
-		}
-
-		// Add cluster statuses for the clusters that did not get their policies properly
-		// replicated. This is not done in the previous loop since some replicated polices may not
-		// have been created at all.
-		for clusterDecision := range failedClusters {
-			log.Info(
-				"Setting the policy to noncompliant since the replication failed", "cluster", clusterDecision,
-			)
-
-			status = append(status, &policiesv1.CompliancePerClusterStatus{
-				ComplianceState:  policiesv1.NonCompliant,
-				ClusterName:      clusterDecision.ClusterName,
-				ClusterNamespace: clusterDecision.ClusterNamespace,
-			})
-		}
-
-		sort.Slice(status, func(i, j int) bool {
-			return status[i].ClusterName < status[j].ClusterName
-		})
-	}
-
-	instance.Status.Status = status
-	// loop through status and set ComplianceState
-	instance.Status.ComplianceState = ""
-	isCompliant := true
-
-	for _, cpcs := range status {
-		if cpcs.ComplianceState == "NonCompliant" {
-			instance.Status.ComplianceState = policiesv1.NonCompliant
-			isCompliant = false
-
-			break
-		} else if cpcs.ComplianceState == "" {
-			isCompliant = false
-		}
-	}
-	// set to compliant only when all status are compliant
-	if len(status) > 0 && isCompliant {
-		instance.Status.ComplianceState = policiesv1.Compliant
-	}
 	// looped through all pb, update status.placement
 	sort.Slice(placements, func(i, j int) bool {
 		return placements[i].PlacementBinding < placements[j].PlacementBinding
