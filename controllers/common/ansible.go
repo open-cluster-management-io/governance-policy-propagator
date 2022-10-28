@@ -5,6 +5,7 @@ package common
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,7 +18,7 @@ import (
 
 // CreateAnsibleJob creates ansiblejob with given PolicyAutomation
 func CreateAnsibleJob(policyAutomation *policyv1beta1.PolicyAutomation,
-	dynamicClient dynamic.Interface, mode string, targetClusters []string,
+	dynamicClient dynamic.Interface, mode string, violationContext policyv1beta1.ViolationContext,
 ) error {
 	ansibleJob := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -32,23 +33,36 @@ func CreateAnsibleJob(policyAutomation *policyv1beta1.PolicyAutomation,
 		},
 	}
 
+	mapExtraVars := map[string]interface{}{}
 	if policyAutomation.Spec.Automation.ExtraVars != nil {
 		// This is to translate the runtime.RawExtension to a map[string]interface{}
-		mapExtraVars := map[string]interface{}{}
-
 		err := json.Unmarshal(policyAutomation.Spec.Automation.ExtraVars.Raw, &mapExtraVars)
 		if err != nil {
 			return err
 		}
-
-		ansibleJob.Object["spec"].(map[string]interface{})["extra_vars"] = mapExtraVars
 	}
 
-	if targetClusters != nil {
-		// nolint: forcetypeassert
-		extravars := ansibleJob.Object["spec"].(map[string]interface{})["extra_vars"].(map[string]interface{})
-		extravars["target_clusters"] = targetClusters
+	values := reflect.ValueOf(violationContext)
+	typesOf := values.Type()
+	// add every violationContext fields into mapExtraVars as well as the empty values,
+	// or when the whole violationContext is empty
+	for i := 0; i < values.NumField(); i++ {
+		tag := typesOf.Field(i).Tag
+		value := values.Field(i).Interface()
+
+		var fieldName string
+		if tag.Get("ansibleJob") != "" {
+			fieldName = tag.Get("ansibleJob")
+		} else if tag.Get("json") != "" {
+			fieldName = strings.SplitN(tag.Get("json"), ",", 2)[0]
+		} else {
+			fieldName = typesOf.Field(i).Name
+		}
+
+		mapExtraVars[fieldName] = value
 	}
+
+	ansibleJob.Object["spec"].(map[string]interface{})["extra_vars"] = mapExtraVars
 
 	if policyAutomation.Spec.Automation.JobTTL != nil {
 		ansibleJob.Object["spec"].(map[string]interface{})["job_ttl"] = *policyAutomation.Spec.Automation.JobTTL

@@ -16,8 +16,8 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
-// labelsForRootPolicy returns the labels for given policy
-func labelsForRootPolicy(plc *policiesv1.Policy) map[string]string {
+// LabelsForRootPolicy returns the labels for given policy
+func LabelsForRootPolicy(plc *policiesv1.Policy) map[string]string {
 	return map[string]string{common.RootPolicyLabel: fullNameForPolicy(plc)}
 }
 

@@ -5,6 +5,7 @@ package common
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -196,4 +197,14 @@ func ParseRootPolicyLabel(rootPlc string) (name, namespace string, err error) {
 	}
 
 	return rootSplit[1], rootSplit[0], nil
+}
+
+// TypeConverter is a helper function to converter type struct a to b
+func TypeConverter(a, b interface{}) error {
+	js, err := json.Marshal(a)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(js, b)
 }
