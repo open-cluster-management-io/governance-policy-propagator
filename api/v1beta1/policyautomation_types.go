@@ -6,6 +6,8 @@ package v1beta1
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
+
+	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 )
 
 // PolicyAutomationSpec defines the desired state of PolicyAutomation
@@ -36,6 +38,8 @@ const (
 	Disabled   PolicyAutomationMode = "disabled"
 )
 
+const DefaultPolicyViolationContextLimit = 1000
+
 // AutomationDef defines the automation to invoke
 type AutomationDef struct {
 	// Type of the automation to invoke
@@ -52,6 +56,22 @@ type AutomationDef struct {
 	TowerSecret string `json:"secret"`
 	// JobTTL sets the time to live for the Kubernetes AnsibleJob object after the Ansible job run has finished.
 	JobTTL *int `json:"jobTtl,omitempty"`
+	// The maximum number of violating cluster contexts that will be provided to the Ansible job as extra variables.
+	// When policyViolationContextLimit is set to 0, it means no limit.
+	// The default value is 1000.
+	PolicyViolationContextLimit *uint `json:"policyViolationContextLimit,omitempty"`
+}
+
+// ViolationContext defines the non-compliant replicated policy information
+// that is sent to the AnsibleJob through extra_vars.
+type ViolationContext struct {
+	TargetClusters  []string `json:"targetClusters" ansibleJob:"target_clusters"`
+	PolicyName      string   `json:"policyName" ansibleJob:"policy_name"`
+	PolicyNamespace string   `json:"namespace"`
+	HubCluster      string   `json:"hubCluster" ansibleJob:"hub_cluster"`
+	PolicySets      []string `json:"policySet" ansibleJob:"policy_set"`
+	//nolint: lll
+	PolicyViolationContext map[string]ReplicatedPolicyStatus `json:"policyViolationContext" ansibleJob:"policy_violation_context"`
 }
 
 // PolicyAutomationStatus defines the observed state of PolicyAutomation
@@ -93,4 +113,23 @@ type ClusterEvent struct {
 
 func init() {
 	SchemeBuilder.Register(&PolicyAutomation{}, &PolicyAutomationList{})
+}
+
+// ReplicatedDetailsPerTemplate defines the replicated policy compliance details and history
+type ReplicatedDetailsPerTemplate struct {
+	ComplianceState policyv1.ComplianceState      `json:"compliant"`
+	History         []ReplicatedComplianceHistory `json:"history"`
+}
+
+// ReplicatedComplianceHistory defines the replicated policy compliance details history
+type ReplicatedComplianceHistory struct {
+	LastTimestamp metav1.Time `json:"lastTimestamp,omitempty" protobuf:"bytes,7,opt,name=lastTimestamp"`
+	Message       string      `json:"message,omitempty" protobuf:"bytes,4,opt,name=message"`
+}
+
+// ReplicatedPolicyStatus defines the replicated policy status
+type ReplicatedPolicyStatus struct {
+	ComplianceState  policyv1.ComplianceState       `json:"compliant"`        // used by replicated policy
+	ViolationMessage string                         `json:"violationMessage"` // used by replicated policy
+	Details          []ReplicatedDetailsPerTemplate `json:"details"`          // used by replicated policy
 }

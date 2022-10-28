@@ -173,7 +173,7 @@ func (r *PolicyReconciler) cleanUpPolicy(instance *policiesv1.Policy) error {
 	}
 
 	err = r.List(
-		context.TODO(), replicatedPlcList, client.MatchingLabels(labelsForRootPolicy(instance)),
+		context.TODO(), replicatedPlcList, client.MatchingLabels(LabelsForRootPolicy(instance)),
 	)
 	if err != nil {
 		log.Error(err, "Failed to list the replicated policies")
@@ -607,7 +607,7 @@ func (r *PolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) error {
 				return r.List(
 					context.TODO(),
 					replicatedPlcList,
-					client.MatchingLabels(labelsForRootPolicy(instance)),
+					client.MatchingLabels(LabelsForRootPolicy(instance)),
 				)
 			},
 			getRetryOptions(log.V(1), "Retrying to list the replicated policies")...,

@@ -19,23 +19,31 @@ spec:
           remediationAction: inform
           imageRegistry: quay.io
 ---
+apiVersion: policy.open-cluster-management.io/v1beta1
+kind: PolicySet
+metadata:
+  name: case5-test-policyset
+spec:
+  policies:
+  - case5-test-policy
+---
 apiVersion: policy.open-cluster-management.io/v1
 kind: PlacementBinding
 metadata:
-  name: case5-test-policy-pb
+  name: case5-test-policyset-pb
 placementRef:
   apiGroup: apps.open-cluster-management.io
   kind: PlacementRule
-  name: case5-test-policy-plr
+  name: case5-test-policyset-plr
 subjects:
 - apiGroup: policy.open-cluster-management.io
-  kind: Policy
-  name: case5-test-policy
+  kind: PolicySet
+  name: case5-test-policyset
 ---
 apiVersion: apps.open-cluster-management.io/v1
 kind: PlacementRule
 metadata:
-  name: case5-test-policy-plr
+  name: case5-test-policyset-plr
 spec:
   clusterConditions:
   - status: "True"
