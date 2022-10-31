@@ -92,7 +92,7 @@ var _ = Describe("Test policy encryption key rotation", func() {
 		Expect(err).Should(BeNil())
 	})
 
-	It("should have roated the key in the "+EncryptionKeySecret+" secret", func() {
+	It("should have rotated the key in the "+EncryptionKeySecret+" secret", func() {
 		var secret *unstructured.Unstructured
 		Eventually(func() interface{} {
 			secret = utils.GetWithTimeout(
