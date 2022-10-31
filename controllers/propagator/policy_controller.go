@@ -113,7 +113,7 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 			err := r.cleanUpPolicy(&policiesv1.Policy{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       policiesv1.Kind,
-					APIVersion: policiesv1.SchemeGroupVersion.Group,
+					APIVersion: policiesv1.GroupVersion.Group + "/" + policiesv1.GroupVersion.Version,
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      request.Name,
