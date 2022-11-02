@@ -56,6 +56,7 @@ type AutomationDef struct {
 	TowerSecret string `json:"secret"`
 	// JobTTL sets the time to live for the Kubernetes AnsibleJob object after the Ansible job run has finished.
 	JobTTL *int `json:"jobTtl,omitempty"`
+	// +kubebuilder:validation:Minimum=0
 	// The maximum number of violating cluster contexts that will be provided to the Ansible job as extra variables.
 	// When policyViolationContextLimit is set to 0, it means no limit.
 	// The default value is 1000.
