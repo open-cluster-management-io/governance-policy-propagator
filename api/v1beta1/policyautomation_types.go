@@ -130,7 +130,7 @@ type ReplicatedComplianceHistory struct {
 
 // ReplicatedPolicyStatus defines the replicated policy status
 type ReplicatedPolicyStatus struct {
-	ComplianceState  policyv1.ComplianceState       `json:"compliant"`        // used by replicated policy
-	ViolationMessage string                         `json:"violationMessage"` // used by replicated policy
-	Details          []ReplicatedDetailsPerTemplate `json:"details"`          // used by replicated policy
+	ComplianceState  policyv1.ComplianceState       `json:"compliant"`         // used by replicated policy
+	ViolationMessage string                         `json:"violation_message"` // used by replicated policy
+	Details          []ReplicatedDetailsPerTemplate `json:"details"`           // used by replicated policy
 }
