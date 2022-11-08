@@ -183,7 +183,7 @@ var _ = Describe("Test policy automation", func() {
 			managed1 := extraVars["policy_violation_context"].(map[string]interface{})["managed1"]
 			compliant := managed1.(map[string]interface{})["compliant"]
 			Expect(compliant).To(Equal(string(policiesv1.NonCompliant)))
-			violationMessage := managed1.(map[string]interface{})["violationMessage"]
+			violationMessage := managed1.(map[string]interface{})["violation_message"]
 			Expect(violationMessage).To(Equal("testing-ViolationMessage"))
 			detail := managed1.(map[string]interface{})["details"].([]interface{})[0]
 			Expect(detail.(map[string]interface{})["compliant"]).To(Equal(string(policiesv1.NonCompliant)))
