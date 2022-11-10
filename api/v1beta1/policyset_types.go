@@ -13,9 +13,12 @@ import (
 // +kubebuilder:validation:MinLength=1
 type NonEmptyString string
 
-// PolicySetSpec defines the desired state of PolicySet
+// PolicySetSpec describes a group of policies that are related and
+// can be placed on the same managed clusters.
 type PolicySetSpec struct {
+	// Description of this PolicySet.
 	Description string `json:"description,omitempty"`
+	// Policies that are grouped together within the PolicySet.
 	// +kubebuilder:validation:Required
 	Policies []NonEmptyString `json:"policies"`
 }
