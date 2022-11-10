@@ -12,7 +12,8 @@ import (
 
 // PolicyAutomationSpec defines the desired state of PolicyAutomation
 type PolicyAutomationSpec struct {
-	// PolicyRef is the name of the policy automation is going to binding with.
+	// PolicyRef is the name of the policy that this automation resource
+	// is bound to.
 	// +kubebuilder:validation:Required
 	PolicyRef string `json:"policyRef"`
 	// Mode decides how automation is going to be triggered
@@ -20,8 +21,13 @@ type PolicyAutomationSpec struct {
 	// EventHook decides when automation is going to be triggered
 	// +kubebuilder:validation:Enum={noncompliant}
 	// +kubebuilder:validation:Required
-	EventHook   string `json:"eventHook,omitempty"`
+	EventHook string `json:"eventHook,omitempty"`
+	// RescanAfter is reserved for future use.
 	RescanAfter string `json:"rescanAfter,omitempty"`
+	// DelayAfterRunSeconds sets the minimum number of seconds before
+	// an automation can run again due to a new violation on the same
+	// managed cluster. This only applies to the EveryEvent Mode.  The
+	// default value is 0.
 	// +kubebuilder:validation:Minimum=0
 	DelayAfterRunSeconds uint `json:"delayAfterRunSeconds,omitempty"`
 	// +kubebuilder:validation:Required
@@ -51,6 +57,8 @@ type AutomationDef struct {
 	// ExtraVars is passed to the Ansible job at execution time and is a known Ansible entity.
 	// +kubebuilder:pruning:PreserveUnknownFields
 	ExtraVars *runtime.RawExtension `json:"extra_vars,omitempty"`
+	// TowerSecret is the name of the secret that contains the Ansible Automation Platform
+	// credential.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	TowerSecret string `json:"secret"`
