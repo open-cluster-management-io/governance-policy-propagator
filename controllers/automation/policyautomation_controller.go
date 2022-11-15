@@ -297,13 +297,27 @@ func (r *PolicyAutomationReconciler) Reconcile(
 	}
 
 	if policyAutomation.Annotations["policy.open-cluster-management.io/rerun"] == "true" {
-		log.Info("Creating an Ansible job", "mode", "manual")
+		violationContext := policyv1beta1.ViolationContext{}
+
+		targetList := common.FindNonCompliantClustersForPolicy(policy)
+		if len(targetList) > 0 {
+			log.Info("Creating an Ansible job", "mode", "manual")
+
+			violationContext, _ = r.getViolationContext(policy, targetList, policyAutomation)
+		} else {
+			log.Info(
+				"All clusters are compliant. "+
+					"Creating an Ansible job without the violation context.",
+				"mode",
+				"manual",
+			)
+		}
 
 		err = common.CreateAnsibleJob(
 			policyAutomation,
 			r.DynamicClient,
 			"manual",
-			policyv1beta1.ViolationContext{},
+			violationContext,
 		)
 		if err != nil {
 			log.Error(err, "Failed to create the Ansible job", "mode", "manual")

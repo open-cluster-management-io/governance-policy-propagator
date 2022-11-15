@@ -799,6 +799,32 @@ var _ = Describe("Test policy automation", func() {
 
 				return len(ansiblejobList.Items)
 			}, 30, 1).Should(Equal(1))
+
+			By("Check each violation context field is not empty in extra_vars for the violated manual run case")
+			ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
+				context.TODO(), metav1.ListOptions{},
+			)
+			Expect(err).To(BeNil())
+			metadata := ansiblejobList.Items[0].Object["metadata"]
+			violatedAnsJobName := metadata.(map[string]interface{})["name"]
+			spec := ansiblejobList.Items[0].Object["spec"]
+			extraVars := spec.(map[string]interface{})["extra_vars"].(map[string]interface{})
+			Expect(extraVars["policy_name"]).To(Equal("case5-test-policy"))
+			Expect(extraVars["namespace"]).To(Equal(testNamespace))
+			// hub_cluster depends on environment so just check if hub_cluster is set
+			// rather than verifying the hub_cluster name
+			By("Check hub_cluster : " + extraVars["hub_cluster"].(string))
+			Expect(len(extraVars["hub_cluster"].(string)) > 0).To(BeTrue())
+			Expect(len(extraVars["target_clusters"].([]interface{}))).To(Equal(2))
+			Expect(len(extraVars["policy_set"].([]interface{}))).To(Equal(1))
+			Expect(extraVars["policy_set"].([]interface{})[0]).To(Equal("case5-test-policyset"))
+			managed1 := extraVars["policy_violation_context"].(map[string]interface{})["managed1"]
+			compliant := managed1.(map[string]interface{})["compliant"]
+			Expect(compliant).To(Equal(string(policiesv1.NonCompliant)))
+			managed2 := extraVars["policy_violation_context"].(map[string]interface{})["managed2"]
+			compliant = managed2.(map[string]interface{})["compliant"]
+			Expect(compliant).To(Equal(string(policiesv1.NonCompliant)))
+
 			By("Patching policy to make both clusters back to Compliant")
 			opt := metav1.ListOptions{
 				LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case5PolicyName,
@@ -845,6 +871,26 @@ var _ = Describe("Test policy automation", func() {
 
 				return len(ansiblejobList.Items)
 			}, 30, 1).Should(Equal(2))
+
+			By("Check each violation context field is null in extra_vars for the compliant manual run case")
+			ansiblejobList, err = clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
+				context.TODO(), metav1.ListOptions{},
+			)
+			Expect(err).To(BeNil())
+			metadata = ansiblejobList.Items[1].Object["metadata"]
+			ansJobName := metadata.(map[string]interface{})["name"]
+			spec = ansiblejobList.Items[1].Object["spec"]
+			if ansJobName == violatedAnsJobName {
+				spec = ansiblejobList.Items[0].Object["spec"]
+			}
+
+			extraVars = spec.(map[string]interface{})["extra_vars"].(map[string]interface{})
+			Expect(extraVars["policy_name"]).To(Equal(""))
+			Expect(extraVars["namespace"]).To(Equal(""))
+			Expect(extraVars["hub_cluster"]).To(Equal(""))
+			Expect(extraVars["target_clusters"]).To(BeNil())
+			Expect(extraVars["policy_set"]).To(BeNil())
+			Expect(extraVars["policy_violation_context"]).To(BeNil())
 		})
 	})
 	Describe("Clean up", func() {
