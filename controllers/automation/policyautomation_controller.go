@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -170,6 +171,11 @@ func (r *PolicyAutomationReconciler) getViolationContext(
 
 	violationContext.PolicySets = policySets
 
+	// skip policy_violation_context if all clusters are compliant
+	if len(targetList) == 0 {
+		return violationContext, nil
+	}
+
 	replicatedPlcList := &policyv1.PolicyList{}
 
 	err := r.List(
@@ -297,21 +303,12 @@ func (r *PolicyAutomationReconciler) Reconcile(
 	}
 
 	if policyAutomation.Annotations["policy.open-cluster-management.io/rerun"] == "true" {
-		violationContext := policyv1beta1.ViolationContext{}
-
 		targetList := common.FindNonCompliantClustersForPolicy(policy)
-		if len(targetList) > 0 {
-			log.Info("Creating an Ansible job", "mode", "manual")
+		log.Info(
+			"Creating an Ansible job", "mode", "manual",
+			"clusterCount", strconv.Itoa(len(targetList)))
 
-			violationContext, _ = r.getViolationContext(policy, targetList, policyAutomation)
-		} else {
-			log.Info(
-				"All clusters are compliant. "+
-					"Creating an Ansible job without the violation context.",
-				"mode",
-				"manual",
-			)
-		}
+		violationContext, _ := r.getViolationContext(policy, targetList, policyAutomation)
 
 		err = common.CreateAnsibleJob(
 			policyAutomation,
