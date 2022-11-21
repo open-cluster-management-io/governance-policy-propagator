@@ -156,6 +156,39 @@ var _ = Describe("Test policyset controller status updates", func() {
 				return rootPlcSet.Object["status"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
 		})
+		It("should show pending if its child policies are pending", func() {
+			opt := metav1.ListOptions{
+				LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case11PolicyName,
+			}
+			By("Patching both replicated policy statuses")
+			replicatedPlcList := utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true,
+				defaultTimeoutSeconds)
+			for _, replicatedPlc := range replicatedPlcList.Items {
+				replicatedPlc.Object["status"] = &policiesv1.PolicyStatus{
+					ComplianceState: policiesv1.Pending,
+					Status: []*policiesv1.CompliancePerClusterStatus{
+						{
+							ClusterName:      "managed1",
+							ClusterNamespace: "managed1",
+							ComplianceState:  policiesv1.Pending,
+						},
+					},
+				}
+				_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
+					context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
+				)
+				Expect(err).To(BeNil())
+			}
+			By("Checking the status of policy set")
+			yamlPlc := utils.ParseYaml("../resources/case11_policyset_controller/case11-statuscheck-8.yaml")
+			Eventually(func() interface{} {
+				rootPlcSet := utils.GetWithTimeout(
+					clientHubDynamic, gvrPolicySet, case11PolicySetName, testNamespace, true, defaultTimeoutSeconds,
+				)
+
+				return rootPlcSet.Object["status"]
+			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
+		})
 		It("should update status properly if a policy is disabled", func() {
 			By("Creating " + case11DisablePolicyYaml)
 			utils.Kubectl("apply",

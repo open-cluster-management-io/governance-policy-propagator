@@ -105,9 +105,10 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 	// compile results and compliance state from policy statuses
 	compliancesFound := []string{}
 	deletedPolicies := []string{}
-	pendingPolicies := []string{}
+	unknownPolicies := []string{}
 	disabledPolicies := []string{}
-	aggregatedCompliance := "Compliant"
+	pendingPolicies := []string{}
+	aggregatedCompliance := policyv1.Compliant
 	placementsByBinding := map[string]policyv1beta1.PolicySetStatusPlacement{}
 
 	// if there are no policies in the policyset, status should be empty
@@ -203,11 +204,18 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 			// aggregate compliance state
 			plcComplianceState := complianceInRelevantClusters(childPlc.Status.Status, clusters)
 			if plcComplianceState == "" {
-				pendingPolicies = append(pendingPolicies, string(childPlcName))
+				unknownPolicies = append(unknownPolicies, string(childPlcName))
 			} else {
-				compliancesFound = append(compliancesFound, string(childPlcName))
-				if plcComplianceState == "NonCompliant" {
-					aggregatedCompliance = "NonCompliant"
+				if plcComplianceState == policyv1.Pending {
+					pendingPolicies = append(pendingPolicies, string(childPlcName))
+					if aggregatedCompliance != policyv1.NonCompliant {
+						aggregatedCompliance = policyv1.Pending
+					}
+				} else {
+					compliancesFound = append(compliancesFound, string(childPlcName))
+					if plcComplianceState == policyv1.NonCompliant {
+						aggregatedCompliance = policyv1.NonCompliant
+					}
 				}
 			}
 		}
@@ -220,10 +228,10 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 
 	builtStatus := policyv1beta1.PolicySetStatus{
 		Placement:     generatedPlacements,
-		StatusMessage: getStatusMessage(disabledPolicies, pendingPolicies, deletedPolicies),
+		StatusMessage: getStatusMessage(disabledPolicies, unknownPolicies, deletedPolicies, pendingPolicies),
 	}
-	if showCompliance(compliancesFound, pendingPolicies) {
-		builtStatus.Compliant = aggregatedCompliance
+	if showCompliance(compliancesFound, unknownPolicies, pendingPolicies) {
+		builtStatus.Compliant = string(aggregatedCompliance)
 	}
 
 	if !equality.Semantic.DeepEqual(plcSet.Status, builtStatus) {
@@ -234,44 +242,56 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 	return needsUpdate
 }
 
-// getStatusMessage returns a message listing disabled, deleted and pending policies
-func getStatusMessage(disabledPolicies []string, pendingPolicies []string, deletedPolicies []string) string {
-	statusMessage := "All policies are reporting status"
+// getStatusMessage returns a message listing disabled, deleted and policies with no status
+func getStatusMessage(
+	disabledPolicies []string,
+	unknownPolicies []string,
+	deletedPolicies []string,
+	pendingPolicies []string,
+) string {
+	statusMessage := ""
 	separator := ""
+	allReporting := true
 
-	if len(disabledPolicies) > 0 {
-		statusMessage = fmt.Sprintf("Disabled policies: %s", strings.Join(disabledPolicies, ", "))
+	if len(pendingPolicies) > 0 {
+		allReporting = false
+		statusMessage += fmt.Sprintf("Policies awaiting pending dependencies: %s",
+			strings.Join(pendingPolicies, ", "))
 		separator = "; "
 	}
 
-	if len(pendingPolicies) > 0 {
-		if separator == "" {
-			statusMessage = ""
-		}
+	if len(disabledPolicies) > 0 {
+		allReporting = false
+		statusMessage += fmt.Sprintf(separator+"Disabled policies: %s", strings.Join(disabledPolicies, ", "))
+		separator = "; "
+	}
 
-		statusMessage = fmt.Sprintf(statusMessage+separator+
-			"No status provided while policies are pending: %s", strings.Join(pendingPolicies, ", "))
+	if len(unknownPolicies) > 0 {
+		allReporting = false
+		statusMessage += fmt.Sprintf(separator+"No status provided while awaiting policy status: %s",
+			strings.Join(unknownPolicies, ", "))
 		separator = "; "
 	}
 
 	if len(deletedPolicies) > 0 {
-		if separator == "" {
-			statusMessage = ""
-		}
+		allReporting = false
+		statusMessage += fmt.Sprintf(separator+"Deleted policies: %s", strings.Join(deletedPolicies, ", "))
+	}
 
-		statusMessage = fmt.Sprintf(statusMessage+separator+"Deleted policies: %s", strings.Join(deletedPolicies, ", "))
+	if allReporting {
+		return "All policies are reporting status"
 	}
 
 	return statusMessage
 }
 
-// showCompliance only if there are policies with compliance and none are pending
-func showCompliance(compliancesFound []string, pending []string) bool {
-	if len(pending) > 0 {
+// showCompliance only if there are policies with compliance and none are still awaiting status
+func showCompliance(compliancesFound []string, unknown []string, pending []string) bool {
+	if len(unknown) > 0 {
 		return false
 	}
 
-	if len(compliancesFound) > 0 {
+	if len(compliancesFound)+len(pending) > 0 {
 		return true
 	}
 
@@ -328,16 +348,24 @@ func (r *PolicySetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // Helper function to filter out compliance statuses that are not in scope
-func complianceInRelevantClusters(status []*policyv1.CompliancePerClusterStatus, relevantClusters []string) string {
+func complianceInRelevantClusters(
+	status []*policyv1.CompliancePerClusterStatus,
+	relevantClusters []string,
+) policyv1.ComplianceState {
 	complianceFound := false
-	compliance := "Compliant"
+	compliance := policyv1.Compliant
 
 	for i := range status {
 		if clusterInList(relevantClusters, status[i].ClusterName) {
-			if string(status[i].ComplianceState) == "NonCompliant" {
-				compliance = "NonCompliant"
+			if status[i].ComplianceState == policyv1.NonCompliant {
+				compliance = policyv1.NonCompliant
 				complianceFound = true
-			} else if string(status[i].ComplianceState) != "" {
+			} else if status[i].ComplianceState == policyv1.Pending {
+				complianceFound = true
+				if compliance != policyv1.NonCompliant {
+					compliance = policyv1.Pending
+				}
+			} else if status[i].ComplianceState != "" {
 				complianceFound = true
 			}
 		}

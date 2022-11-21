@@ -1,0 +1,13 @@
+apiVersion: policy.open-cluster-management.io/v1beta1
+kind: PolicySet
+metadata:
+  name: case11-test-policyset
+spec:
+  policies:
+  - case11-test-policy
+status:
+  compliant: Pending
+  placement:
+  - placementBinding: case11-test-policyset-pb
+    placementRule: case11-test-policyset-plr
+  statusMessage: "Policies awaiting pending dependencies: case11-test-policy"
