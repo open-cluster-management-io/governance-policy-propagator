@@ -31,7 +31,7 @@ jobs:
     name: KinD tests
     steps:
     - name: Checkout Governance Policy Propagator
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         path: governance-policy-propagator
         fetch-depth: 0 # Fetch all history for all tags and branches
