@@ -1,0 +1,33 @@
+[
+    {
+        "op":"add",
+        "path":"/spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/dependencies/items/oneOf",
+        "value": [{
+            "properties": {
+                "kind": {"enum": ["CertificatePolicy", "ConfigurationPolicy","IamPolicy"]},
+                "namespace": {"maxLength": 0}
+            }
+        },{
+            "not": {
+                "properties": {
+                    "kind": {"pattern": "^(?:(?:Certificate|Configuration|Iam)Policy)$"}
+                }
+            }
+        }]
+    },{
+        "op":"add",
+        "path":"/spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/policy-templates/items/properties/extraDependencies/items/oneOf",
+        "value": [{
+            "properties": {
+                "kind": {"enum": ["CertificatePolicy", "ConfigurationPolicy","IamPolicy"]},
+                "namespace": {"maxLength": 0}
+            }
+        },{
+            "not": {
+                "properties": {
+                    "kind": {"pattern": "^(?:(?:Certificate|Configuration|Iam)Policy)$"}
+                }
+            }
+        }]
+    }
+]
