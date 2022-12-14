@@ -232,6 +232,8 @@ func (r *PolicyReconciler) cleanUpPolicy(instance *policiesv1.Policy) error {
 		return errors.New("failed to delete one or more replicated policies")
 	}
 
+	propagationFailureMetric.DeleteLabelValues(instance.GetName(), instance.GetNamespace())
+
 	return nil
 }
 
