@@ -155,6 +155,8 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 		// requeue it to be reprocessed later.
 		err := r.handleRootPolicy(instance)
 		if err != nil {
+			propagationFailureMetric.WithLabelValues(instance.GetName(), instance.GetNamespace()).Inc()
+
 			r.recordWarning(
 				instance,
 				fmt.Sprintf("Retrying the request in %d minutes", requeueErrorDelay),

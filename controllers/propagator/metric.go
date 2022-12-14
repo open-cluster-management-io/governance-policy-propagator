@@ -15,6 +15,13 @@ var (
 			Help: "The number of active watch API requests for Hub policy templates",
 		},
 	)
+	propagationFailureMetric = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "policy_propagation_failure_total",
+			Help: "The number of failed policy propagation attempts per policy",
+		},
+		[]string{"name", "namespace"},
+	)
 	roothandlerMeasure = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name: "ocm_handle_root_policy_duration_seconds_bucket",
 		Help: "Time the handleRootPolicy function takes to complete.",
@@ -23,5 +30,6 @@ var (
 
 func init() {
 	metrics.Registry.MustRegister(roothandlerMeasure)
+	metrics.Registry.MustRegister(propagationFailureMetric)
 	metrics.Registry.MustRegister(hubTemplateActiveWatchesMetric)
 }
