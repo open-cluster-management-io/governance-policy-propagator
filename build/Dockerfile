@@ -5,12 +5,6 @@ FROM golang:1.19 AS builder
 
 ENV COMPONENT=governance-policy-propagator
 ENV REPO_PATH=/go/src/github.com/open-cluster-management/${COMPONENT}
-# Account for Prow replacing the base image to be UBI based
-RUN if [ -x "$(command -v dnf)" ] ; then \
-        dnf install -y patch; \
-    else \
-        apt update && apt install -y patch; \
-    fi
 WORKDIR ${REPO_PATH}
 COPY . .
 RUN make build
