@@ -13,7 +13,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stolostron/go-log-utils v0.1.1
 	github.com/stolostron/go-template-utils/v3 v3.0.1
-	github.com/stolostron/kubernetes-dependency-watches v0.1.0
+	github.com/stolostron/kubernetes-dependency-watches v0.1.1
 	k8s.io/api v0.23.9
 	k8s.io/apimachinery v0.23.9
 	k8s.io/client-go v12.0.0+incompatible
