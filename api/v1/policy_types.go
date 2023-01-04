@@ -60,7 +60,8 @@ type PolicyDependency struct {
 	Namespace string `json:"namespace,omitempty"`
 
 	// The ComplianceState (at path .status.compliant) required before the policy should be created
-	Compliance string `json:"compliance"`
+	// +kubebuilder:validation:Enum=Compliant;Pending;NonCompliant
+	Compliance ComplianceState `json:"compliance"`
 }
 
 // PolicySpec defines the desired state of Policy
