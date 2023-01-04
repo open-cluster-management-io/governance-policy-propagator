@@ -71,7 +71,7 @@ func fakeDependencyFromObj(obj client.Object, compliance string) policiesv1.Poli
 		},
 		Name:       obj.GetName(),
 		Namespace:  obj.GetNamespace(),
-		Compliance: compliance,
+		Compliance: policiesv1.ComplianceState(compliance),
 	}
 }
 
