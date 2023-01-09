@@ -74,6 +74,14 @@ rules:
   - list
   - watch
 - apiGroups:
+  - config.openshift.io
+  resourceNames:
+  - cluster
+  resources:
+  - dnses
+  verbs:
+  - get
+- apiGroups:
   - ""
   resources:
   - configmaps

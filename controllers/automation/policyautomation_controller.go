@@ -6,21 +6,20 @@ package automation
 import (
 	"context"
 	"fmt"
-	"net"
 	"strconv"
-	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -32,8 +31,11 @@ import (
 
 const ControllerName string = "policy-automation"
 
+var dnsGVR = schema.GroupVersionResource{Group: "config.openshift.io", Version: "v1", Resource: "dnses"}
+
 var log = ctrl.Log.WithName(ControllerName)
 
+//+kubebuilder:rbac:groups=config.openshift.io,resources=dnses,resourceNames=cluster,verbs=get
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policyautomations,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policyautomations/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policyautomations/finalizers,verbs=update
@@ -104,41 +106,35 @@ func getTargetListMap(targetList []string) map[string]bool {
 	return targetListMap
 }
 
-// getClusterName will get the hub cluster name information
-func getClusterName() string {
-	hubCluster := ""
-	// Get a config to talk to the apiserver
-	cfg, err := config.GetConfig()
-	if err == nil {
-		hubCluster = cfg.Host
-	} else {
-		log.Error(err, "Unable to get the Kubernetes configuration.")
-	}
+// getClusterDNSName will get the Hub cluster DNS name if the Hub is an OpenShift cluster.
+func (r *PolicyAutomationReconciler) getClusterDNSName(ctx context.Context) (string, error) {
+	dnsCluster, err := r.DynamicClient.Resource(dnsGVR).Get(ctx, "cluster", metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// This is a debug log to not spam the logs when the Hub is installed on a Kubernetes distribution other
+			// than OpenShift.
+			log.V(2).Info("The Hub cluster DNS name couldn't be determined")
 
-	if len(hubCluster) > 0 {
-		// remove possible https head
-		hubCluster = strings.ReplaceAll(hubCluster, "https://", "")
-		// remove possible http head
-		hubCluster = strings.ReplaceAll(hubCluster, "http://", "")
-		// remove possible port number
-		hubCluster = strings.SplitN(hubCluster, ":", 2)[0]
-		// convert host name to URL if it is IP address
-		if net.ParseIP(hubCluster) != nil {
-			names, _ := net.LookupAddr(hubCluster)
-			if len(names) != 0 {
-				hubCluster = names[0]
-			}
+			return "", nil
 		}
+
+		return "", err
 	}
 
-	log.V(3).Info("Hub Cluster information: %s", hubCluster)
+	dnsName, _, _ := unstructured.NestedString(dnsCluster.Object, "spec", "baseDomain")
+	if dnsName == "" {
+		log.Info("The OpenShift DNS object named cluster did not contain a valid spec.baseDomain value")
+	} else {
+		log.V(2).Info("The Hub cluster DNS name was found", "name", dnsName)
+	}
 
-	return hubCluster
+	return dnsName, nil
 }
 
 // getViolationContext will put the root policy information into violationContext
 // It also puts the status of the non-compliant replicated policies into violationContext
 func (r *PolicyAutomationReconciler) getViolationContext(
+	ctx context.Context,
 	policy *policyv1.Policy,
 	targetList []string,
 	policyAutomation *policyv1beta1.PolicyAutomation,
@@ -157,7 +153,12 @@ func (r *PolicyAutomationReconciler) getViolationContext(
 	// 3) get the root policy namespace
 	violationContext.PolicyNamespace = policy.GetNamespace()
 	// 4) get the root policy hub cluster name
-	violationContext.HubCluster = getClusterName()
+	var err error
+
+	violationContext.HubCluster, err = r.getClusterDNSName(ctx)
+	if err != nil {
+		return policyv1beta1.ViolationContext{}, err
+	}
 
 	// 5) get the policy sets of the root policy
 	plcPlacement := policy.Status.Placement
@@ -178,7 +179,7 @@ func (r *PolicyAutomationReconciler) getViolationContext(
 
 	replicatedPlcList := &policyv1.PolicyList{}
 
-	err := r.List(
+	err = r.List(
 		context.TODO(),
 		replicatedPlcList,
 		client.MatchingLabels(propagator.LabelsForRootPolicy(policy)),
@@ -308,7 +309,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 			"Creating an Ansible job", "mode", "manual",
 			"clusterCount", strconv.Itoa(len(targetList)))
 
-		violationContext, _ := r.getViolationContext(policy, targetList, policyAutomation)
+		violationContext, _ := r.getViolationContext(ctx, policy, targetList, policyAutomation)
 
 		err = common.CreateAnsibleJob(
 			policyAutomation,
@@ -359,7 +360,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 			targetList := common.FindNonCompliantClustersForPolicy(policy)
 			if len(targetList) > 0 {
 				log.Info("Creating An Ansible job", "targetList", targetList)
-				violationContext, _ := r.getViolationContext(policy, targetList, policyAutomation)
+				violationContext, _ := r.getViolationContext(ctx, policy, targetList, policyAutomation)
 				err = common.CreateAnsibleJob(policyAutomation, r.DynamicClient, "scan", violationContext)
 				if err != nil {
 					return reconcile.Result{RequeueAfter: requeueAfter}, err
@@ -381,7 +382,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 			if len(targetList) > 0 {
 				log.Info("Creating an Ansible job", "targetList", targetList)
 
-				violationContext, _ := r.getViolationContext(policy, targetList, policyAutomation)
+				violationContext, _ := r.getViolationContext(ctx, policy, targetList, policyAutomation)
 				err = common.CreateAnsibleJob(
 					policyAutomation,
 					r.DynamicClient,
@@ -492,7 +493,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 					trimmedTargetList = append(trimmedTargetList, clusterName)
 				}
 				log.Info("Creating An Ansible job", "trimmedTargetList", trimmedTargetList)
-				violationContext, _ := r.getViolationContext(policy, trimmedTargetList, policyAutomation)
+				violationContext, _ := r.getViolationContext(ctx, policy, trimmedTargetList, policyAutomation)
 				err = common.CreateAnsibleJob(
 					policyAutomation,
 					r.DynamicClient,

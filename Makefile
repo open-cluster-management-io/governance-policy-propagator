@@ -262,6 +262,7 @@ install-crds: manifests
 	kubectl apply -f https://raw.githubusercontent.com/open-cluster-management-io/api/main/cluster/v1beta1/0000_02_clusters.open-cluster-management.io_placements.crd.yaml --validate=false
 	kubectl apply -f https://raw.githubusercontent.com/open-cluster-management-io/api/main/cluster/v1beta1/0000_03_clusters.open-cluster-management.io_placementdecisions.crd.yaml --validate=false
 	kubectl apply -f deploy/crds/external/tower.ansible.com_joblaunch_crd.yaml
+	kubectl apply -f test/resources/case5_policy_automation/dns-crd.yaml
 
 .PHONY: install-resources
 install-resources:
@@ -272,6 +273,8 @@ install-resources:
 	@echo creating cluster resources
 	kubectl apply -f test/resources/managed1-cluster.yaml
 	kubectl apply -f test/resources/managed2-cluster.yaml
+	@echo setting a Hub cluster DNS name
+	kubectl apply -f test/resources/case5_policy_automation/cluster-dns.yaml
 
 .PHONY: e2e-dependencies
 e2e-dependencies:
