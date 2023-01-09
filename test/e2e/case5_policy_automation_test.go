@@ -172,10 +172,7 @@ var _ = Describe("Test policy automation", func() {
 			extraVars := spec.(map[string]interface{})["extra_vars"].(map[string]interface{})
 			Expect(extraVars["policy_name"]).To(Equal("case5-test-policy"))
 			Expect(extraVars["namespace"]).To(Equal(testNamespace))
-			// hub_cluster depends on environment so just check if hub_cluster is set
-			// rather than verifying the hub_cluster name
-			By("Check hub_cluster : " + extraVars["hub_cluster"].(string))
-			Expect(len(extraVars["hub_cluster"].(string)) > 0).To(BeTrue())
+			Expect(extraVars["hub_cluster"]).To(Equal("millienium-falcon.tatooine.local"))
 			Expect(len(extraVars["target_clusters"].([]interface{}))).To(Equal(1))
 			Expect(extraVars["target_clusters"].([]interface{})[0]).To(Equal("managed1"))
 			Expect(len(extraVars["policy_set"].([]interface{}))).To(Equal(1))
@@ -811,10 +808,7 @@ var _ = Describe("Test policy automation", func() {
 			extraVars := spec.(map[string]interface{})["extra_vars"].(map[string]interface{})
 			Expect(extraVars["policy_name"]).To(Equal("case5-test-policy"))
 			Expect(extraVars["namespace"]).To(Equal(testNamespace))
-			// hub_cluster depends on environment so just check if hub_cluster is set
-			// rather than verifying the hub_cluster name
-			By("Check hub_cluster : " + extraVars["hub_cluster"].(string))
-			Expect(len(extraVars["hub_cluster"].(string)) > 0).To(BeTrue())
+			Expect(extraVars["hub_cluster"]).To(Equal("millienium-falcon.tatooine.local"))
 			Expect(len(extraVars["target_clusters"].([]interface{}))).To(Equal(2))
 			Expect(len(extraVars["policy_set"].([]interface{}))).To(Equal(1))
 			Expect(extraVars["policy_set"].([]interface{})[0]).To(Equal("case5-test-policyset"))
@@ -872,7 +866,7 @@ var _ = Describe("Test policy automation", func() {
 				return len(ansiblejobList.Items)
 			}, 30, 1).Should(Equal(2))
 
-			By("Check each policy_violation_context is null in extra_vars for the compliant manual run case")
+			By("Check the policy_violation_context is mostly empty for the compliant manual run case")
 			ansiblejobList, err = clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
 				context.TODO(), metav1.ListOptions{},
 			)
@@ -887,8 +881,7 @@ var _ = Describe("Test policy automation", func() {
 			extraVars = spec.(map[string]interface{})["extra_vars"].(map[string]interface{})
 			Expect(extraVars["policy_name"]).To(Equal("case5-test-policy"))
 			Expect(extraVars["namespace"]).To(Equal(testNamespace))
-			By("Check hub_cluster : " + extraVars["hub_cluster"].(string))
-			Expect(len(extraVars["hub_cluster"].(string)) > 0).To(BeTrue())
+			Expect(extraVars["hub_cluster"]).To(Equal("millienium-falcon.tatooine.local"))
 			Expect(len(extraVars["target_clusters"].([]interface{}))).To(Equal(0))
 			Expect(len(extraVars["policy_set"].([]interface{}))).To(Equal(1))
 			Expect(extraVars["policy_set"].([]interface{})[0]).To(Equal("case5-test-policyset"))
