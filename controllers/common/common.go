@@ -188,15 +188,16 @@ func GetNumWorkers(listLength int, concurrencyPerPolicy int) int {
 }
 
 func ParseRootPolicyLabel(rootPlc string) (name, namespace string, err error) {
-	rootSplit := strings.Split(rootPlc, ".")
-	if len(rootSplit) != 2 {
-		err = fmt.Errorf("required exactly one `.` in value of label `%v`: %w",
+	// namespaces can't have a `.` (but names can) so this always correctly pulls the namespace out
+	namespace, name, found := strings.Cut(rootPlc, ".")
+	if !found {
+		err = fmt.Errorf("required at least one `.` in value of label `%v`: %w",
 			RootPolicyLabel, ErrInvalidLabelValue)
 
 		return "", "", err
 	}
 
-	return rootSplit[1], rootSplit[0], nil
+	return name, namespace, nil
 }
 
 // TypeConverter is a helper function to converter type struct a to b

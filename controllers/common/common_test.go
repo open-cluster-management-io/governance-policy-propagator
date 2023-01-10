@@ -10,7 +10,7 @@ func TestParseRootPolicyLabel(t *testing.T) {
 	}{
 		"foobar":   {"", "", true},
 		"foo.bar":  {"bar", "foo", false},
-		"fo.ob.ar": {"", "", true},
+		"fo.ob.ar": {"ob.ar", "fo", false},
 	}
 
 	for input, expected := range tests {
