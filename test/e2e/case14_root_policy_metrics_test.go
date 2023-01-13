@@ -5,6 +5,8 @@ package e2e
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -13,13 +15,25 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
-var _ = Describe("Test policy template metrics", Ordered, func() {
+var _ = Describe("Test root policy metrics", Ordered, func() {
 	const (
 		policyName = "case9-test-policy"
 		policyYaml = "../resources/case9_templates/case9-test-policy.yaml"
 	)
 
 	Describe("Create policy, placement and referenced resource in ns:"+testNamespace, func() {
+		prePolicyDuration := -1
+
+		It("should record root policy duration before the policy is created", func() {
+			durationMetric := utils.GetMetrics(
+				"ocm_handle_root_policy_duration_seconds_bucket_bucket", fmt.Sprintf(`le=\"%d\"`, 10))
+			Expect(len(durationMetric) != 0)
+			numEvals, err := strconv.Atoi(durationMetric[0])
+			Expect(err == nil)
+			prePolicyDuration = numEvals
+			Expect(prePolicyDuration > -1)
+		})
+
 		It("should be created in user ns", func() {
 			By("Creating " + policyYaml)
 			utils.Kubectl("apply",
@@ -61,6 +75,23 @@ var _ = Describe("Test policy template metrics", Ordered, func() {
 
 				return replicatedPlc.Object["spec"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
+		})
+
+		It("should update root policy duration after the policy is created", func() {
+			By("Checking metric bucket for root policy duration (10 seconds or less)")
+			Eventually(func() interface{} {
+				metric := utils.GetMetrics(
+					"ocm_handle_root_policy_duration_seconds_bucket_bucket", fmt.Sprintf(`le=\"%d\"`, 10))
+				if len(metric) == 0 {
+					return false
+				}
+				numEvals, err := strconv.Atoi(metric[0])
+				if err != nil {
+					return false
+				}
+
+				return numEvals > prePolicyDuration
+			}, defaultTimeoutSeconds, 1).Should(Equal(true))
 		})
 
 		It("should correctly report root policy hub template watches when propagated", func() {
