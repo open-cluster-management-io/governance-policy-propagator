@@ -9,9 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
-	"github.com/avast/retry-go/v3"
 	"github.com/go-logr/logr"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -33,14 +31,33 @@ const (
 var ErrInvalidLabelValue = errors.New("unexpected format of label value")
 
 // IsInClusterNamespace check if policy is in cluster namespace
-func IsInClusterNamespace(ns string, allClusters []clusterv1.ManagedCluster) bool {
-	for _, cluster := range allClusters {
-		if ns == cluster.GetName() {
-			return true
-		}
+func IsInClusterNamespace(c client.Client, ns string) (bool, error) {
+	cluster := &clusterv1.ManagedCluster{}
+
+	err := c.Get(context.TODO(), types.NamespacedName{Name: ns}, cluster)
+	if k8serrors.IsNotFound(err) {
+		return false, nil
 	}
 
-	return false
+	if err != nil {
+		return false, fmt.Errorf("failed to get the managed cluster %s: %w", ns, err)
+	}
+
+	return true, nil
+}
+
+func IsReplicatedPolicy(c client.Client, policy client.Object) (bool, error) {
+	rootPlcName := policy.GetLabels()[RootPolicyLabel]
+	if rootPlcName == "" {
+		return false, nil
+	}
+
+	_, _, err := ParseRootPolicyLabel(rootPlcName)
+	if err != nil {
+		return false, fmt.Errorf("invalid value set in %s: %w", RootPolicyLabel, err)
+	}
+
+	return IsInClusterNamespace(c, policy.GetNamespace())
 }
 
 // IsPbForPoicy compares group and kind with policy group and kind for given pb
@@ -86,17 +103,6 @@ func FindNonCompliantClustersForPolicy(plc *policiesv1.Policy) []string {
 	}
 
 	return clusterList
-}
-
-// GetRetryOptions returns reasonable options to call retry.Do with.
-func GetRetryOptions(logger logr.Logger, retryMsg string, attempts uint) []retry.Option {
-	return []retry.Option{
-		retry.Attempts(attempts),
-		retry.Delay(2 * time.Second),
-		retry.MaxDelay(10 * time.Second),
-		retry.OnRetry(func(n uint, err error) { logger.Info(retryMsg) }),
-		retry.LastErrorOnly(true),
-	}
 }
 
 // GetClusterPlacementDecisions return the placement decisions from cluster
@@ -198,6 +204,17 @@ func ParseRootPolicyLabel(rootPlc string) (name, namespace string, err error) {
 	}
 
 	return name, namespace, nil
+}
+
+// LabelsForRootPolicy returns the labels for given policy
+func LabelsForRootPolicy(plc *policiesv1.Policy) map[string]string {
+	return map[string]string{RootPolicyLabel: FullNameForPolicy(plc)}
+}
+
+// fullNameForPolicy returns the fully qualified name for given policy
+// full qualified name: ${namespace}.${name}
+func FullNameForPolicy(plc *policiesv1.Policy) string {
+	return plc.GetNamespace() + "." + plc.GetName()
 }
 
 // TypeConverter is a helper function to converter type struct a to b

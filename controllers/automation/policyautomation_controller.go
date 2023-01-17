@@ -26,7 +26,6 @@ import (
 	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	policyv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
 	"open-cluster-management.io/governance-policy-propagator/controllers/common"
-	"open-cluster-management.io/governance-policy-propagator/controllers/propagator"
 )
 
 const ControllerName string = "policy-automation"
@@ -182,7 +181,7 @@ func (r *PolicyAutomationReconciler) getViolationContext(
 	err = r.List(
 		context.TODO(),
 		replicatedPlcList,
-		client.MatchingLabels(propagator.LabelsForRootPolicy(policy)),
+		client.MatchingLabels(common.LabelsForRootPolicy(policy)),
 	)
 	if err != nil {
 		log.Error(err, "Failed to list the replicated policies")

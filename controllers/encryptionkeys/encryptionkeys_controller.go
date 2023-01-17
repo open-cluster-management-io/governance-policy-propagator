@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/avast/retry-go/v3"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -238,12 +237,7 @@ func (r *EncryptionKeysReconciler) triggerTemplateUpdate(
 
 	policies := policyv1.PolicyList{}
 	// Get all the policies in the cluster namespace
-	err := retry.Do(
-		func() error {
-			return r.List(ctx, &policies, client.InNamespace(clusterName))
-		},
-		common.GetRetryOptions(log.V(1), "Retrying to list the managed cluster policy templates", retries+1)...,
-	)
+	err := r.List(ctx, &policies, client.InNamespace(clusterName))
 	if err != nil {
 		log.Error(err, "Failed to trigger all the policies to be reprocessed after the key rotation")
 
@@ -289,14 +283,7 @@ func (r *EncryptionKeysReconciler) triggerTemplateUpdate(
 			},
 		}
 
-		err = retry.Do(
-			func() error {
-				return r.Patch(ctx, rootPolicy, client.RawPatch(types.MergePatchType, patch))
-			},
-			common.GetRetryOptions(
-				log.V(1), "Retrying to trigger the policy templates to be reprocessed", retries+1,
-			)...,
-		)
+		err = r.Patch(ctx, rootPolicy, client.RawPatch(types.MergePatchType, patch))
 		if err != nil {
 			log.Error(
 				err,

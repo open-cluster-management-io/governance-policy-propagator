@@ -224,6 +224,10 @@ issues:
     - linters:
         - lll
       source: \/\/ ?https?:\/\/
+    # Disable the lint failure about the name "stuttering"
+    - linters:
+        - revive
+      source: type PolicyStatusReconciler struct
 
   # Independently from option `exclude` we use default exclude patterns,
   # it can be disabled by this option. To list all

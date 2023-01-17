@@ -4,12 +4,9 @@ import (
 	"context"
 	"sort"
 
-	retry "github.com/avast/retry-go/v3"
-	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/apimachinery/pkg/types"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
-	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
 // calculatePerClusterStatus lists up all policies replicated from the input policy, and stores
@@ -17,52 +14,36 @@ import (
 // will be marked as NonCompliant in the result. The result is sorted by cluster name. An error
 // will be returned if lookup of the replicated policies fails, and the retries also fail.
 func (r *PolicyReconciler) calculatePerClusterStatus(
-	instance *policiesv1.Policy, failedClusters decisionSet,
+	instance *policiesv1.Policy, allDecisions, failedClusters decisionSet,
 ) ([]*policiesv1.CompliancePerClusterStatus, error) {
 	if instance.Spec.Disabled {
 		return nil, nil
 	}
 
-	replicatedPlcList := &policiesv1.PolicyList{}
+	status := make([]*policiesv1.CompliancePerClusterStatus, 0, len(allDecisions))
 
-	log.V(1).Info("Getting the replicated policies")
-
-	err := retry.Do(
-		func() error {
-			return r.List(
-				context.TODO(),
-				replicatedPlcList,
-				client.MatchingLabels(LabelsForRootPolicy(instance)),
-			)
-		},
-		getRetryOptions(log.V(1), "Retrying to list the replicated policies")...,
-	)
-	if err != nil {
-		log.Info("Gave up on listing the replicated policies after too many retries")
-		r.recordWarning(instance, "Could not list the replicated policies")
-
-		return nil, err
-	}
-
-	status := make([]*policiesv1.CompliancePerClusterStatus, 0, len(replicatedPlcList.Items)+len(failedClusters))
-
-	// Update the status based on the replicated policies
-	for _, rPlc := range replicatedPlcList.Items {
-		key := appsv1.PlacementDecision{
-			ClusterName:      rPlc.GetLabels()[common.ClusterNameLabel],
-			ClusterNamespace: rPlc.GetLabels()[common.ClusterNamespaceLabel],
-		}
-
-		if failed := failedClusters[key]; failed {
+	// Update the status based on the processed decisions
+	for decision := range allDecisions {
+		if failedClusters[decision] {
 			// Skip the replicated policies that failed to be properly replicated
 			// for now. This will be handled later.
 			continue
 		}
 
+		rPlc := &policiesv1.Policy{}
+		key := types.NamespacedName{
+			Namespace: decision.ClusterNamespace, Name: instance.Namespace + "." + instance.Name,
+		}
+
+		err := r.Get(context.TODO(), key, rPlc)
+		if err != nil {
+			return nil, err
+		}
+
 		status = append(status, &policiesv1.CompliancePerClusterStatus{
 			ComplianceState:  rPlc.Status.ComplianceState,
-			ClusterName:      key.ClusterName,
-			ClusterNamespace: key.ClusterNamespace,
+			ClusterName:      decision.ClusterName,
+			ClusterNamespace: decision.ClusterNamespace,
 		})
 	}
 
@@ -88,9 +69,9 @@ func (r *PolicyReconciler) calculatePerClusterStatus(
 	return status, nil
 }
 
-// calculateRootCompliance uses the input per-cluster statuses to determine what a root policy's
+// CalculateRootCompliance uses the input per-cluster statuses to determine what a root policy's
 // ComplianceState should be. General precedence is: NonCompliant > Pending > Unknown > Compliant.
-func calculateRootCompliance(clusters []*policiesv1.CompliancePerClusterStatus) policiesv1.ComplianceState {
+func CalculateRootCompliance(clusters []*policiesv1.CompliancePerClusterStatus) policiesv1.ComplianceState {
 	if len(clusters) == 0 {
 		// No clusters == no status
 		return ""

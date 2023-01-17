@@ -70,7 +70,7 @@ func TestCalculateRootCompliance(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := calculateRootCompliance(test.input)
+			got := CalculateRootCompliance(test.input)
 			if !reflect.DeepEqual(test.want, got) {
 				t.Fatalf("expected: %v, got: %v", test.want, got)
 			}

@@ -3,7 +3,6 @@ module open-cluster-management.io/governance-policy-propagator
 go 1.19
 
 require (
-	github.com/avast/retry-go/v3 v3.1.1
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/go-logr/logr v1.2.2
 	github.com/go-logr/zapr v1.2.2
