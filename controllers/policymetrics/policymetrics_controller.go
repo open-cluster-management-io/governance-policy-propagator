@@ -10,7 +10,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -52,18 +51,16 @@ func (r *MetricReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 
 	// Need to know if the policy is a root policy to create the correct prometheus labels
 	// Can't try to use a label on the policy, because the policy might have been deleted.
-	clusterList := &clusterv1.ManagedClusterList{}
-
-	err := r.List(ctx, clusterList, &client.ListOptions{})
+	inClusterNs, err := common.IsInClusterNamespace(r.Client, request.Namespace)
 	if err != nil {
-		log.Error(err, "Failed to list clusters, going to requeue the request")
+		log.Error(err, "Failed to determine if the policy is a replicated policy")
 
 		return reconcile.Result{}, err
 	}
 
 	var promLabels map[string]string
 
-	if common.IsInClusterNamespace(request.Namespace, clusterList.Items) {
+	if inClusterNs {
 		// propagated policies should look like <namespace>.<name>
 		// also note: k8s namespace names follow RFC 1123 (so no "." in it)
 		splitName := strings.SplitN(request.Name, ".", 2)

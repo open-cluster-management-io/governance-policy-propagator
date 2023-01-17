@@ -142,27 +142,6 @@ var _ = Describe("Test unexpected policy mutation", func() {
 			return plc.Object["spec"]
 		}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(rootPlc.Object["spec"]))
 	})
-	It("Should recover root policy status if modified", func() {
-		By("Clearing the status of the root policy")
-		rootPlc := utils.GetWithTimeout(
-			clientHubDynamic, gvrPolicy, case3PolicyName, testNamespace, true, defaultTimeoutSeconds,
-		)
-		Expect(rootPlc).ToNot(BeNil())
-		rootPlc.Object["status"] = policiesv1.PolicyStatus{}
-		rootPlc, err := clientHubDynamic.Resource(gvrPolicy).Namespace(testNamespace).UpdateStatus(
-			context.TODO(), rootPlc, metav1.UpdateOptions{},
-		)
-		Expect(err).To(BeNil())
-		By("Getting root policy again")
-		yamlPlc := utils.ParseYaml("../resources/case3_mutation_recovery/managed-both-status-compliant.yaml")
-		Eventually(func() interface{} {
-			rootPlc = utils.GetWithTimeout(
-				clientHubDynamic, gvrPolicy, case3PolicyName, testNamespace, true, defaultTimeoutSeconds,
-			)
-
-			return rootPlc.Object["status"]
-		}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
-	})
 	It("Should remove labels added to replicated policies", func() {
 		By("Adding a label to the replicated policy in ns managed2")
 		plc := utils.GetWithTimeout(

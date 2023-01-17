@@ -16,17 +16,6 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
-// LabelsForRootPolicy returns the labels for given policy
-func LabelsForRootPolicy(plc *policiesv1.Policy) map[string]string {
-	return map[string]string{common.RootPolicyLabel: fullNameForPolicy(plc)}
-}
-
-// fullNameForPolicy returns the fully qualified name for given policy
-// full qualified name: ${namespace}.${name}
-func fullNameForPolicy(plc *policiesv1.Policy) string {
-	return plc.GetNamespace() + "." + plc.GetName()
-}
-
 // equivalentReplicatedPolicies compares replicated policies. Returns true if they match.
 func equivalentReplicatedPolicies(plc1 *policiesv1.Policy, plc2 *policiesv1.Policy) bool {
 	// Compare annotations
@@ -49,7 +38,7 @@ func equivalentReplicatedPolicies(plc1 *policiesv1.Policy, plc2 *policiesv1.Poli
 func (r *PolicyReconciler) buildReplicatedPolicy(
 	root *policiesv1.Policy, decision appsv1.PlacementDecision,
 ) (*policiesv1.Policy, error) {
-	replicatedName := fullNameForPolicy(root)
+	replicatedName := common.FullNameForPolicy(root)
 
 	replicated := root.DeepCopy()
 	replicated.SetName(replicatedName)

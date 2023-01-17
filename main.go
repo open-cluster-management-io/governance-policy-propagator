@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/go-logr/zapr"
 	"github.com/spf13/pflag"
@@ -44,6 +45,7 @@ import (
 	metricsctrl "open-cluster-management.io/governance-policy-propagator/controllers/policymetrics"
 	policysetctrl "open-cluster-management.io/governance-policy-propagator/controllers/policyset"
 	propagatorctrl "open-cluster-management.io/governance-policy-propagator/controllers/propagator"
+	rootpolicystatusctrl "open-cluster-management.io/governance-policy-propagator/controllers/rootpolicystatus"
 	"open-cluster-management.io/governance-policy-propagator/version"
 )
 
@@ -89,7 +91,7 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
-	var keyRotationDays, keyRotationMaxConcurrency uint
+	var keyRotationDays, keyRotationMaxConcurrency, policyStatusMaxConcurrency uint
 
 	pflag.StringVar(&metricsAddr, "metrics-bind-address", ":8383", "The address the metric endpoint binds to.")
 	pflag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -107,6 +109,12 @@ func main() {
 		"key-rotation-max-concurrency",
 		10,
 		"The maximum number of concurrent reconciles for the policy-encryption-keys controller",
+	)
+	pflag.UintVar(
+		&policyStatusMaxConcurrency,
+		"policy-status-max-concurrency",
+		5,
+		"The maximum number of concurrent reconciles for the policy-status controller",
 	)
 
 	pflag.Parse()
@@ -235,11 +243,14 @@ func main() {
 		}
 	}()
 
+	policiesLock := &sync.Map{}
+
 	if err = (&propagatorctrl.PolicyReconciler{
-		Client:         mgr.GetClient(),
-		Scheme:         mgr.GetScheme(),
-		Recorder:       mgr.GetEventRecorderFor(propagatorctrl.ControllerName),
-		DynamicWatcher: dynamicWatcher,
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		Recorder:        mgr.GetEventRecorderFor(propagatorctrl.ControllerName),
+		DynamicWatcher:  dynamicWatcher,
+		RootPolicyLocks: policiesLock,
 	}).SetupWithManager(mgr, dynamicWatcherSource); err != nil {
 		log.Error(err, "Unable to create the controller", "controller", propagatorctrl.ControllerName)
 		os.Exit(1)
@@ -281,6 +292,16 @@ func main() {
 		Scheme:                  mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		log.Error(err, "Unable to create controller", "controller", encryptionkeysctrl.ControllerName)
+		os.Exit(1)
+	}
+
+	if err = (&rootpolicystatusctrl.RootPolicyStatusReconciler{
+		Client:                  mgr.GetClient(),
+		MaxConcurrentReconciles: policyStatusMaxConcurrency,
+		RootPolicyLocks:         policiesLock,
+		Scheme:                  mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		log.Error(err, "Unable to create controller", "controller", rootpolicystatusctrl.ControllerName)
 		os.Exit(1)
 	}
 

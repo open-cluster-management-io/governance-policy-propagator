@@ -5,15 +5,13 @@ package propagator
 
 import (
 	"context"
-	"fmt"
-	"time"
+	"sync"
 
 	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -55,7 +53,8 @@ func (r *PolicyReconciler) SetupWithManager(mgr ctrl.Manager, additionalSources 
 		// particular way, so we will define that in a separate "Watches"
 		Watches(
 			&source.Kind{Type: &policiesv1.Policy{}},
-			&common.EnqueueRequestsFromMapFunc{ToRequests: policyMapper(mgr.GetClient())}).
+			handler.EnqueueRequestsFromMapFunc(common.PolicyMapper(mgr.GetClient())),
+			builder.WithPredicates(policyPredicates())).
 		Watches(
 			&source.Kind{Type: &policiesv1beta1.PolicySet{}},
 			handler.EnqueueRequestsFromMapFunc(policySetMapper(mgr.GetClient())),
@@ -85,9 +84,10 @@ var _ reconcile.Reconciler = &PolicyReconciler{}
 // PolicyReconciler reconciles a Policy object
 type PolicyReconciler struct {
 	client.Client
-	Scheme         *runtime.Scheme
-	Recorder       record.EventRecorder
-	DynamicWatcher k8sdepwatches.DynamicWatcher
+	Scheme          *runtime.Scheme
+	Recorder        record.EventRecorder
+	DynamicWatcher  k8sdepwatches.DynamicWatcher
+	RootPolicyLocks *sync.Map
 }
 
 // Reconcile reads that state of the cluster for a Policy object and makes changes based on the state read
@@ -97,6 +97,13 @@ type PolicyReconciler struct {
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	log := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+
+	log.V(3).Info("Acquiring the lock for the root policy")
+
+	lock, _ := r.RootPolicyLocks.LoadOrStore(request.NamespacedName, &sync.Mutex{})
+
+	lock.(*sync.Mutex).Lock()
+	defer func() { lock.(*sync.Mutex).Unlock() }()
 
 	// Set the hub template watch metric after reconcile
 	defer func() {
@@ -113,7 +120,7 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 
 	err := r.Get(ctx, request.NamespacedName, instance)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if k8serrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected.
 			log.Info("Policy not found, so it may have been deleted. Deleting the replicated policies.")
@@ -141,36 +148,20 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 		return reconcile.Result{}, err
 	}
 
-	clusterList := &clusterv1.ManagedClusterList{}
-
-	err = r.List(ctx, clusterList, &client.ListOptions{})
+	inClusterNs, err := common.IsInClusterNamespace(r.Client, instance.Namespace)
 	if err != nil {
-		log.Error(err, "Failed to list ManagedCluster objects. Requeueing the request.")
+		log.Error(err, "Failed to determine if the policy is in a managed cluster namespace. Requeueing the request.")
 
 		return reconcile.Result{}, err
 	}
 
-	if !common.IsInClusterNamespace(request.Namespace, clusterList.Items) {
-		// handleRootPolicy handles all retries and it will give up as appropriate. In that case
-		// requeue it to be reprocessed later.
+	if !inClusterNs {
 		err := r.handleRootPolicy(instance)
 		if err != nil {
 			propagationFailureMetric.WithLabelValues(instance.GetName(), instance.GetNamespace()).Inc()
-
-			r.recordWarning(
-				instance,
-				fmt.Sprintf("Retrying the request in %d minutes", requeueErrorDelay),
-			)
-
-			duration := time.Duration(requeueErrorDelay) * time.Minute
-
-			// An error must not be returned for RequeueAfter to take effect. See:
-			// https://github.com/kubernetes-sigs/controller-runtime/blob/5de246bfbfd1a75f966b5662edcb9c7235244160/pkg/internal/controller/controller.go#L319-L322
-			// nolint: nilerr
-			return reconcile.Result{RequeueAfter: duration}, nil
 		}
 
-		return reconcile.Result{}, nil
+		return reconcile.Result{}, err
 	}
 
 	log = log.WithValues("name", instance.GetName(), "namespace", instance.GetNamespace())
@@ -178,7 +169,7 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 	log.Info("The policy was found in the cluster namespace but doesn't belong to any root policy, deleting it")
 
 	err = r.Delete(ctx, instance)
-	if err != nil && !errors.IsNotFound(err) {
+	if err != nil && !k8serrors.IsNotFound(err) {
 		log.Error(err, "Failed to delete the policy")
 
 		return reconcile.Result{}, err
