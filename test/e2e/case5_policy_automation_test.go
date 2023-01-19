@@ -171,13 +171,13 @@ var _ = Describe("Test policy automation", func() {
 			spec := ansiblejobList.Items[0].Object["spec"]
 			extraVars := spec.(map[string]interface{})["extra_vars"].(map[string]interface{})
 			Expect(extraVars["policy_name"]).To(Equal("case5-test-policy"))
-			Expect(extraVars["namespace"]).To(Equal(testNamespace))
+			Expect(extraVars["policy_namespace"]).To(Equal(testNamespace))
 			Expect(extraVars["hub_cluster"]).To(Equal("millienium-falcon.tatooine.local"))
 			Expect(len(extraVars["target_clusters"].([]interface{}))).To(Equal(1))
 			Expect(extraVars["target_clusters"].([]interface{})[0]).To(Equal("managed1"))
-			Expect(len(extraVars["policy_set"].([]interface{}))).To(Equal(1))
-			Expect(extraVars["policy_set"].([]interface{})[0]).To(Equal("case5-test-policyset"))
-			managed1 := extraVars["policy_violation_context"].(map[string]interface{})["managed1"]
+			Expect(len(extraVars["policy_sets"].([]interface{}))).To(Equal(1))
+			Expect(extraVars["policy_sets"].([]interface{})[0]).To(Equal("case5-test-policyset"))
+			managed1 := extraVars["policy_violations"].(map[string]interface{})["managed1"]
 			compliant := managed1.(map[string]interface{})["compliant"]
 			Expect(compliant).To(Equal(string(policiesv1.NonCompliant)))
 			violationMessage := managed1.(map[string]interface{})["violation_message"]
@@ -807,15 +807,15 @@ var _ = Describe("Test policy automation", func() {
 			spec := ansiblejobList.Items[0].Object["spec"]
 			extraVars := spec.(map[string]interface{})["extra_vars"].(map[string]interface{})
 			Expect(extraVars["policy_name"]).To(Equal("case5-test-policy"))
-			Expect(extraVars["namespace"]).To(Equal(testNamespace))
+			Expect(extraVars["policy_namespace"]).To(Equal(testNamespace))
 			Expect(extraVars["hub_cluster"]).To(Equal("millienium-falcon.tatooine.local"))
 			Expect(len(extraVars["target_clusters"].([]interface{}))).To(Equal(2))
-			Expect(len(extraVars["policy_set"].([]interface{}))).To(Equal(1))
-			Expect(extraVars["policy_set"].([]interface{})[0]).To(Equal("case5-test-policyset"))
-			managed1 := extraVars["policy_violation_context"].(map[string]interface{})["managed1"]
+			Expect(len(extraVars["policy_sets"].([]interface{}))).To(Equal(1))
+			Expect(extraVars["policy_sets"].([]interface{})[0]).To(Equal("case5-test-policyset"))
+			managed1 := extraVars["policy_violations"].(map[string]interface{})["managed1"]
 			compliant := managed1.(map[string]interface{})["compliant"]
 			Expect(compliant).To(Equal(string(policiesv1.NonCompliant)))
-			managed2 := extraVars["policy_violation_context"].(map[string]interface{})["managed2"]
+			managed2 := extraVars["policy_violations"].(map[string]interface{})["managed2"]
 			compliant = managed2.(map[string]interface{})["compliant"]
 			Expect(compliant).To(Equal(string(policiesv1.NonCompliant)))
 
@@ -866,7 +866,7 @@ var _ = Describe("Test policy automation", func() {
 				return len(ansiblejobList.Items)
 			}, 30, 1).Should(Equal(2))
 
-			By("Check the policy_violation_context is mostly empty for the compliant manual run case")
+			By("Check policy_violations is mostly empty for the compliant manual run case")
 			ansiblejobList, err = clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
 				context.TODO(), metav1.ListOptions{},
 			)
@@ -880,12 +880,12 @@ var _ = Describe("Test policy automation", func() {
 
 			extraVars = spec.(map[string]interface{})["extra_vars"].(map[string]interface{})
 			Expect(extraVars["policy_name"]).To(Equal("case5-test-policy"))
-			Expect(extraVars["namespace"]).To(Equal(testNamespace))
+			Expect(extraVars["policy_namespace"]).To(Equal(testNamespace))
 			Expect(extraVars["hub_cluster"]).To(Equal("millienium-falcon.tatooine.local"))
 			Expect(len(extraVars["target_clusters"].([]interface{}))).To(Equal(0))
-			Expect(len(extraVars["policy_set"].([]interface{}))).To(Equal(1))
-			Expect(extraVars["policy_set"].([]interface{})[0]).To(Equal("case5-test-policyset"))
-			Expect(extraVars["policy_violation_context"]).To(BeNil())
+			Expect(len(extraVars["policy_sets"].([]interface{}))).To(Equal(1))
+			Expect(extraVars["policy_sets"].([]interface{})[0]).To(Equal("case5-test-policyset"))
+			Expect(extraVars["policy_violations"]).To(BeNil())
 		})
 	})
 	Describe("Clean up", func() {
