@@ -195,16 +195,16 @@ func (r *PolicyAutomationReconciler) getViolationContext(
 		return violationContext, nil
 	}
 
-	policyViolationContextLimit := policyAutomation.Spec.Automation.PolicyViolationContextLimit
-	if policyViolationContextLimit == nil {
-		policyViolationContextLimit = new(uint)
-		*policyViolationContextLimit = policyv1beta1.DefaultPolicyViolationContextLimit
+	policyViolationsLimit := policyAutomation.Spec.Automation.PolicyViolationsLimit
+	if policyViolationsLimit == nil {
+		policyViolationsLimit = new(uint)
+		*policyViolationsLimit = policyv1beta1.DefaultPolicyViolationsLimit
 	}
 
-	contextLimit := int(*policyViolationContextLimit)
+	contextLimit := int(*policyViolationsLimit)
 
 	targetListMap := getTargetListMap(targetList)
-	violationContext.PolicyViolationContext = make(
+	violationContext.PolicyViolations = make(
 		map[string]policyv1beta1.ReplicatedPolicyStatus,
 		len(replicatedPlcList.Items),
 	)
@@ -219,7 +219,7 @@ func (r *PolicyAutomationReconciler) getViolationContext(
 		rPlcStatus := policyv1beta1.ReplicatedPolicyStatus{}
 		// Convert PolicyStatus to ReplicatedPolicyStatus and skip the unnecessary items
 		err := common.TypeConverter(rPlc.Status, &rPlcStatus)
-		if err != nil { // still assign the empty rPlcStatus to PolicyViolationContext later
+		if err != nil { // still assign the empty rPlcStatus to PolicyViolations later
 			log.Error(err, "The PolicyStatus cannot be converted to the type ReplicatedPolicyStatus.")
 		}
 
@@ -229,10 +229,10 @@ func (r *PolicyAutomationReconciler) getViolationContext(
 			rPlcStatus.ViolationMessage = statusDetails[0].History[0].Message
 		}
 
-		violationContext.PolicyViolationContext[clusterName] = rPlcStatus
-		if contextLimit > 0 && len(violationContext.PolicyViolationContext) == contextLimit {
+		violationContext.PolicyViolations[clusterName] = rPlcStatus
+		if contextLimit > 0 && len(violationContext.PolicyViolations) == contextLimit {
 			log.V(2).Info(
-				"PolicyViolationContextLimit is %s so skipping %s remaining replicated policies violations.",
+				"PolicyViolationsLimit is %s so skipping %s remaining replicated policies violations.",
 				fmt.Sprint(contextLimit),
 				fmt.Sprint(len(replicatedPlcList.Items)-contextLimit),
 			)

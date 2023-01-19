@@ -44,7 +44,7 @@ const (
 	Disabled   PolicyAutomationMode = "disabled"
 )
 
-const DefaultPolicyViolationContextLimit = 1000
+const DefaultPolicyViolationsLimit = 1000
 
 // AutomationDef defines the automation to invoke
 type AutomationDef struct {
@@ -66,21 +66,20 @@ type AutomationDef struct {
 	JobTTL *int `json:"jobTtl,omitempty"`
 	// +kubebuilder:validation:Minimum=0
 	// The maximum number of violating cluster contexts that will be provided to the Ansible job as extra variables.
-	// When policyViolationContextLimit is set to 0, it means no limit.
+	// When policyViolationsLimit is set to 0, it means no limit.
 	// The default value is 1000.
-	PolicyViolationContextLimit *uint `json:"policyViolationContextLimit,omitempty"`
+	PolicyViolationsLimit *uint `json:"policyViolationsLimit,omitempty"`
 }
 
 // ViolationContext defines the non-compliant replicated policy information
 // that is sent to the AnsibleJob through extra_vars.
 type ViolationContext struct {
-	TargetClusters  []string `json:"targetClusters" ansibleJob:"target_clusters"`
-	PolicyName      string   `json:"policyName" ansibleJob:"policy_name"`
-	PolicyNamespace string   `json:"namespace"`
-	HubCluster      string   `json:"hubCluster" ansibleJob:"hub_cluster"`
-	PolicySets      []string `json:"policySet" ansibleJob:"policy_set"`
-	//nolint: lll
-	PolicyViolationContext map[string]ReplicatedPolicyStatus `json:"policyViolationContext" ansibleJob:"policy_violation_context"`
+	TargetClusters   []string                          `json:"targetClusters" ansibleJob:"target_clusters"`
+	PolicyName       string                            `json:"policyName" ansibleJob:"policy_name"`
+	PolicyNamespace  string                            `json:"policyNamespace" ansibleJob:"policy_namespace"`
+	HubCluster       string                            `json:"hubCluster" ansibleJob:"hub_cluster"`
+	PolicySets       []string                          `json:"policySets" ansibleJob:"policy_sets"`
+	PolicyViolations map[string]ReplicatedPolicyStatus `json:"policyViolations" ansibleJob:"policy_violations"`
 }
 
 // PolicyAutomationStatus defines the observed state of PolicyAutomation
