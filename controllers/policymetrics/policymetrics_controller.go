@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
@@ -25,6 +26,9 @@ var log = ctrl.Log.WithName(ControllerName)
 // SetupWithManager sets up the controller with the Manager.
 func (r *MetricReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		// The work queue prevents the same item being reconciled concurrently:
+		// https://github.com/kubernetes-sigs/controller-runtime/issues/1416#issuecomment-899833144
+		WithOptions(controller.Options{MaxConcurrentReconciles: int(r.MaxConcurrentReconciles)}).
 		Named(ControllerName).
 		For(&policiesv1.Policy{}).
 		Complete(r)
@@ -36,7 +40,8 @@ var _ reconcile.Reconciler = &MetricReconciler{}
 // MetricReconciler reconciles the metrics for the Policy
 type MetricReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	MaxConcurrentReconciles uint
+	Scheme                  *runtime.Scheme
 }
 
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies,verbs=get;list;watch;create;update;patch;delete

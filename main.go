@@ -91,7 +91,7 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
-	var keyRotationDays, keyRotationMaxConcurrency, policyStatusMaxConcurrency uint
+	var keyRotationDays, keyRotationMaxConcurrency, policyMetricsMaxConcurrency, policyStatusMaxConcurrency uint
 
 	pflag.StringVar(&metricsAddr, "metrics-bind-address", ":8383", "The address the metric endpoint binds to.")
 	pflag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -109,6 +109,12 @@ func main() {
 		"key-rotation-max-concurrency",
 		10,
 		"The maximum number of concurrent reconciles for the policy-encryption-keys controller",
+	)
+	pflag.UintVar(
+		&policyMetricsMaxConcurrency,
+		"policy-metrics-max-concurrency",
+		5,
+		"The maximum number of concurrent reconciles for the policy-metrics controller",
 	)
 	pflag.UintVar(
 		&policyStatusMaxConcurrency,
@@ -258,8 +264,9 @@ func main() {
 
 	if reportMetrics() {
 		if err = (&metricsctrl.MetricReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
+			Client:                  mgr.GetClient(),
+			MaxConcurrentReconciles: policyMetricsMaxConcurrency,
+			Scheme:                  mgr.GetScheme(),
 		}).SetupWithManager(mgr); err != nil {
 			log.Error(err, "Unable to create the controller", "controller", metricsctrl.ControllerName)
 			os.Exit(1)
