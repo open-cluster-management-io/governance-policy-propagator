@@ -8,8 +8,11 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/dynamic"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
@@ -534,6 +537,212 @@ var _ = Describe("Test policy propagation", func() {
 				"-n", testNamespace)
 			opt := metav1.ListOptions{}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 10)
+		})
+	})
+
+	Describe("Test spec.copyPolicyMetadata", Ordered, func() {
+		const policyName = "case1-metadata"
+		policyClient := func() dynamic.ResourceInterface {
+			return clientHubDynamic.Resource(gvrPolicy).Namespace(testNamespace)
+		}
+
+		getPolicy := func() *policiesv1.Policy {
+			return &policiesv1.Policy{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       policiesv1.Kind,
+					APIVersion: policiesv1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      policyName,
+					Namespace: testNamespace,
+				},
+				Spec: policiesv1.PolicySpec{
+					Disabled:        false,
+					PolicyTemplates: []*policiesv1.PolicyTemplate{},
+				},
+			}
+		}
+
+		BeforeAll(func() {
+			By("Creating a PlacementRule")
+			plr := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "apps.open-cluster-management.io/v1",
+					"kind":       "PlacementRule",
+					"metadata": map[string]interface{}{
+						"name":      policyName,
+						"namespace": testNamespace,
+					},
+					"spec": map[string]interface{}{},
+				},
+			}
+			var err error
+			plr, err = clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).Create(
+				context.TODO(), plr, metav1.CreateOptions{},
+			)
+			Expect(err).To(BeNil())
+
+			plr.Object["status"] = utils.GeneratePlrStatus("managed1")
+			_, err = clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
+				context.TODO(), plr, metav1.UpdateOptions{},
+			)
+			Expect(err).To(BeNil())
+
+			By("Creating a PlacementBinding")
+			plb := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": policiesv1.GroupVersion.String(),
+					"kind":       "PlacementBinding",
+					"metadata": map[string]interface{}{
+						"name":      policyName,
+						"namespace": testNamespace,
+					},
+					"placementRef": map[string]interface{}{
+						"apiGroup": gvrPlacementRule.Group,
+						"kind":     "PlacementRule",
+						"name":     policyName,
+					},
+					"subjects": []interface{}{
+						map[string]interface{}{
+							"apiGroup": policiesv1.GroupVersion.Group,
+							"kind":     policiesv1.Kind,
+							"name":     policyName,
+						},
+					},
+				},
+			}
+
+			_, err = clientHubDynamic.Resource(gvrPlacementBinding).Namespace(testNamespace).Create(
+				context.TODO(), plb, metav1.CreateOptions{},
+			)
+			Expect(err).To(BeNil())
+		})
+
+		AfterEach(func() {
+			By("Removing the policy")
+			err := policyClient().Delete(context.TODO(), policyName, metav1.DeleteOptions{})
+			if !errors.IsNotFound(err) {
+				Expect(err).To(BeNil())
+			}
+
+			replicatedPolicy := utils.GetWithTimeout(
+				clientHubDynamic,
+				gvrPolicy,
+				testNamespace+"."+policyName,
+				"managed1",
+				false,
+				defaultTimeoutSeconds,
+			)
+			Expect(replicatedPolicy).To(BeNil())
+		})
+
+		AfterAll(func() {
+			By("Removing the PlacementRule")
+			err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).Delete(
+				context.TODO(), policyName, metav1.DeleteOptions{},
+			)
+			if !errors.IsNotFound(err) {
+				Expect(err).To(BeNil())
+			}
+
+			By("Removing the PlacementBinding")
+			err = clientHubDynamic.Resource(gvrPlacementBinding).Namespace(testNamespace).Delete(
+				context.TODO(), policyName, metav1.DeleteOptions{},
+			)
+			if !errors.IsNotFound(err) {
+				Expect(err).To(BeNil())
+			}
+		})
+
+		It("Verifies that spec.copyPolicyMetadata defaults to unset", func() {
+			By("Creating an empty policy")
+			policy := getPolicy()
+			policyMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(policy)
+			Expect(err).To(BeNil())
+
+			policyRV, err := policyClient().Create(
+				context.TODO(), &unstructured.Unstructured{Object: policyMap}, metav1.CreateOptions{},
+			)
+			Expect(err).To(BeNil())
+
+			_, found, _ := unstructured.NestedBool(policyRV.Object, "spec", "copyPolicyMetadata")
+			Expect(found).To(BeFalse())
+		})
+
+		It("verifies that the labels and annotations are copied with spec.copyPolicyMetadata=true", func() {
+			By("Creating a policy with labels and annotations")
+			policy := getPolicy()
+			copyPolicyMetadata := true
+			policy.Spec.CopyPolicyMetadata = &copyPolicyMetadata
+			policy.SetAnnotations(map[string]string{"do": "copy", "please": "do-copy"})
+			policy.SetLabels(map[string]string{"do": "copy", "please": "do-copy"})
+
+			policyMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(policy)
+			Expect(err).To(BeNil())
+
+			_, err = policyClient().Create(
+				context.TODO(), &unstructured.Unstructured{Object: policyMap}, metav1.CreateOptions{},
+			)
+			Expect(err).To(BeNil())
+
+			Eventually(func(g Gomega) {
+				replicatedPlc := utils.GetWithTimeout(
+					clientHubDynamic,
+					gvrPolicy,
+					testNamespace+"."+policyName,
+					"managed1",
+					true,
+					defaultTimeoutSeconds,
+				)
+
+				annotations := replicatedPlc.GetAnnotations()
+				g.Expect(annotations["do"]).To(Equal("copy"))
+				g.Expect(annotations["please"]).To(Equal("do-copy"))
+				// This annotation is always set.
+				g.Expect(annotations["argocd.argoproj.io/compare-options"]).To(Equal("IgnoreExtraneous"))
+
+				labels := replicatedPlc.GetLabels()
+				g.Expect(labels["do"]).To(Equal("copy"))
+				g.Expect(labels["please"]).To(Equal("do-copy"))
+			}, defaultTimeoutSeconds, 1).Should(Succeed())
+		})
+
+		It("verifies that the labels and annotations are not copied with spec.copyPolicyMetadata=false", func() {
+			By("Creating a policy with labels and annotations")
+			policy := getPolicy()
+			copyPolicyMetadata := false
+			policy.Spec.CopyPolicyMetadata = &copyPolicyMetadata
+			policy.SetAnnotations(map[string]string{"do-not": "copy", "please": "do-not-copy"})
+			policy.SetLabels(map[string]string{"do-not": "copy", "please": "do-not-copy"})
+
+			policyMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(policy)
+			Expect(err).To(BeNil())
+
+			_, err = policyClient().Create(
+				context.TODO(), &unstructured.Unstructured{Object: policyMap}, metav1.CreateOptions{},
+			)
+			Expect(err).To(BeNil())
+
+			Eventually(func(g Gomega) {
+				replicatedPlc := utils.GetWithTimeout(
+					clientHubDynamic,
+					gvrPolicy,
+					testNamespace+"."+policyName,
+					"managed1",
+					true,
+					defaultTimeoutSeconds,
+				)
+
+				annotations := replicatedPlc.GetAnnotations()
+				g.Expect(annotations["do-not"]).To(Equal(""))
+				g.Expect(annotations["please"]).To(Equal(""))
+				// This annotation is always set.
+				g.Expect(annotations["argocd.argoproj.io/compare-options"]).To(Equal("IgnoreExtraneous"))
+
+				labels := replicatedPlc.GetLabels()
+				g.Expect(labels["do-not"]).To(Equal(""))
+				g.Expect(labels["please"]).To(Equal(""))
+			}, defaultTimeoutSeconds, 1).Should(Succeed())
 		})
 	})
 })
