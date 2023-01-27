@@ -16,6 +16,8 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
+const argoCDCompareOptionsAnnotation = "argocd.argoproj.io/compare-options"
+
 // equivalentReplicatedPolicies compares replicated policies. Returns true if they match.
 func equivalentReplicatedPolicies(plc1 *policiesv1.Policy, plc2 *policiesv1.Policy) bool {
 	// Compare annotations
@@ -52,12 +54,42 @@ func (r *PolicyReconciler) buildReplicatedPolicy(
 		labels = map[string]string{}
 	}
 
+	if root.Spec.CopyPolicyMetadata != nil && !*root.Spec.CopyPolicyMetadata {
+		originalLabels := replicated.GetLabels()
+
+		for label := range originalLabels {
+			if !strings.HasPrefix(label, policiesv1.GroupVersion.Group+"/") {
+				delete(labels, label)
+			}
+		}
+	}
+
 	// Extra labels on replicated policies
 	labels[common.ClusterNameLabel] = decision.ClusterName
 	labels[common.ClusterNamespaceLabel] = decision.ClusterNamespace
 	labels[common.RootPolicyLabel] = replicatedName
 
 	replicated.SetLabels(labels)
+
+	annotations := replicated.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+
+	if root.Spec.CopyPolicyMetadata != nil && !*root.Spec.CopyPolicyMetadata {
+		originalAnnotations := replicated.GetAnnotations()
+
+		for annotation := range originalAnnotations {
+			if !strings.HasPrefix(annotation, policiesv1.GroupVersion.Group+"/") {
+				delete(annotations, annotation)
+			}
+		}
+	}
+
+	// Always set IgnoreExtraneous to avoid ArgoCD managing the replicated policy.
+	annotations[argoCDCompareOptionsAnnotation] = "IgnoreExtraneous"
+
+	replicated.SetAnnotations(annotations)
 
 	var err error
 
