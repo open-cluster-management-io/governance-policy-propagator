@@ -87,7 +87,7 @@ func GetClusterLevelWithTimeout(
 
 	var obj *unstructured.Unstructured
 
-	Eventually(func() error {
+	EventuallyWithOffset(1, func() error {
 		var err error
 		namespace := clientHubDynamic.Resource(gvr)
 
@@ -129,7 +129,7 @@ func GetWithTimeout(
 
 	var obj *unstructured.Unstructured
 
-	Eventually(func() error {
+	EventuallyWithOffset(1, func() error {
 		var err error
 		namespace := clientHubDynamic.Resource(gvr).Namespace(namespace)
 
@@ -172,7 +172,7 @@ func ListWithTimeout(
 
 	var list *unstructured.UnstructuredList
 
-	Eventually(func() error {
+	EventuallyWithOffset(1, func() error {
 		var err error
 		list, err = clientHubDynamic.Resource(gvr).List(context.TODO(), opts)
 
@@ -211,7 +211,7 @@ func ListWithTimeoutByNamespace(
 
 	var list *unstructured.UnstructuredList
 
-	Eventually(func() error {
+	EventuallyWithOffset(1, func() error {
 		var err error
 		list, err = clientHubDynamic.Resource(gvr).Namespace(ns).List(context.TODO(), opts)
 
