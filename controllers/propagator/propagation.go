@@ -808,7 +808,7 @@ func (r *PolicyReconciler) handleDecision(
 	if policyHasTemplates(desiredReplicatedPolicy) {
 		// If the replicated policy has an initialization vector specified, set it for processing
 		if initializationVector, ok := replicatedPlc.Annotations[IVAnnotation]; ok {
-			tempAnnotations := replicatedPlc.GetAnnotations()
+			tempAnnotations := desiredReplicatedPolicy.GetAnnotations()
 			if tempAnnotations == nil {
 				tempAnnotations = make(map[string]string)
 			}
