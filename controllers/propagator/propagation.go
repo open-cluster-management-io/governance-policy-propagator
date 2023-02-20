@@ -824,7 +824,7 @@ func (r *PolicyReconciler) handleDecision(
 		templateRefObjs, _ = r.processTemplates(desiredReplicatedPolicy, decision, rootPlc)
 	}
 
-	if !equivalentReplicatedPolicies(desiredReplicatedPolicy, replicatedPlc) {
+	if !common.EquivalentReplicatedPolicies(desiredReplicatedPolicy, replicatedPlc) {
 		// update needed
 		log.Info("Root policy and replicated policy mismatch, updating replicated policy")
 		replicatedPlc.SetAnnotations(desiredReplicatedPolicy.GetAnnotations())

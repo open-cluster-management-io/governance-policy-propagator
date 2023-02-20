@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/api/equality"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -29,6 +30,24 @@ const (
 )
 
 var ErrInvalidLabelValue = errors.New("unexpected format of label value")
+
+// equivalentReplicatedPolicies compares replicated policies. Returns true if they match.
+// NOTE: This function is in common because it's used in other controller repos,
+// i.e. governance-policy-framework-addon
+func EquivalentReplicatedPolicies(plc1 *policiesv1.Policy, plc2 *policiesv1.Policy) bool {
+	// Compare annotations
+	if !equality.Semantic.DeepEqual(plc1.GetAnnotations(), plc2.GetAnnotations()) {
+		return false
+	}
+
+	// Compare labels
+	if !equality.Semantic.DeepEqual(plc1.GetLabels(), plc2.GetLabels()) {
+		return false
+	}
+
+	// Compare the specs
+	return equality.Semantic.DeepEqual(plc1.Spec, plc2.Spec)
+}
 
 // IsInClusterNamespace check if policy is in cluster namespace
 func IsInClusterNamespace(c client.Client, ns string) (bool, error) {

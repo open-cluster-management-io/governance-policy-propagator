@@ -13,6 +13,7 @@ import (
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	policiesv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
+	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
 func fakeBasicPolicy(name, namespace string) *policiesv1.Policy {
@@ -109,7 +110,7 @@ func TestEquivalentReplicatedPolicies(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			if equivalentReplicatedPolicies(basePolicy, test.comparePlc) != test.expected {
+			if common.EquivalentReplicatedPolicies(basePolicy, test.comparePlc) != test.expected {
 				if test.expected {
 					t.Fatalf("Expected policies to be equivalent: %+v, %+v", basePolicy, test.comparePlc)
 				} else {

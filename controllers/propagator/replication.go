@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
-	"k8s.io/apimachinery/pkg/api/equality"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -17,22 +16,6 @@ import (
 )
 
 const argoCDCompareOptionsAnnotation = "argocd.argoproj.io/compare-options"
-
-// equivalentReplicatedPolicies compares replicated policies. Returns true if they match.
-func equivalentReplicatedPolicies(plc1 *policiesv1.Policy, plc2 *policiesv1.Policy) bool {
-	// Compare annotations
-	if !equality.Semantic.DeepEqual(plc1.GetAnnotations(), plc2.GetAnnotations()) {
-		return false
-	}
-
-	// Compare labels
-	if !equality.Semantic.DeepEqual(plc1.GetLabels(), plc2.GetLabels()) {
-		return false
-	}
-
-	// Compare the specs
-	return equality.Semantic.DeepEqual(plc1.Spec, plc2.Spec)
-}
 
 // buildReplicatedPolicy constructs a replicated policy based on a root policy and a placementDecision.
 // In particular, it adds labels that the policy framework uses, and ensures that policy dependencies
