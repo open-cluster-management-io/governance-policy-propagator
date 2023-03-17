@@ -17,21 +17,22 @@ import (
 )
 
 const (
-	case9PolicyName              = "case9-test-policy"
-	case9PolicyYaml              = "../resources/case9_templates/case9-test-policy.yaml"
-	case9ReplicatedPolicyYamlM1  = "../resources/case9_templates/case9-test-replpolicy-managed1.yaml"
-	case9ReplicatedPolicyYamlM2  = "../resources/case9_templates/case9-test-replpolicy-managed2.yaml"
-	case9PolicyNameEncrypted     = "case9-test-policy-encrypted"
-	case9PolicyYamlEncrypted     = "../resources/case9_templates/case9-test-policy_encrypted.yaml"
-	case9PolicyYamlEncryptedRepl = "../resources/case9_templates/case9-test-replpolicy_encrypted-"
-	case9EncryptionSecret        = "../resources/case9_templates/case9-test-encryption-secret.yaml"
-	case9EncryptionSecretName    = "policy-encryption-key"
-	case9SecretName              = "case9-secret"
-	IVAnnotation                 = "policy.open-cluster-management.io/encryption-iv"
+	case9PolicyName                   = "case9-test-policy"
+	case9PolicyYaml                   = "../resources/case9_templates/case9-test-policy.yaml"
+	case9ReplicatedPolicyYamlM1       = "../resources/case9_templates/case9-test-replpolicy-managed1.yaml"
+	case9ReplicatedPolicyYamlM1Update = "../resources/case9_templates/case9-test-replpolicy-managed1-relabelled.yaml"
+	case9ReplicatedPolicyYamlM2       = "../resources/case9_templates/case9-test-replpolicy-managed2.yaml"
+	case9PolicyNameEncrypted          = "case9-test-policy-encrypted"
+	case9PolicyYamlEncrypted          = "../resources/case9_templates/case9-test-policy_encrypted.yaml"
+	case9PolicyYamlEncryptedRepl      = "../resources/case9_templates/case9-test-replpolicy_encrypted-"
+	case9EncryptionSecret             = "../resources/case9_templates/case9-test-encryption-secret.yaml"
+	case9EncryptionSecretName         = "policy-encryption-key"
+	case9SecretName                   = "case9-secret"
+	IVAnnotation                      = "policy.open-cluster-management.io/encryption-iv"
 )
 
 var _ = Describe("Test policy templates", func() {
-	Describe("Create policy, placement and referenced resource in ns:"+testNamespace, func() {
+	Describe("Create policy, placement and referenced resource in ns:"+testNamespace, Ordered, func() {
 		It("should be created in user ns", func() {
 			By("Creating " + case9PolicyYaml)
 			utils.Kubectl("apply",
@@ -60,6 +61,25 @@ var _ = Describe("Test policy templates", func() {
 			Expect(plc).ToNot(BeNil())
 
 			yamlPlc := utils.ParseYaml(case9ReplicatedPolicyYamlM1)
+			Eventually(func() interface{} {
+				replicatedPlc := utils.GetWithTimeout(
+					clientHubDynamic,
+					gvrPolicy,
+					testNamespace+"."+case9PolicyName,
+					"managed1",
+					true,
+					defaultTimeoutSeconds,
+				)
+
+				return replicatedPlc.Object["spec"]
+			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
+		})
+		It("should update the templated value when the managed cluster labels change", func() {
+			By("Updating the label on managed1")
+			utils.Kubectl("label", "managedcluster", "managed1", "vendor=Fake", "--overwrite")
+
+			By("Verifying the policy is updated")
+			yamlPlc := utils.ParseYaml(case9ReplicatedPolicyYamlM1Update)
 			Eventually(func() interface{} {
 				replicatedPlc := utils.GetWithTimeout(
 					clientHubDynamic,
@@ -104,10 +124,12 @@ var _ = Describe("Test policy templates", func() {
 				return replicatedPlc.Object["spec"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
 		})
-		It("should clean up", func() {
+		AfterAll(func() {
 			utils.Kubectl("delete",
 				"-f", case9PolicyYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--ignore-not-found")
+			utils.Kubectl("label", "managedcluster", "managed1", "vendor=auto-detect", "--overwrite")
 			opt := metav1.ListOptions{}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, defaultTimeoutSeconds)
 		})
