@@ -34,6 +34,8 @@ spec:
                     {{hub fromConfigMap "policy-propagator-test" "case9-config2" "saying" | base64dec | indent 4 hub}}
                   autoindent-test: |
                     {{hub fromConfigMap "policy-propagator-test" "case9-config2" "saying" | base64dec | autoindent hub}}
+                  label-vendor-test: |
+                    {{hub .ManagedClusterLabels.vendor hub}}
 ---
 apiVersion: policy.open-cluster-management.io/v1
 kind: PlacementBinding

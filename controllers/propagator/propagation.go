@@ -10,6 +10,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	templates "github.com/stolostron/go-template-utils/v3/pkg/templates"
@@ -21,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -860,10 +862,10 @@ func policyHasTemplates(instance *policiesv1.Policy) bool {
 	return false
 }
 
-// iterates through policy definitions  and  processes hub templates
-// a special  annotation policy.open-cluster-management.io/trigger-update is used to trigger reprocessing of the
-// templates and ensuring that the replicated-policies in cluster is updated only if there is a change.
-// this annotation is deleted from the replicated policies and not propagated to the cluster namespaces.
+// Iterates through policy definitions and processes hub templates. A special annotation
+// policy.open-cluster-management.io/trigger-update is used to trigger reprocessing of the templates
+// and ensure that replicated-policies in the cluster are updated only if there is a change. This
+// annotation is deleted from the replicated policies and not propagated to the cluster namespaces.
 func (r *PolicyReconciler) processTemplates(
 	replicatedPlc *policiesv1.Policy, decision appsv1.PlacementDecision, rootPlc *policiesv1.Policy,
 ) (
@@ -934,9 +936,30 @@ func (r *PolicyReconciler) processTemplates(
 		log.V(1).Info("Found an object definition with templates")
 
 		templateContext := struct {
-			ManagedClusterName string
+			ManagedClusterName   string
+			ManagedClusterLabels map[string]string
 		}{
 			ManagedClusterName: decision.ClusterName,
+		}
+
+		if strings.Contains(string(policyT.ObjectDefinition.Raw), "ManagedClusterLabels") {
+			templateRefObjs[k8sdepwatches.ObjectIdentifier{
+				Group:     "cluster.open-cluster-management.io",
+				Version:   "v1",
+				Kind:      "ManagedCluster",
+				Namespace: "",
+				Name:      decision.ClusterName,
+			}] = true
+
+			managedCluster := &clusterv1.ManagedCluster{}
+
+			err := r.Get(context.TODO(), types.NamespacedName{Name: decision.ClusterName}, managedCluster)
+			if err != nil {
+				log.Error(err, "Failed to get the ManagedCluster in order to use its labels in a hub template")
+			}
+
+			// if an error occurred, the ManagedClusterLabels will just be left empty
+			templateContext.ManagedClusterLabels = managedCluster.Labels
 		}
 
 		// Handle value encryption initialization
