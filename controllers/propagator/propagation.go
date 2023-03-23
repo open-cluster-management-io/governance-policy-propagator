@@ -435,12 +435,12 @@ func (r *PolicyReconciler) handleDecisions(
 // decisions. If the cluster exists in the status but doesn't exist in the input placement
 // decisions, then it's considered stale and will be removed.
 func (r *PolicyReconciler) cleanUpOrphanedRplPolicies(
-	instance *policiesv1.Policy, oldStatus []*policiesv1.CompliancePerClusterStatus, allDecisions decisionSet,
+	instance *policiesv1.Policy, allDecisions decisionSet,
 ) error {
 	log := log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
 	successful := true
 
-	for _, cluster := range oldStatus {
+	for _, cluster := range instance.Status.Status {
 		key := appsv1.PlacementDecision{
 			ClusterName:      cluster.ClusterNamespace,
 			ClusterNamespace: cluster.ClusterNamespace,
@@ -527,21 +527,8 @@ func (r *PolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) error {
 		return errors.New("c" + msg[1:])
 	}
 
-	cpcs, _ := r.calculatePerClusterStatus(instance, allDecisions, failedClusters)
-
-	oldStatus := instance.Status.Status
-	instance.Status.Status = cpcs
-	instance.Status.ComplianceState = CalculateRootCompliance(cpcs)
-
-	// looped through all pb, update status.placement
-	sort.Slice(placements, func(i, j int) bool {
-		return placements[i].PlacementBinding < placements[j].PlacementBinding
-	})
-
-	instance.Status.Placement = placements
-
 	// Clean up before the status update in case the status update fails
-	err = r.cleanUpOrphanedRplPolicies(instance, oldStatus, allDecisions)
+	err = r.cleanUpOrphanedRplPolicies(instance, allDecisions)
 	if err != nil {
 		log.Error(err, "Failed to delete orphaned replicated policies")
 
@@ -549,6 +536,22 @@ func (r *PolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) error {
 	}
 
 	log.V(1).Info("Updating the root policy status")
+
+	cpcs, _ := r.calculatePerClusterStatus(instance, allDecisions, failedClusters)
+
+	// loop through all pb, update status.placement
+	sort.Slice(placements, func(i, j int) bool {
+		return placements[i].PlacementBinding < placements[j].PlacementBinding
+	})
+
+	err = r.Get(context.TODO(), types.NamespacedName{Namespace: instance.Namespace, Name: instance.Name}, instance)
+	if err != nil {
+		log.Error(err, "Failed to refresh the cached policy. Will use existing policy.")
+	}
+
+	instance.Status.Status = cpcs
+	instance.Status.ComplianceState = CalculateRootCompliance(cpcs)
+	instance.Status.Placement = placements
 
 	err = r.Status().Update(context.TODO(), instance, &client.UpdateOptions{})
 	if err != nil {
