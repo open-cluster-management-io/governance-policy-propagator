@@ -111,6 +111,11 @@ func (r *RootPolicyStatusReconciler) Reconcile(ctx context.Context, request ctrl
 
 	updatedStatus := false
 
+	err = r.Get(ctx, types.NamespacedName{Namespace: request.Namespace, Name: request.Name}, rootPolicy)
+	if err != nil {
+		log.Error(err, "Failed to refresh the cached policy. Will use existing policy.")
+	}
+
 	for _, status := range rootPolicy.Status.Status {
 		replicatedPolicy := clusterToReplicatedPolicy[status.ClusterNamespace]
 		if replicatedPolicy == nil {
