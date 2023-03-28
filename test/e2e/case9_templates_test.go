@@ -17,24 +17,20 @@ import (
 )
 
 const (
-	case9PolicyName                   = "case9-test-policy"
-	case9PolicyYaml                   = "../resources/case9_templates/case9-test-policy.yaml"
-	case9ReplicatedPolicyYamlM1       = "../resources/case9_templates/case9-test-replpolicy-managed1.yaml"
-	case9ReplicatedPolicyYamlM1Update = "../resources/case9_templates/case9-test-replpolicy-managed1-relabelled.yaml"
-	case9ReplicatedPolicyYamlM2       = "../resources/case9_templates/case9-test-replpolicy-managed2.yaml"
-	case9PolicyNameEncrypted          = "case9-test-policy-encrypted"
-	case9PolicyYamlEncrypted          = "../resources/case9_templates/case9-test-policy_encrypted.yaml"
-	case9PolicyYamlEncryptedRepl      = "../resources/case9_templates/case9-test-replpolicy_encrypted-"
-	case9EncryptionSecret             = "../resources/case9_templates/case9-test-encryption-secret.yaml"
-	case9EncryptionSecretName         = "policy-encryption-key"
-	case9SecretName                   = "case9-secret"
-	IVAnnotation                      = "policy.open-cluster-management.io/encryption-iv"
-)
-
-const (
-	case9PolicyNameCopy       = "case9-test-policy-copy"
-	case9PolicyYamlCopy       = "../resources/case9_templates/case9-test-policy_copy.yaml"
-	case9PolicyYamlCopiedRepl = "../resources/case9_templates/case9-test-replpolicy_copied-"
+	case9PolicyName              = "case9-test-policy"
+	case9PolicyYaml              = "../resources/case9_templates/case9-test-policy.yaml"
+	case9ReplicatedPolicyYamlM1  = "../resources/case9_templates/case9-test-replpolicy-managed1.yaml"
+	case9ReplicatedPolicyYamlM2  = "../resources/case9_templates/case9-test-replpolicy-managed2.yaml"
+	case9PolicyNameEncrypted     = "case9-test-policy-encrypted"
+	case9PolicyYamlEncrypted     = "../resources/case9_templates/case9-test-policy_encrypted.yaml"
+	case9PolicyYamlEncryptedRepl = "../resources/case9_templates/case9-test-replpolicy_encrypted-"
+	case9EncryptionSecret        = "../resources/case9_templates/case9-test-encryption-secret.yaml"
+	case9EncryptionSecretName    = "policy-encryption-key"
+	case9SecretName              = "case9-secret"
+	IVAnnotation                 = "policy.open-cluster-management.io/encryption-iv"
+	case9PolicyNameCopy          = "case9-test-policy-copy"
+	case9PolicyYamlCopy          = "../resources/case9_templates/case9-test-policy_copy.yaml"
+	case9PolicyYamlCopiedRepl    = "../resources/case9_templates/case9-test-replpolicy_copied-"
 )
 
 var _ = Describe("Test policy templates", func() {
