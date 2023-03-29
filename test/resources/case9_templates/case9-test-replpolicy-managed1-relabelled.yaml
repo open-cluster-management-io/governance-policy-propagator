@@ -37,4 +37,4 @@ spec:
                     Or do not.
                     There is no try.
                   label-vendor-test: |
-                    auto-detect
+                    Fake
