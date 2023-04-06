@@ -37,6 +37,7 @@ func equivalentReplicatedPolicies(plc1 *policiesv1.Policy, plc2 *policiesv1.Poli
 // buildReplicatedPolicy constructs a replicated policy based on a root policy and a placementDecision.
 // In particular, it adds labels that the policy framework uses, and ensures that policy dependencies
 // are in a consistent format suited for use on managed clusters.
+// It can return an error if it needed to canonicalize a dependency, but a PolicySet lookup failed.
 func (r *PolicyReconciler) buildReplicatedPolicy(
 	root *policiesv1.Policy, decision appsv1.PlacementDecision,
 ) (*policiesv1.Policy, error) {
