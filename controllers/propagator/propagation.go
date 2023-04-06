@@ -283,6 +283,18 @@ func handleDecisionWrapper(
 
 type decisionSet map[appsv1.PlacementDecision]bool
 
+func (set decisionSet) namespaces() []string {
+	namespaces := make([]string, 0)
+
+	for decision, isTrue := range set {
+		if isTrue {
+			namespaces = append(namespaces, decision.ClusterNamespace)
+		}
+	}
+
+	return namespaces
+}
+
 // handleDecisions will get all the placement decisions based on the input policy and placement
 // binding list and propagate the policy. Note that this method performs concurrent operations.
 // It returns the following:
@@ -558,6 +570,10 @@ func (r *PolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) error {
 	err = r.Status().Update(context.TODO(), instance, &client.UpdateOptions{})
 	if err != nil {
 		return err
+	}
+
+	if len(failedClusters) != 0 {
+		return errors.New("failed to handle cluster namespaces:" + strings.Join(failedClusters.namespaces(), ","))
 	}
 
 	log.Info("Reconciliation complete")

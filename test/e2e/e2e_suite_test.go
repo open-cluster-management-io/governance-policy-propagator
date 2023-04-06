@@ -37,6 +37,7 @@ var (
 	gvrPlacementDecision  schema.GroupVersionResource
 	gvrSecret             schema.GroupVersionResource
 	gvrAnsibleJob         schema.GroupVersionResource
+	gvrNamespace          schema.GroupVersionResource
 	defaultTimeoutSeconds int
 	defaultImageRegistry  string
 )
@@ -78,6 +79,9 @@ var _ = BeforeSuite(func() {
 	}
 	gvrAnsibleJob = schema.GroupVersionResource{
 		Group: "tower.ansible.com", Version: "v1alpha1", Resource: "ansiblejobs",
+	}
+	gvrNamespace = schema.GroupVersionResource{
+		Group: "", Version: "v1", Resource: "namespaces",
 	}
 	clientHub = NewKubeClient("", "", "")
 	clientHubDynamic = NewKubeClientDynamic("", "", "")
