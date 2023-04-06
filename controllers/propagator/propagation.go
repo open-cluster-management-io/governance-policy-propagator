@@ -32,18 +32,6 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
-const (
-	attemptsDefault = 3
-	attemptsEnvName = "CONTROLLER_CONFIG_RETRY_ATTEMPTS"
-)
-
-// The configuration in minutes to requeue after if something failed after several
-// retries.
-const (
-	requeueErrorDelayEnvName = "CONTROLLER_CONFIG_REQUEUE_ERROR_DELAY"
-	requeueErrorDelayDefault = 5
-)
-
 // The configuration of the maximum number of Go routines to spawn when handling placement decisions
 // per policy.
 const (
@@ -58,8 +46,6 @@ const (
 )
 
 var (
-	attempts             int
-	requeueErrorDelay    int
 	concurrencyPerPolicy int
 	kubeConfig           *rest.Config
 	kubeClient           *kubernetes.Interface
@@ -68,8 +54,6 @@ var (
 func Initialize(kubeconfig *rest.Config, kubeclient *kubernetes.Interface) {
 	kubeConfig = kubeconfig
 	kubeClient = kubeclient
-	attempts = getEnvVarPosInt(attemptsEnvName, attemptsDefault)
-	requeueErrorDelay = getEnvVarPosInt(requeueErrorDelayEnvName, requeueErrorDelayDefault)
 	concurrencyPerPolicy = getEnvVarPosInt(concurrencyPerPolicyEnvName, concurrencyPerPolicyDefault)
 }
 
