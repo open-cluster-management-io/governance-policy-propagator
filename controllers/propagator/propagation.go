@@ -268,7 +268,7 @@ func handleDecisionWrapper(
 			"policyNamespace", instance.GetNamespace(),
 			"decision", decision,
 		)
-		log.Info("Handling the decision")
+		log.V(1).Info("Handling the decision")
 
 		instanceCopy := *instance.DeepCopy()
 
@@ -530,15 +530,11 @@ func (r *PolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) error {
 		return err
 	}
 
-	// allDecisions and failedClusters are sets in the format of <namespace>/<name>
 	placements, allDecisions, failedClusters, allFailed := r.handleDecisions(instance, pbList)
 	if allFailed {
 		log.Info("Failed to get any placement decisions. Giving up on the request.")
 
-		msg := "Could not get the placement decisions"
-
-		// Make the error start with a lower case for the linting check
-		return errors.New("c" + msg[1:])
+		return errors.New("could not get the placement decisions")
 	}
 
 	// Clean up before the status update in case the status update fails
@@ -761,6 +757,9 @@ func getPlacementDecisions(c client.Client, pb policiesv1.PlacementBinding,
 	return nil, nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Name, pb.Namespace)
 }
 
+// handleDecision puts the policy on the cluster, creating it or updating it as required,
+// including resolving hub templates. It will return an error if an API call fails; no
+// internal states will result in errors (eg invalid templates don't cause errors here)
 func (r *PolicyReconciler) handleDecision(
 	rootPlc *policiesv1.Policy, decision appsv1.PlacementDecision,
 ) (

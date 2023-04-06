@@ -21,8 +21,8 @@ const (
 )
 
 var _ = Describe("Test policy propagation", func() {
-	Describe("Create policy/pb/plc in ns:"+testNamespace+" and then update pb/plc", func() {
-		It("should be created in user ns", func() {
+	Describe("Create policy/pb/plc in ns:"+testNamespace+" and then update pb/plc", Ordered, func() {
+		BeforeAll(func() {
 			By("Creating " + case6PolicyYaml)
 			utils.Kubectl("apply",
 				"-f", case6PolicyYaml,
@@ -369,7 +369,7 @@ var _ = Describe("Test policy propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
 		})
-		It("should clean up", func() {
+		AfterAll(func() {
 			utils.Kubectl("delete",
 				"-f", case6PolicyYaml,
 				"-n", testNamespace)
@@ -378,8 +378,8 @@ var _ = Describe("Test policy propagation", func() {
 		})
 	})
 
-	Describe("Create policy/pb/plc in ns:"+testNamespace+" and then update policy", func() {
-		It("should be created in user ns", func() {
+	Describe("Create policy/pb/plc in ns:"+testNamespace+" and then update policy", Ordered, func() {
+		BeforeAll(func() {
 			By("Creating " + case6PolicyYaml)
 			utils.Kubectl("apply",
 				"-f", case6PolicyYaml,
@@ -518,7 +518,7 @@ var _ = Describe("Test policy propagation", func() {
 				return replicatedPlc.Object["spec"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
 		})
-		It("should clean up", func() {
+		AfterAll(func() {
 			utils.Kubectl("delete",
 				"-f", "../resources/case6_placement_propagation/case6-test-policy2.yaml",
 				"-n", testNamespace)
