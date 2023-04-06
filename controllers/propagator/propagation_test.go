@@ -18,87 +18,6 @@ import (
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 )
 
-func TestInitializeAttempts(t *testing.T) {
-	tests := []struct {
-		envVarValue string
-		expected    int
-	}{
-		{"", attemptsDefault},
-		{fmt.Sprint(attemptsDefault + 2), attemptsDefault + 2},
-		{"0", attemptsDefault},
-		{"-3", attemptsDefault},
-	}
-
-	for _, test := range tests {
-		t.Run(
-			fmt.Sprintf(`%s="%s"`, attemptsEnvName, test.envVarValue),
-			func(t *testing.T) {
-				defer func() {
-					// Reset to the default values
-					attempts = 0
-
-					err := os.Unsetenv(attemptsEnvName)
-					if err != nil {
-						t.Fatalf("failed to unset the environment variable: %v", err)
-					}
-				}()
-
-				err := os.Setenv(attemptsEnvName, test.envVarValue)
-				if err != nil {
-					t.Fatalf("failed to set the environment variable: %v", err)
-				}
-
-				var k8sInterface kubernetes.Interface
-				Initialize(&rest.Config{}, &k8sInterface)
-
-				if attempts != test.expected {
-					t.Fatalf("Expected attempts=%d, got %d", test.expected, attempts)
-				}
-			},
-		)
-	}
-}
-
-func TestInitializeRequeueErrorDelay(t *testing.T) {
-	tests := []struct {
-		envVarValue string
-		expected    int
-	}{
-		{"", requeueErrorDelayDefault},
-		{fmt.Sprint(requeueErrorDelayDefault + 2), requeueErrorDelayDefault + 2},
-		{"0", requeueErrorDelayDefault},
-		{"-3", requeueErrorDelayDefault},
-	}
-
-	for _, test := range tests {
-		t.Run(
-			fmt.Sprintf(`%s="%s"`, requeueErrorDelayEnvName, test.envVarValue),
-			func(t *testing.T) {
-				defer func() {
-					// Reset to the default values
-					requeueErrorDelay = 0
-
-					err := os.Unsetenv(requeueErrorDelayEnvName)
-					if err != nil {
-						t.Fatalf("failed to unset the environment variable: %v", err)
-					}
-				}()
-
-				err := os.Setenv(requeueErrorDelayEnvName, test.envVarValue)
-				if err != nil {
-					t.Fatalf("failed to set the environment variable: %v", err)
-				}
-				var k8sInterface kubernetes.Interface
-				Initialize(&rest.Config{}, &k8sInterface)
-
-				if requeueErrorDelay != test.expected {
-					t.Fatalf("Expected requeueErrorDelay=%d, got %d", test.expected, attempts)
-				}
-			},
-		)
-	}
-}
-
 func TestInitializeConcurrencyPerPolicyEnvName(t *testing.T) {
 	tests := []struct {
 		envVarValue string
@@ -132,7 +51,7 @@ func TestInitializeConcurrencyPerPolicyEnvName(t *testing.T) {
 				Initialize(&rest.Config{}, &k8sInterface)
 
 				if concurrencyPerPolicy != test.expected {
-					t.Fatalf("Expected concurrencyPerPolicy=%d, got %d", test.expected, attempts)
+					t.Fatalf("Expected concurrencyPerPolicy=%d, got %d", test.expected, concurrencyPerPolicy)
 				}
 			},
 		)
@@ -153,14 +72,6 @@ func (r MockPolicyReconciler) handleDecision(
 }
 
 func TestHandleDecisionWrapper(t *testing.T) {
-	// Simulate running Initialize. This is required for the retry library to actually run
-	// the handleDecision method.
-	attempts = 1
-	defer func() {
-		// Reset to the default value
-		attempts = 0
-	}()
-
 	tests := []struct {
 		Error         error
 		ExpectedError bool
