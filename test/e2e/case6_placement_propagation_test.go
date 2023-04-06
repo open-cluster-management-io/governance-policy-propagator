@@ -526,4 +526,81 @@ var _ = Describe("Test policy propagation", func() {
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 10)
 		})
 	})
+
+	Describe("Handling propagation to terminating clusters", Ordered, func() {
+		BeforeAll(func() {
+			By("Creating " + case6PolicyYaml)
+			utils.Kubectl("apply",
+				"-f", case6PolicyYaml,
+				"-n", testNamespace)
+			plc := utils.GetWithTimeout(
+				clientHubDynamic, gvrPolicy, case6PolicyName, testNamespace, true, defaultTimeoutSeconds,
+			)
+			Expect(plc).NotTo(BeNil())
+		})
+		It("sets up the terminating cluster", func() {
+			By("Creating the namespace and cluster")
+			// Note: the namespace is initially created with a finalizer
+			_, err := utils.KubectlWithOutput("apply", "-f",
+				"../resources/case6_placement_propagation/extra-cluster.yaml")
+			Expect(err).To(BeNil())
+
+			By("Deleting the namespace")
+			out, err := utils.KubectlWithOutput("delete", "namespace", "test6-extra", "--timeout=2s")
+			Expect(err).NotTo(BeNil())
+			Expect(out).To(MatchRegexp("waiting for the condition"))
+		})
+		It("should fail to propagate to the terminating cluster", func() {
+			By("Patching test-policy-plr with decision of cluster test6-extra")
+			plr := utils.GetWithTimeout(
+				clientHubDynamic,
+				gvrPlacementDecision,
+				case6PolicyName+"-plr-1",
+				testNamespace,
+				true,
+				defaultTimeoutSeconds,
+			)
+			plr.Object["status"] = utils.GeneratePldStatus(plr.GetName(), plr.GetNamespace(), "test6-extra")
+			_, err := clientHubDynamic.Resource(gvrPlacementDecision).Namespace(testNamespace).UpdateStatus(
+				context.TODO(), plr, metav1.UpdateOptions{},
+			)
+			Expect(err).To(BeNil())
+
+			By("Verifying that the replicated policy is not created")
+			Consistently(func() interface{} {
+				return utils.GetWithTimeout(clientHubDynamic, gvrPolicy, testNamespace+"."+case6PolicyName,
+					"test6-extra", false, defaultTimeoutSeconds)
+			}, defaultTimeoutSeconds, 1).Should(BeNil())
+		})
+		It("should succeed when the cluster namespace is re-created", func() {
+			By("Removing the finalizer from the namespace")
+			utils.Kubectl("patch", "namespace", "test6-extra", "--type=json",
+				`-p=[{"op":"remove","path":"/metadata/finalizers"}]`)
+
+			By("Verifying that the namespace is removed")
+			ns := utils.GetClusterLevelWithTimeout(clientHubDynamic, gvrNamespace, "test6-extra", false,
+				defaultTimeoutSeconds)
+			Expect(ns).To(BeNil())
+
+			By("Recreating the namespace")
+			utils.Kubectl("create", "namespace", "test6-extra")
+
+			By("Verifying that the policy is now replicated")
+			pol := utils.GetWithTimeout(clientHubDynamic, gvrPolicy, testNamespace+"."+case6PolicyName,
+				"test6-extra", true, defaultTimeoutSeconds)
+			Expect(pol).NotTo(BeNil())
+		})
+		AfterAll(func() {
+			utils.Kubectl("delete",
+				"-f", case6PolicyYaml,
+				"-n", testNamespace)
+			opt := metav1.ListOptions{}
+			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 10)
+
+			utils.Kubectl("patch", "namespace", "test6-extra", "--type=json",
+				`-p=[{"op":"remove","path":"/metadata/finalizers"}]`)
+			utils.Kubectl("delete", "namespace", "test6-extra", "--timeout=2s")
+			utils.Kubectl("delete", "managedcluster", "test6-extra")
+		})
+	})
 })
