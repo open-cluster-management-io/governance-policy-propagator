@@ -360,7 +360,8 @@ func (r *PolicyAutomationReconciler) Reconcile(
 			if len(targetList) > 0 {
 				log.Info("Creating An Ansible job", "targetList", targetList)
 				violationContext, _ := r.getViolationContext(ctx, policy, targetList, policyAutomation)
-				err = common.CreateAnsibleJob(policyAutomation, r.DynamicClient, "scan", violationContext)
+				err = common.CreateAnsibleJob(policyAutomation, r.DynamicClient, "scan",
+					violationContext)
 				if err != nil {
 					return reconcile.Result{RequeueAfter: requeueAfter}, err
 				}
@@ -381,6 +382,16 @@ func (r *PolicyAutomationReconciler) Reconcile(
 			if len(targetList) > 0 {
 				log.Info("Creating an Ansible job", "targetList", targetList)
 
+				AjExist, err := common.MatchPAGeneration(policyAutomation,
+					r.DynamicClient, policyAutomation.GetGeneration())
+				if err != nil {
+					log.Error(err, "Failed to get Ansible job's generation")
+
+					return reconcile.Result{}, err
+				}
+				if AjExist {
+					return reconcile.Result{}, nil
+				}
 				violationContext, _ := r.getViolationContext(ctx, policy, targetList, policyAutomation)
 				err = common.CreateAnsibleJob(
 					policyAutomation,

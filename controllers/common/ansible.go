@@ -5,17 +5,67 @@ package common
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	ctrl "sigs.k8s.io/controller-runtime"
 
 	policyv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
 )
+
+const (
+	ControllerName             string = "policy-automation"
+	PolicyAutomationLabel      string = "policy.open-cluster-management.io/policyautomation-name"
+	PolicyAutomationGeneration string = "policy.open-cluster-management.io/policyautomation-generation"
+)
+
+var log = ctrl.Log.WithName(ControllerName)
+
+var ansibleJobRes = schema.GroupVersionResource{
+	Group: "tower.ansible.com", Version: "v1alpha1",
+	Resource: "ansiblejobs",
+}
+
+// Check any ansiblejob is made by input genteration number
+// Returning "true" means the policy automation already created ansiblejob with the generation
+func MatchPAGeneration(policyAutomation *policyv1beta1.PolicyAutomation,
+	dynamicClient dynamic.Interface, generation int64,
+) (bool, error) {
+	ansiblejobList, err := dynamicClient.Resource(ansibleJobRes).Namespace(policyAutomation.GetNamespace()).List(
+		context.TODO(), metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("%s=%s", PolicyAutomationLabel, policyAutomation.GetName()),
+		},
+	)
+	if err != nil {
+		log.Error(err, "Failed to get ansiblejob list")
+
+		return false, err
+	}
+
+	ansiblejobLen := len(ansiblejobList.Items)
+	// Check whether new PolicyAutomation
+	if ansiblejobLen == 0 {
+		return false, nil
+	}
+
+	s := strconv.FormatInt(generation, 10)
+
+	for _, aj := range ansiblejobList.Items {
+		annotations := aj.GetAnnotations()
+		if annotations[PolicyAutomationGeneration] == s {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
 
 // CreateAnsibleJob creates ansiblejob with given PolicyAutomation
 func CreateAnsibleJob(policyAutomation *policyv1beta1.PolicyAutomation,
@@ -25,6 +75,12 @@ func CreateAnsibleJob(policyAutomation *policyv1beta1.PolicyAutomation,
 		Object: map[string]interface{}{
 			"apiVersion": "tower.ansible.com/v1alpha1",
 			"kind":       "AnsibleJob",
+			"metadata": map[string]interface{}{
+				"annotations": map[string]interface{}{
+					PolicyAutomationGeneration: strconv.
+						FormatInt(policyAutomation.GetGeneration(), 10),
+				},
+			},
 			"spec": map[string]interface{}{
 				"job_template_name": policyAutomation.Spec.Automation.Name,
 				"tower_auth_secret": policyAutomation.Spec.Automation.TowerSecret,
@@ -62,6 +118,11 @@ func CreateAnsibleJob(policyAutomation *policyv1beta1.PolicyAutomation,
 
 		mapExtraVars[fieldName] = value
 	}
+
+	label := map[string]string{
+		PolicyAutomationLabel: policyAutomation.GetName(),
+	}
+	ansibleJob.SetLabels(label)
 
 	ansibleJob.Object["spec"].(map[string]interface{})["extra_vars"] = mapExtraVars
 

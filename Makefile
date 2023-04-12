@@ -267,9 +267,11 @@ install-resources:
 	kubectl create ns policy-propagator-test
 	kubectl create ns managed1
 	kubectl create ns managed2
+	kubectl create ns managed3
 	@echo creating cluster resources
 	kubectl apply -f test/resources/managed1-cluster.yaml
 	kubectl apply -f test/resources/managed2-cluster.yaml
+	kubectl apply -f test/resources/managed3-cluster.yaml
 	@echo setting a Hub cluster DNS name
 	kubectl apply -f test/resources/case5_policy_automation/cluster-dns.yaml
 
