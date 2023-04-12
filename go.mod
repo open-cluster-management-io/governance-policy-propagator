@@ -8,6 +8,7 @@ require (
 	github.com/go-logr/zapr v1.2.3
 	github.com/onsi/ginkgo/v2 v2.9.4
 	github.com/onsi/gomega v1.27.6
+	github.com/google/go-cmp v0.5.9
 	github.com/prometheus/client_golang v1.15.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stolostron/go-log-utils v0.1.2
@@ -41,7 +42,6 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/gnostic v0.6.9 // indirect
-	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/pprof v0.0.0-20230502171905-255e3b9b56de // indirect
 	github.com/google/uuid v1.3.0 // indirect

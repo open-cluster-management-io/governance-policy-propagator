@@ -3,6 +3,7 @@
 package automation
 
 import (
+	"github.com/google/go-cmp/cmp"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -21,7 +22,7 @@ var policyPredicateFuncs = predicate.Funcs{
 		//nolint:forcetypeassert
 		plcObjOld := e.ObjectOld.(*policiesv1.Policy)
 
-		return plcObjNew.Status.ComplianceState != plcObjOld.Status.ComplianceState
+		return !cmp.Equal(plcObjNew.Status.Status, plcObjOld.Status.Status)
 	},
 	CreateFunc: func(e event.CreateEvent) bool {
 		return false
