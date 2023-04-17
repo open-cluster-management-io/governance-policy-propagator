@@ -520,7 +520,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 
 			policyAutomation.Status.ClustersWithEvent = eventMap
 			// use StatusWriter to update status subresource of a Kubernetes object
-			err = r.Status().Update(ctx, policyAutomation, &client.SubResourceUpdateOptions{})
+			err = r.Status().Update(ctx, policyAutomation, &client.UpdateOptions{})
 			if err != nil {
 				log.Error(err, "Failed to update ClustersWithEvent in policyAutomation status")
 
