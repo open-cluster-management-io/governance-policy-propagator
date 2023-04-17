@@ -136,7 +136,7 @@ func (r *RootPolicyStatusReconciler) Reconcile(ctx context.Context, request ctrl
 
 	rootPolicy.Status.ComplianceState = propagator.CalculateRootCompliance(rootPolicy.Status.Status)
 
-	err = r.Status().Update(context.TODO(), rootPolicy, &client.UpdateOptions{})
+	err = r.Status().Update(context.TODO(), rootPolicy, &client.SubResourceUpdateOptions{})
 	if err != nil {
 		log.Error(err, "Failed to update the root policy status. Will Requeue.")
 
