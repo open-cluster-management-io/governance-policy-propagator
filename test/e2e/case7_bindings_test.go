@@ -102,7 +102,7 @@ var _ = Describe("Test policy propagation", func() {
 			_, err := clientHubDynamic.Resource(gvrPlacementDecision).Namespace(testNamespace).UpdateStatus(
 				context.TODO(), plr, metav1.UpdateOptions{},
 			)
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 			plc := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, testNamespace+"."+case7PolicyName, "managed1", true, defaultTimeoutSeconds,
 			)
@@ -126,7 +126,7 @@ var _ = Describe("Test policy propagation", func() {
 			_, err := clientHubDynamic.Resource(gvrPlacementDecision).Namespace(testNamespace).UpdateStatus(
 				context.TODO(), plr, metav1.UpdateOptions{},
 			)
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 			plc := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, testNamespace+"."+case7PolicyName, "managed2", true, defaultTimeoutSeconds,
 			)
@@ -154,7 +154,7 @@ var _ = Describe("Test policy propagation", func() {
 			_, err := clientHubDynamic.Resource(gvrPlacementBinding).Namespace(testNamespace).Update(
 				context.TODO(), pb, metav1.UpdateOptions{},
 			)
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 			opt := metav1.ListOptions{
 				LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case7PolicyName,
 			}
@@ -169,7 +169,7 @@ var _ = Describe("Test policy propagation", func() {
 			_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
 				context.TODO(), plr, metav1.UpdateOptions{},
 			)
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 			opt := metav1.ListOptions{
 				LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case7PolicyName,
 			}
@@ -193,7 +193,7 @@ var _ = Describe("Test policy propagation", func() {
 			_, err := clientHubDynamic.Resource(gvrPlacementBinding).Namespace(testNamespace).Update(
 				context.TODO(), pb, metav1.UpdateOptions{},
 			)
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 			opt := metav1.ListOptions{
 				LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case7PolicyName,
 			}
@@ -208,7 +208,7 @@ var _ = Describe("Test policy propagation", func() {
 			_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
 				context.TODO(), plr, metav1.UpdateOptions{},
 			)
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 			opt := metav1.ListOptions{
 				LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case7PolicyName,
 			}

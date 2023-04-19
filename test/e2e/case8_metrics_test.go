@@ -37,7 +37,7 @@ var _ = Describe("Test metrics appear locally", func() {
 		_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
 			context.TODO(), plr, metav1.UpdateOptions{},
 		)
-		Expect(err).To(BeNil())
+		Expect(err).ToNot(HaveOccurred())
 		plc = utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, testNamespace+"."+case8PolicyName, "managed2", true, defaultTimeoutSeconds,
 		)
@@ -52,7 +52,7 @@ var _ = Describe("Test metrics appear locally", func() {
 			_, err = clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
 				context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
 			)
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 		}
 		By("Checking the status of root policy")
 		yamlPlc := utils.ParseYaml("../resources/case8_metrics/managed-both-status-compliant.yaml")
@@ -91,7 +91,7 @@ var _ = Describe("Test metrics appear locally", func() {
 			_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
 				context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
 			)
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 		}
 		By("Checking the status of root policy")
 		yamlPlc := utils.ParseYaml("../resources/case8_metrics/managed-both-status-noncompliant.yaml")

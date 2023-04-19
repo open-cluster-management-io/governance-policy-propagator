@@ -12,9 +12,9 @@ import (
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 )
 
-func placementBindingMapper(c client.Client) handler.MapFunc {
+func placementBindingMapper(_ client.Client) handler.MapFunc {
 	return func(obj client.Object) []reconcile.Request {
-		// nolint: forcetypeassert
+		//nolint:forcetypeassert
 		object := obj.(*policiesv1.PlacementBinding)
 		var result []reconcile.Request
 

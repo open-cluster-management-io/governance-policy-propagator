@@ -24,16 +24,16 @@ const (
 	keySize     = 256
 )
 
-func TestGetEncryptionKeyNoSecret(t *testing.T) {
+func TestGetEncryptionKeyNoSecret(_ *testing.T) {
 	RegisterFailHandler(Fail)
 
 	client := fake.NewClientBuilder().Build()
 	r := PolicyReconciler{Client: client}
 	key, err := r.getEncryptionKey(clusterName)
 
-	Expect(err).To(BeNil())
+	Expect(err).ToNot(HaveOccurred())
 	// Verify that the generated key is 256 bits.
-	Expect(len(key)).To(Equal(keySize / 8))
+	Expect(key).To(HaveLen(keySize / 8))
 
 	ctx := context.TODO()
 	objectKey := types.NamespacedName{
@@ -43,18 +43,18 @@ func TestGetEncryptionKeyNoSecret(t *testing.T) {
 	encryptionSecret := &corev1.Secret{}
 	err = client.Get(ctx, objectKey, encryptionSecret)
 
-	Expect(err).To(BeNil())
+	Expect(err).ToNot(HaveOccurred())
 	// Verify that the generated key stored in the secret is 256 bits.
-	Expect(len(encryptionSecret.Data["key"])).To(Equal(keySize / 8))
+	Expect(encryptionSecret.Data["key"]).To(HaveLen(keySize / 8))
 }
 
-func TestGetEncryptionKeySecretExists(t *testing.T) {
+func TestGetEncryptionKeySecretExists(_ *testing.T) {
 	RegisterFailHandler(Fail)
 
 	// Generate an AES-256 key and stored it as a secret.
 	key := make([]byte, keySize/8)
 	_, err := rand.Read(key)
-	Expect(err).To(BeNil())
+	Expect(err).ToNot(HaveOccurred())
 
 	encryptionSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -71,9 +71,9 @@ func TestGetEncryptionKeySecretExists(t *testing.T) {
 	r := PolicyReconciler{Client: client}
 	key, err = r.getEncryptionKey(clusterName)
 
-	Expect(err).To(BeNil())
+	Expect(err).ToNot(HaveOccurred())
 	// Verify that the returned key is 256 bits.
-	Expect(len(key)).To(Equal(keySize / 8))
+	Expect(key).To(HaveLen(keySize / 8))
 }
 
 func TestGetInitializationVector(t *testing.T) {
@@ -113,9 +113,9 @@ func TestGetInitializationVector(t *testing.T) {
 				t.Parallel()
 				initializationVector, err := r.getInitializationVector(policyName, clusterName, subTest.annotations)
 
-				Expect(err).To(BeNil())
+				Expect(err).ToNot(HaveOccurred())
 				// Verify that the returned initialization vector is 128 bits
-				Expect(len(initializationVector)).To(Equal(templates.IVSize))
+				Expect(initializationVector).To(HaveLen(templates.IVSize))
 				// Verify that the annotation object was updated
 				Expect(
 					subTest.annotations[IVAnnotation],

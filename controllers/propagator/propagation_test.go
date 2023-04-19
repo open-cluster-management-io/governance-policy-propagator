@@ -43,10 +43,8 @@ func TestInitializeConcurrencyPerPolicyEnvName(t *testing.T) {
 					}
 				}()
 
-				err := os.Setenv(concurrencyPerPolicyEnvName, test.envVarValue)
-				if err != nil {
-					t.Fatalf("failed to set the environment variable: %v", err)
-				}
+				t.Setenv(concurrencyPerPolicyEnvName, test.envVarValue)
+
 				var k8sInterface kubernetes.Interface
 				Initialize(&rest.Config{}, &k8sInterface)
 
@@ -64,7 +62,7 @@ type MockPolicyReconciler struct {
 }
 
 func (r MockPolicyReconciler) handleDecision(
-	instance *policiesv1.Policy, decision appsv1.PlacementDecision,
+	_ *policiesv1.Policy, _ appsv1.PlacementDecision,
 ) (
 	map[k8sdepwatches.ObjectIdentifier]bool, error,
 ) {
@@ -132,7 +130,7 @@ func TestHandleDecisionWrapper(t *testing.T) {
 			if test.ExpectedError {
 				if result.Err == nil {
 					t.Fatal("Expected an error but didn't get one")
-				} else if result.Err != test.Error { // nolint: errorlint
+				} else if result.Err != test.Error { //nolint:errorlint
 					t.Fatalf("Expected the error %v but got: %v", test.Error, result.Err)
 				}
 			} else if result.Err != nil {
@@ -152,7 +150,7 @@ func TestHandleDecisionWrapper(t *testing.T) {
 }
 
 func (r MockPolicyReconciler) deletePolicy(
-	instance *policiesv1.Policy,
+	_ *policiesv1.Policy,
 ) error {
 	return r.Err
 }
@@ -221,7 +219,7 @@ func TestPlcDeletionWrapper(t *testing.T) {
 			if test.ExpectedError {
 				if result.Err == nil {
 					t.Fatal("Expected an error but didn't get one")
-				} else if result.Err != test.Error { // nolint: errorlint
+				} else if result.Err != test.Error { //nolint:errorlint
 					t.Fatalf("Expected the error %v but got: %v", test.Error, result.Err)
 				}
 			} else if result.Err != nil {

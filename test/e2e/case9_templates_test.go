@@ -56,7 +56,7 @@ var _ = Describe("Test policy templates", func() {
 			_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
 				context.TODO(), plr, metav1.UpdateOptions{},
 			)
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 			plc := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, testNamespace+"."+case9PolicyName, "managed1",
 				true, defaultTimeoutSeconds,
@@ -106,7 +106,7 @@ var _ = Describe("Test policy templates", func() {
 			_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
 				context.TODO(), plr, metav1.UpdateOptions{},
 			)
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 			plc := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, testNamespace+"."+case9PolicyName, "managed2",
 				true, defaultTimeoutSeconds,
@@ -161,7 +161,7 @@ var _ = Describe("Test encrypted policy templates", func() {
 				_, err := utils.KubectlWithOutput("apply",
 					"-f", case9EncryptionSecret,
 					"-n", managedCluster)
-				Expect(err).To(BeNil())
+				Expect(err).ToNot(HaveOccurred())
 
 				By("Patching test-policy-plr with decision of cluster " + managedCluster)
 				plr := utils.GetWithTimeout(
@@ -172,7 +172,7 @@ var _ = Describe("Test encrypted policy templates", func() {
 				_, err = clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
 					context.TODO(), plr, metav1.UpdateOptions{},
 				)
-				Expect(err).To(BeNil())
+				Expect(err).ToNot(HaveOccurred())
 
 				var replicatedPlc *unstructured.Unstructured
 				By("Waiting for encrypted values")
@@ -198,7 +198,7 @@ var _ = Describe("Test encrypted policy templates", func() {
 				_, err = clientHubDynamic.Resource(gvrPolicy).Namespace(managedCluster).Update(
 					context.TODO(), replicatedPlc, metav1.UpdateOptions{},
 				)
-				Expect(err).To(BeNil())
+				Expect(err).ToNot(HaveOccurred())
 
 				By("Verifying the replicated policy against a snapshot")
 				yamlPlc := utils.ParseYaml(case9PolicyYamlEncryptedRepl + managedCluster + ".yaml")
@@ -223,7 +223,7 @@ var _ = Describe("Test encrypted policy templates", func() {
 				_, err := clientHub.CoreV1().Secrets(testNamespace).Patch(
 					context.TODO(), case9SecretName, types.StrategicMergePatchType, patch, metav1.PatchOptions{},
 				)
-				Expect(err).To(BeNil())
+				Expect(err).ToNot(HaveOccurred())
 
 				By("Verifying the replicated policy was updated")
 				expected := "$ocm_encrypted:dbHPzG98PxV7RXcAx25mMGPBAUbfjJTEMyFc7kE2W7U3FW5+X31LkidHu/25ic4m"
@@ -308,7 +308,7 @@ var _ = Describe("Test encrypted policy templates with secret copy", func() {
 				_, err := utils.KubectlWithOutput("apply",
 					"-f", case9EncryptionSecret,
 					"-n", managedCluster)
-				Expect(err).To(BeNil())
+				Expect(err).ToNot(HaveOccurred())
 
 				By("Patching test-policy-plr with decision of cluster " + managedCluster)
 				plr := utils.GetWithTimeout(
@@ -319,7 +319,7 @@ var _ = Describe("Test encrypted policy templates with secret copy", func() {
 				_, err = clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
 					context.TODO(), plr, metav1.UpdateOptions{},
 				)
-				Expect(err).To(BeNil())
+				Expect(err).ToNot(HaveOccurred())
 
 				var replicatedPlc *unstructured.Unstructured
 				By("Waiting for encrypted values")
@@ -345,7 +345,7 @@ var _ = Describe("Test encrypted policy templates with secret copy", func() {
 				_, err = clientHubDynamic.Resource(gvrPolicy).Namespace(managedCluster).Update(
 					context.TODO(), replicatedPlc, metav1.UpdateOptions{},
 				)
-				Expect(err).To(BeNil())
+				Expect(err).ToNot(HaveOccurred())
 
 				By("Verifying the replicated policy against a snapshot")
 				yamlPlc := utils.ParseYaml(case9PolicyYamlCopiedRepl + managedCluster + ".yaml")
@@ -370,7 +370,7 @@ var _ = Describe("Test encrypted policy templates with secret copy", func() {
 				_, err := clientHub.CoreV1().Secrets(testNamespace).Patch(
 					context.TODO(), case9SecretName, types.StrategicMergePatchType, patch, metav1.PatchOptions{},
 				)
-				Expect(err).To(BeNil())
+				Expect(err).ToNot(HaveOccurred())
 
 				By("Verifying the replicated policy was updated")
 				expected := "$ocm_encrypted:dbHPzG98PxV7RXcAx25mMGPBAUbfjJTEMyFc7kE2W7U3FW5+X31LkidHu/25ic4m"

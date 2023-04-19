@@ -1,10 +1,6 @@
-service:
-  # When updating this, also update the version stored in docker/build-tools/Dockerfile in the multicloudlab/tools repo.
-  golangci-lint-version: 1.18.x # use the fixed version to not introduce new linters unexpectedly
 run:
   # timeout for analysis, e.g. 30s, 5m, default is 1m
   deadline: 20m
-  go: '1.17'
   timeout: 20m
 
   # which dirs to skip: they won't be analyzed;
@@ -80,7 +76,7 @@ linters-settings:
     check-shadowing: false
   gci:
     sections:
-      - prefix(open-cluster-management.io/config-policy-controller)
+      - prefix(open-cluster-management.io/governance-policy-propagator)
   golint:
     # minimal confidence for issues, default is 0.8
     min-confidence: 0.0

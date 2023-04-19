@@ -12,7 +12,7 @@ import (
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 )
 
-func policyMapper(c client.Client) handler.MapFunc {
+func policyMapper(_ client.Client) handler.MapFunc {
 	return func(object client.Object) []reconcile.Request {
 		log := log.WithValues("policyName", object.GetName(), "namespace", object.GetNamespace())
 		log.V(2).Info("Reconcile Request for Policy")

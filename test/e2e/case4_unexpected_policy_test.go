@@ -22,7 +22,7 @@ var _ = Describe("Test unexpect policy handling", func() {
 		out, err := utils.KubectlWithOutput("apply",
 			"-f", case4PolicyYaml,
 			"-n", "managed1")
-		Expect(err).Should(BeNil())
+		Expect(err).ShouldNot(HaveOccurred())
 		Expect(out).Should(ContainSubstring(case4PolicyName + " created"))
 		Eventually(func() interface{} {
 			return utils.GetWithTimeout(
@@ -36,7 +36,7 @@ var _ = Describe("Test unexpect policy handling", func() {
 		out, err := utils.KubectlWithOutput("apply",
 			"-f", plcYaml,
 			"-n", "managed1")
-		Expect(err).Should(BeNil())
+		Expect(err).ShouldNot(HaveOccurred())
 		Expect(out).Should(ContainSubstring("policy-propagator-test.case4-test-policy created"))
 		Eventually(func() interface{} {
 			return utils.GetWithTimeout(
@@ -55,7 +55,7 @@ var _ = Describe("Test unexpect policy handling", func() {
 		out, err := utils.KubectlWithOutput("apply",
 			"-f", plcYaml,
 			"-n", "leaf-hub1")
-		Expect(err).Should(BeNil())
+		Expect(err).ShouldNot(HaveOccurred())
 		Expect(out).Should(ContainSubstring("policy-propagator-test.case4-test-policy created"))
 		utils.Pause(2)
 		plc := utils.GetWithTimeout(

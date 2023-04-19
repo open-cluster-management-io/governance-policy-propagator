@@ -38,7 +38,7 @@ func GeneratePlrStatus(clusters ...string) *appsv1.PlacementRuleStatus {
 
 // GeneratePldStatus generate pld status with given clusters
 func GeneratePldStatus(
-	placementName string, placementNamespace string, clusters ...string,
+	_ string, _ string, clusters ...string,
 ) *clusterv1beta1.PlacementDecisionStatus {
 	plrDecision := []clusterv1beta1.ClusterDecision{}
 	for _, cluster := range clusters {
@@ -63,11 +63,11 @@ func Pause(s uint) {
 // ParseYaml read given yaml file and unmarshal it to &unstructured.Unstructured{}
 func ParseYaml(file string) *unstructured.Unstructured {
 	yamlFile, err := os.ReadFile(file)
-	Expect(err).To(BeNil())
+	Expect(err).ToNot(HaveOccurred())
 
 	yamlPlc := &unstructured.Unstructured{}
 	err = yaml.Unmarshal(yamlFile, yamlPlc)
-	Expect(err).To(BeNil())
+	Expect(err).ToNot(HaveOccurred())
 
 	return yamlPlc
 }
@@ -246,7 +246,7 @@ func Kubectl(args ...string) {
 // KubectlWithOutput execute kubectl cli and return output and error
 func KubectlWithOutput(args ...string) (string, error) {
 	output, err := exec.Command("kubectl", args...).CombinedOutput()
-	// nolint: forbidigo
+	//nolint:forbidigo
 	fmt.Println(string(output))
 
 	return string(output), err

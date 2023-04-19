@@ -45,7 +45,7 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 		_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
 			context.TODO(), plr, metav1.UpdateOptions{},
 		)
-		Expect(err).To(BeNil())
+		Expect(err).ToNot(HaveOccurred())
 
 		By("Verifying the replicated policy was created")
 		plc := utils.GetWithTimeout(
@@ -78,7 +78,7 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 				testNamespace+"."+case13PolicyName, "managed1", true, defaultTimeoutSeconds)
 			deps, found, err := unstructured.NestedSlice(plc.Object, "spec", "dependencies")
 			g.Expect(found).To(BeTrue())
-			g.Expect(err).To(BeNil())
+			g.Expect(err).ToNot(HaveOccurred())
 
 			gotdeps := make([]string, 0)
 
@@ -101,7 +101,7 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 		It("should replace a PolicySet dependency with each policy in the existing set", func() {
 			By("Updating the root policy to have a PolicySet dependency")
 			_, err := utils.KubectlWithOutput("apply", "-f", case13Test1Yaml, "-n", testNamespace)
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 
 			By("Checking that the replicated policy has the correct list of dependencies")
 			Eventually(getDependencies, defaultTimeoutSeconds, 1).Should(ConsistOf(
@@ -113,7 +113,7 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 		It("should keep a non-existent PolicySet dependency as-is", func() {
 			By("Updating the root policy to have a non-existent PolicySet dependency")
 			_, err := utils.KubectlWithOutput("apply", "-f", case13Test2Yaml, "-n", testNamespace)
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 
 			By("Checking that the replicated policy has the correct list of dependencies")
 			Eventually(getDependencies, defaultTimeoutSeconds, 1).Should(ConsistOf(
@@ -125,13 +125,13 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 
 		It("should update when the policy set is created", func() {
 			By("Waiting some time, to make sure extra policy reconciles aren't pending")
-			// This helps verify that the the policy is correctly watching the PolicySets,
+			// This helps verify that the policy is correctly watching the PolicySets,
 			// and isn't just coincidently being re-reconiled for some other reason.
 			time.Sleep(5 * time.Second)
 
 			By("Creating the PolicySet that was non-existent")
 			_, err := utils.KubectlWithOutput("apply", "-f", case13Set2Yaml)
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 
 			By("Checking that the replicated policy has the correct list of dependencies")
 			Eventually(getDependencies, defaultTimeoutSeconds, 1).Should(ConsistOf(
@@ -144,13 +144,13 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 
 		It("should update when a dependency policy set is updated", func() {
 			By("Waiting some time, to make sure extra policy reconciles aren't pending")
-			// This helps verify that the the policy is correctly watching the PolicySets,
+			// This helps verify that the policy is correctly watching the PolicySets,
 			// and isn't just coincidently being re-reconiled for some other reason.
 			time.Sleep(5 * time.Second)
 
 			By("Updating the PolicySet")
 			_, err := utils.KubectlWithOutput("apply", "-f", case13Set2updateYaml)
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 
 			By("Checking that the replicated policy has the correct list of dependencies")
 			Eventually(getDependencies, defaultTimeoutSeconds, 1).Should(ConsistOf(
@@ -176,7 +176,7 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 
 			templates, found, err := unstructured.NestedSlice(plc.Object, "spec", "policy-templates")
 			g.Expect(found).To(BeTrue())
-			g.Expect(err).To(BeNil())
+			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(templates).To(HaveLen(1))
 
 			template, ok := templates[0].(map[string]interface{})
@@ -206,7 +206,7 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 		It("should replace a PolicySet extraDependency with each policy in the existing set", func() {
 			By("Updating the root policy to have a PolicySet extraDependency")
 			_, err := utils.KubectlWithOutput("apply", "-f", case13Test3Yaml, "-n", testNamespace)
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 
 			By("Checking that the replicated policy has the correct list of extraDependencies")
 			Eventually(getExtraDependencies, defaultTimeoutSeconds, 1).Should(ConsistOf(
@@ -218,7 +218,7 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 		It("should keep a non-existent PolicySet extraDependency as-is", func() {
 			By("Updating the root policy to have a non-existent PolicySet dependency")
 			_, err := utils.KubectlWithOutput("apply", "-f", case13Test4Yaml, "-n", testNamespace)
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 
 			By("Checking that the replicated policy has the correct list of extraDependencies")
 			Eventually(getExtraDependencies, defaultTimeoutSeconds, 1).Should(ConsistOf(
@@ -230,13 +230,13 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 
 		It("should update when the policy set is created", func() {
 			By("Waiting some time, to make sure extra policy reconciles aren't pending")
-			// This helps verify that the the policy is correctly watching the PolicySets,
+			// This helps verify that the policy is correctly watching the PolicySets,
 			// and isn't just coincidently being re-reconiled for some other reason.
 			time.Sleep(5 * time.Second)
 
 			By("Creating the PolicySet that was non-existent")
 			_, err := utils.KubectlWithOutput("apply", "-f", case13Set2Yaml)
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 
 			By("Checking that the replicated policy has the correct list of extraDependencies")
 			Eventually(getExtraDependencies, defaultTimeoutSeconds, 1).Should(ConsistOf(
@@ -249,13 +249,13 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 
 		It("should update when a dependency policy set is updated", func() {
 			By("Waiting some time, to make sure extra policy reconciles aren't pending")
-			// This helps verify that the the policy is correctly watching the PolicySets,
+			// This helps verify that the policy is correctly watching the PolicySets,
 			// and isn't just coincidently being re-reconiled for some other reason.
 			time.Sleep(5 * time.Second)
 
 			By("Updating the PolicySet")
 			_, err := utils.KubectlWithOutput("apply", "-f", case13Set2updateYaml)
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 
 			By("Checking that the replicated policy has the correct list of dependencies")
 			Eventually(getExtraDependencies, defaultTimeoutSeconds, 1).Should(ConsistOf(

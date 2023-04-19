@@ -87,15 +87,15 @@ clean:
 
 .PHONY: fmt-dependencies
 fmt-dependencies:
-	$(call go-get-tool,github.com/daixiang0/gci@v0.2.9)
-	$(call go-get-tool,mvdan.cc/gofumpt@v0.2.0)
+	$(call go-get-tool,github.com/daixiang0/gci@v0.10.1)
+	$(call go-get-tool,mvdan.cc/gofumpt@v0.5.0)
 
 # All available format: format-go format-protos format-python
 # Default value will run all formats, override these make target with your requirements:
 #    eg: fmt: format-go format-protos
 fmt: fmt-dependencies
 	find . -not \( -path "./.go" -prune \) -name "*.go" | xargs gofmt -s -w
-	find . -not \( -path "./.go" -prune \) -name "*.go" | xargs gci -w -local "$(shell cat go.mod | head -1 | cut -d " " -f 2)"
+	find . -not \( -path "./.go" -prune \) -name "*.go" | xargs gci write -s standard -s default -s "prefix($(shell cat go.mod | head -1 | cut -d " " -f 2))"
 	find . -not \( -path "./.go" -prune \) -name "*.go" | xargs gofumpt -l -w
 
 ############################################################
@@ -107,7 +107,7 @@ check: lint
 
 .PHONY: lint-dependencies
 lint-dependencies:
-	$(call go-get-tool,github.com/golangci/golangci-lint/cmd/golangci-lint@v1.46.2)
+	$(call go-get-tool,github.com/golangci/golangci-lint/cmd/golangci-lint@v1.52.2)
 
 # All available linters: lint-dockerfiles lint-scripts lint-yaml lint-copyright-banner lint-go lint-python lint-helm lint-markdown lint-sass lint-typescript lint-protos
 # Default value will run all linters, override these make target with your requirements:
@@ -119,19 +119,20 @@ lint: lint-dependencies lint-all
 ############################################################
 GOSEC = $(LOCAL_BIN)/gosec
 KUBEBUILDER = $(LOCAL_BIN)/kubebuilder
-KBVERSION = 3.2.0
-K8S_VERSION = 1.21.2
+ENVTEST = $(LOCAL_BIN)/setup-envtest
+KBVERSION = 3.12.0
+ENVTEST_K8S_VERSION = 1.26.x
 
 .PHONY: test
 test: test-dependencies
-	KUBEBUILDER_ASSETS=$(LOCAL_BIN) go test $(TESTARGS) `go list ./... | grep -v test/e2e`
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test $(TESTARGS) `go list ./... | grep -v test/e2e`
 
 .PHONY: test-coverage
 test-coverage: TESTARGS = -json -cover -covermode=atomic -coverprofile=coverage_unit.out
 test-coverage: test
 
 .PHONY: test-dependencies
-test-dependencies: kubebuilder-dependencies kubebuilder
+test-dependencies: envtest kubebuilder
 
 .PHONY: kubebuilder
 kubebuilder:
@@ -141,17 +142,13 @@ kubebuilder:
 		chmod +x $(KUBEBUILDER); \
 	fi
 
-.PHONY: kubebuilder-dependencies
-kubebuilder-dependencies: $(LOCAL_BIN)
-	@if [ ! -f $(LOCAL_BIN)/etcd ] || [ ! -f $(LOCAL_BIN)/kube-apiserver ] || [ ! -f $(LOCAL_BIN)/kubectl ] || \
-	[ "$$($(KUBEBUILDER) version 2>/dev/null | grep -o KubeBuilderVersion:\"[0-9]*\.[0-9]\.[0-9]*\")" != "KubeBuilderVersion:\"$(KBVERSION)\"" ]; then \
-		echo "Installing envtest Kubebuilder assets"; \
-		curl -L "https://go.kubebuilder.io/test-tools/$(K8S_VERSION)/$(GOOS)/$(GOARCH)" | tar xz --strip-components=2 -C $(LOCAL_BIN); \
-	fi
+.PHONY: envtest
+envtest:
+	$(call go-get-tool,sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
 
 .PHONY: gosec
 gosec:
-	$(call go-get-tool,github.com/securego/gosec/v2/cmd/gosec@v2.9.6)
+	$(call go-get-tool,github.com/securego/gosec/v2/cmd/gosec@v2.15.0)
 
 .PHONY: gosec-scan
 gosec-scan: gosec
@@ -212,7 +209,7 @@ controller-gen: ## Download controller-gen locally if necessary.
 
 .PHONY: kustomize
 kustomize: ## Download kustomize locally if necessary.
-	$(call go-get-tool,sigs.k8s.io/kustomize/kustomize/v4@v4.5.4)
+	$(call go-get-tool,sigs.k8s.io/kustomize/kustomize/v5@v5.0.1)
 
 ############################################################
 # e2e test section

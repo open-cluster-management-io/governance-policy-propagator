@@ -30,7 +30,7 @@ var _ = Describe("Test CRD validation", func() {
 		}}
 
 		err := unstructured.SetNestedSlice(pol.Object, deps, "spec", "dependencies")
-		Expect(err).To(BeNil())
+		Expect(err).ToNot(HaveOccurred())
 
 		return pol
 	}
@@ -38,7 +38,7 @@ var _ = Describe("Test CRD validation", func() {
 	addExtraDependency := func(pol *unstructured.Unstructured, name, ns, kind string) *unstructured.Unstructured {
 		templates, found, err := unstructured.NestedSlice(pol.Object, "spec", "policy-templates")
 		Expect(found).To(BeTrue())
-		Expect(err).To(BeNil())
+		Expect(err).ToNot(HaveOccurred())
 
 		tmpl0 := templates[0].(map[string]interface{})
 		tmpl0["extraDependencies"] = []interface{}{map[string]interface{}{
@@ -50,7 +50,7 @@ var _ = Describe("Test CRD validation", func() {
 		}}
 
 		err = unstructured.SetNestedSlice(pol.Object, templates, "spec", "policy-templates")
-		Expect(err).To(BeNil())
+		Expect(err).ToNot(HaveOccurred())
 
 		return pol
 	}
