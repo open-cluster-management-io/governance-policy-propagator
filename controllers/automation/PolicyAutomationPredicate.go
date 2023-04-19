@@ -13,9 +13,9 @@ import (
 // we only want to watch for pb contains policy as subjects
 var policyAuomtationPredicateFuncs = predicate.Funcs{
 	UpdateFunc: func(e event.UpdateEvent) bool {
-		// nolint: forcetypeassert
+		//nolint:forcetypeassert
 		policyAutomationNew := e.ObjectNew.(*policyv1beta1.PolicyAutomation)
-		// nolint: forcetypeassert
+		//nolint:forcetypeassert
 		policyAutomationOld := e.ObjectOld.(*policyv1beta1.PolicyAutomation)
 
 		if policyAutomationNew.Spec.PolicyRef == "" {
@@ -29,7 +29,7 @@ var policyAuomtationPredicateFuncs = predicate.Funcs{
 		return !equality.Semantic.DeepEqual(policyAutomationNew.Spec, policyAutomationOld.Spec)
 	},
 	CreateFunc: func(e event.CreateEvent) bool {
-		// nolint: forcetypeassert
+		//nolint:forcetypeassert
 		policyAutomationNew := e.Object.(*policyv1beta1.PolicyAutomation)
 
 		return policyAutomationNew.Spec.PolicyRef != ""

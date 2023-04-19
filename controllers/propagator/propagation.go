@@ -547,7 +547,7 @@ func (r *PolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) error {
 	instance.Status.ComplianceState = CalculateRootCompliance(cpcs)
 	instance.Status.Placement = placements
 
-	err = r.Status().Update(context.TODO(), instance, &client.UpdateOptions{})
+	err = r.Status().Update(context.TODO(), instance)
 	if err != nil {
 		return err
 	}

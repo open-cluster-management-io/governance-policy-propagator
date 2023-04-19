@@ -75,7 +75,7 @@ var _ = Describe("Test policy encryption key rotation", func() {
 			_, err := clientHubDynamic.Resource(gvrPolicy).
 				Namespace(testNamespace).
 				Create(context.TODO(), policy, metav1.CreateOptions{})
-			Expect(err).Should(BeNil())
+			Expect(err).ShouldNot(HaveOccurred())
 		}
 	})
 
@@ -89,7 +89,7 @@ var _ = Describe("Test policy encryption key rotation", func() {
 			Data: map[string][]byte{"key": key, "previousKey": previousKey},
 		}
 		_, err := clientHub.CoreV1().Secrets(testNamespace).Create(context.TODO(), secret, metav1.CreateOptions{})
-		Expect(err).Should(BeNil())
+		Expect(err).ShouldNot(HaveOccurred())
 	})
 
 	It("should have rotated the key in the "+EncryptionKeySecret+" secret", func() {
@@ -139,7 +139,7 @@ var _ = Describe("Test policy encryption key rotation", func() {
 		policy, err := clientHubDynamic.Resource(gvrPolicy).Namespace(testNamespace).Get(
 			context.TODO(), "policy-two", metav1.GetOptions{},
 		)
-		Expect(err).Should(BeNil())
+		Expect(err).ShouldNot(HaveOccurred())
 		Expect(policy.GetAnnotations()[TriggerUpdateAnnotation]).Should(Equal(""))
 	})
 
@@ -147,13 +147,13 @@ var _ = Describe("Test policy encryption key rotation", func() {
 		err := clientHub.CoreV1().Secrets(testNamespace).Delete(
 			context.TODO(), EncryptionKeySecret, metav1.DeleteOptions{},
 		)
-		Expect(err).Should(BeNil())
+		Expect(err).ShouldNot(HaveOccurred())
 
 		for _, policyName := range []string{"policy-one", "policy-two"} {
 			err = clientHubDynamic.Resource(gvrPolicy).Namespace(testNamespace).Delete(
 				context.TODO(), policyName, metav1.DeleteOptions{},
 			)
-			Expect(err).Should(BeNil())
+			Expect(err).ShouldNot(HaveOccurred())
 		}
 	})
 })

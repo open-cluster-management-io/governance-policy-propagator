@@ -13,9 +13,9 @@ import (
 
 var policyPredicateFuncs = predicate.Funcs{
 	UpdateFunc: func(e event.UpdateEvent) bool {
-		// nolint: forcetypeassert
+		//nolint:forcetypeassert
 		policyObjNew := e.ObjectNew.(*policiesv1.Policy)
-		// nolint: forcetypeassert
+		//nolint:forcetypeassert
 		policyObjOld := e.ObjectOld.(*policiesv1.Policy)
 
 		return !equality.Semantic.DeepEqual(policyObjNew.Status, policyObjOld.Status)

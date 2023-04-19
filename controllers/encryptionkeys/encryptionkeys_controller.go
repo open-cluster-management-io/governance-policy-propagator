@@ -56,7 +56,7 @@ var _ reconcile.Reconciler = &EncryptionKeysReconciler{}
 
 // EncryptionKeysReconciler is responsible for rotating the AES encryption key in the "policy-encryption-key" Secrets
 // for all managed clusters.
-type EncryptionKeysReconciler struct { // nolint:golint,revive
+type EncryptionKeysReconciler struct { //nolint:golint,revive
 	client.Client
 	KeyRotationDays         uint
 	MaxConcurrentReconciles uint
@@ -192,7 +192,7 @@ func (r *EncryptionKeysReconciler) getNextRotationFromNow(secret *corev1.Secret)
 
 	lastRotated, err := time.Parse(time.RFC3339, lastRotatedTS)
 	if err != nil {
-		return 0, fmt.Errorf(`%w with value "%s": %v`, errLastRotationParseError, lastRotatedTS, err)
+		return 0, fmt.Errorf(`%w with value "%s": %w`, errLastRotationParseError, lastRotatedTS, err)
 	}
 
 	nextRotation := lastRotated.Add(time.Hour * 24 * time.Duration(r.KeyRotationDays))

@@ -16,9 +16,9 @@ func policyStatusPredicate() predicate.Funcs {
 		// Creations are handled by the main policy controller.
 		CreateFunc: func(e event.CreateEvent) bool { return false },
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			// nolint: forcetypeassert
+			//nolint:forcetypeassert
 			oldPolicy := e.ObjectOld.(*policiesv1.Policy)
-			// nolint: forcetypeassert
+			//nolint:forcetypeassert
 			updatedPolicy := e.ObjectNew.(*policiesv1.Policy)
 
 			// If there was an update and the generation is the same, the status must have changed.

@@ -16,7 +16,7 @@ import (
 
 func policyMapper(c client.Client) handler.MapFunc {
 	return func(obj client.Object) []reconcile.Request {
-		// nolint: forcetypeassert
+		//nolint:forcetypeassert
 		policy := obj.(*policiesv1.Policy)
 
 		var result []reconcile.Request
@@ -42,9 +42,8 @@ func policyMapper(c client.Client) handler.MapFunc {
 
 		if found {
 			modeType := policyAutomation.Spec.Mode
-			if modeType == "scan" {
-				// scan mode, do not queue
-			} else if modeType == policyv1beta1.Once || modeType == policyv1beta1.EveryEvent {
+			// Do not queue during scan mode
+			if modeType != "scan" && modeType == policyv1beta1.Once || modeType == policyv1beta1.EveryEvent {
 				// The same policyAutomation mapping logic for once and everyEvent mode
 				request := reconcile.Request{NamespacedName: types.NamespacedName{
 					Name:      policyAutomation.GetName(),

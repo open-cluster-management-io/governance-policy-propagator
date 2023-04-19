@@ -15,9 +15,9 @@ import (
 func policyPredicates() predicate.Funcs {
 	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			// nolint: forcetypeassert
+			//nolint:forcetypeassert
 			oldPolicy := e.ObjectOld.(*policiesv1.Policy)
-			// nolint: forcetypeassert
+			//nolint:forcetypeassert
 			updatedPolicy := e.ObjectNew.(*policiesv1.Policy)
 
 			// Ignore pure status updates since those are handled by a separate controller
