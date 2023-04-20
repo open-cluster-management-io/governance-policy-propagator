@@ -282,7 +282,7 @@ e2e-dependencies:
 
 .PHONY: e2e-test
 e2e-test: e2e-dependencies
-	$(GINKGO) -v --fail-fast --slow-spec-threshold=10s $(E2E_TEST_ARGS) test/e2e
+	$(GINKGO) -v --fail-fast $(E2E_TEST_ARGS) test/e2e
 
 .PHONY: e2e-test-coverage
 e2e-test-coverage: E2E_TEST_ARGS = --json-report=report_e2e.json --output-dir=.
