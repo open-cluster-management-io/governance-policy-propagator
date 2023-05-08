@@ -9,7 +9,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	policiesv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
@@ -39,8 +38,9 @@ func equivalentReplicatedPolicies(plc1 *policiesv1.Policy, plc2 *policiesv1.Poli
 // are in a consistent format suited for use on managed clusters.
 // It can return an error if it needed to canonicalize a dependency, but a PolicySet lookup failed.
 func (r *PolicyReconciler) buildReplicatedPolicy(
-	root *policiesv1.Policy, decision appsv1.PlacementDecision,
+	root *policiesv1.Policy, clusterDec clusterDecision,
 ) (*policiesv1.Policy, error) {
+	decision := clusterDec.Cluster
 	replicatedName := common.FullNameForPolicy(root)
 
 	replicated := root.DeepCopy()
@@ -91,6 +91,14 @@ func (r *PolicyReconciler) buildReplicatedPolicy(
 	annotations[argoCDCompareOptionsAnnotation] = "IgnoreExtraneous"
 
 	replicated.SetAnnotations(annotations)
+
+	// Override the replicated policy remediationAction when it's selected to be enforced
+	if !strings.EqualFold(string(replicated.Spec.RemediationAction), string(policiesv1.Enforce)) {
+		if clusterDec.PolicyOverrides.RemediationAction != "" {
+			replicated.Spec.RemediationAction = policiesv1.RemediationAction(
+				clusterDec.PolicyOverrides.RemediationAction)
+		}
+	}
 
 	var err error
 
