@@ -1,0 +1,51 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: case16-test-policy
+spec:
+  remediationAction: inform
+  disabled: false
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: case16-test-policy-namespace
+        spec:
+          namespaceselector:
+            exclude:
+            - kube-*
+            include:
+            - '*'
+          object-templates:
+          - complianceType: musthave
+            objectDefinition:
+              apiVersion: v1
+              kind: Namespace
+              metadata:
+                name: case16-test-namespace
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: case16-test-policy-pb
+placementRef:
+  apiGroup: apps.open-cluster-management.io
+  kind: PlacementRule
+  name: case16-test-policy-plr
+subjects:
+- apiGroup: policy.open-cluster-management.io
+  kind: Policy
+  name: case16-test-policy
+---
+apiVersion: apps.open-cluster-management.io/v1
+kind: PlacementRule
+metadata:
+  name: case16-test-policy-plr
+spec:
+  clusterConditions:
+  - status: "True"
+    type: ManagedClusterConditionAvailable
+  clusterSelector:
+    matchExpressions:
+      []
