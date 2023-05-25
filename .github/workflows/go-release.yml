@@ -7,7 +7,6 @@ on:
 
 env:
   TAG: ${{ github.ref_name }}
-  RELEASE_VERSION: ${{ github.ref_name }}
 defaults:
   run:
     working-directory: go/src/open-cluster-management.io/governance-policy-propagator
@@ -32,15 +31,15 @@ jobs:
       - name: push image
         run: |
           echo ${{ secrets.DOCKER_PASSWORD }} | docker login quay.io --username ${{ secrets.DOCKER_USER }} --password-stdin
-          docker push quay.io/open-cluster-management/governance-policy-propagator:$RELEASE_VERSION
+          docker push quay.io/open-cluster-management/governance-policy-propagator:$TAG
       - name: generate changelog
         run: |
-          echo "# Governance-policy-propagator $RELEASE_VERSION" > /home/runner/work/changelog.txt
-          echo "- See the [CHANGELOG](https://github.com/open-cluster-management-io/governance-policy-propagator/blob/main/CHANGELOG/CHANGELOG-${RELEASE_VERSION}.md) for more details." >> /home/runner/work/changelog.txt
-          echo "- The released image is quay.io/open-cluster-management/governance-policy-propagator:$RELEASE_VERSION" >> /home/runner/work/changelog.txt
+          echo "# governance-policy-propagator $TAG" > /home/runner/work/changelog.txt
+          echo "- The released image is quay.io/open-cluster-management/governance-policy-propagator:$TAG" >> /home/runner/work/changelog.txt
       - name: publish release
-        uses: softprops/action-gh-release@v0.1.5
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+        uses: softprops/action-gh-release@v0.1.15
         with:
           body_path: /home/runner/work/changelog.txt
+          generate_release_notes: true
+          draft: true
+          prerelease: false
