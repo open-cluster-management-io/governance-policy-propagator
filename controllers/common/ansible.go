@@ -24,6 +24,8 @@ const (
 	ControllerName             string = "policy-automation"
 	PolicyAutomationLabel      string = "policy.open-cluster-management.io/policyautomation-name"
 	PolicyAutomationGeneration string = "policy.open-cluster-management.io/policyautomation-generation"
+	// policyautomation-ResouceVersion
+	PolicyAutomationResouceV string = "policy.open-cluster-management.io/policyautomation-resource-version"
 )
 
 var log = ctrl.Log.WithName(ControllerName)
@@ -49,17 +51,37 @@ func MatchPAGeneration(policyAutomation *policyv1beta1.PolicyAutomation,
 		return false, err
 	}
 
-	ansiblejobLen := len(ansiblejobList.Items)
-	// Check whether new PolicyAutomation
-	if ansiblejobLen == 0 {
-		return false, nil
-	}
-
 	s := strconv.FormatInt(generation, 10)
 
 	for _, aj := range ansiblejobList.Items {
 		annotations := aj.GetAnnotations()
 		if annotations[PolicyAutomationGeneration] == s {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// Check any ansiblejob is made by current resourceVersion number
+// Returning "true" means the policy automation already created ansiblejob with this resourceVersion
+func MatchPAResouceV(policyAutomation *policyv1beta1.PolicyAutomation,
+	dynamicClient dynamic.Interface, resourceVersion string,
+) (bool, error) {
+	ansiblejobList, err := dynamicClient.Resource(ansibleJobRes).Namespace(policyAutomation.GetNamespace()).List(
+		context.TODO(), metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("%s=%s", PolicyAutomationLabel, policyAutomation.GetName()),
+		},
+	)
+	if err != nil {
+		log.Error(err, "Failed to get ansiblejob list")
+
+		return false, err
+	}
+
+	for _, aj := range ansiblejobList.Items {
+		annotations := aj.GetAnnotations()
+		if annotations[PolicyAutomationResouceV] == resourceVersion {
 			return true, nil
 		}
 	}
@@ -79,6 +101,7 @@ func CreateAnsibleJob(policyAutomation *policyv1beta1.PolicyAutomation,
 				"annotations": map[string]interface{}{
 					PolicyAutomationGeneration: strconv.
 						FormatInt(policyAutomation.GetGeneration(), 10),
+					PolicyAutomationResouceV: policyAutomation.GetResourceVersion(),
 				},
 			},
 			"spec": map[string]interface{}{
