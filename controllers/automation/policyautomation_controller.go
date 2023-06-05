@@ -302,6 +302,20 @@ func (r *PolicyAutomationReconciler) Reconcile(
 	}
 
 	if policyAutomation.Annotations["policy.open-cluster-management.io/rerun"] == "true" {
+		AjExist, err := common.MatchPAResouceV(policyAutomation,
+			r.DynamicClient, policyAutomation.GetResourceVersion())
+		if err != nil {
+			log.Error(err, "Failed to compare Ansible job's resourceVersion")
+
+			return reconcile.Result{}, err
+		}
+
+		if AjExist {
+			log.Info("Ansiblejob already exist under this policyautomation resourceVersion")
+
+			return reconcile.Result{}, nil
+		}
+
 		targetList := common.FindNonCompliantClustersForPolicy(policy)
 		log.Info(
 			"Creating an Ansible job", "mode", "manual",
