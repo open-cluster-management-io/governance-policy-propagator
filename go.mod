@@ -20,7 +20,7 @@ require (
 	k8s.io/client-go v0.27.2
 	k8s.io/klog/v2 v2.100.1
 	open-cluster-management.io/api v0.10.1
-	open-cluster-management.io/multicloud-operators-subscription v0.10.0
+	open-cluster-management.io/multicloud-operators-subscription v0.11.0
 	sigs.k8s.io/controller-runtime v0.15.0
 )
 
@@ -96,5 +96,4 @@ require (
 replace (
 	golang.org/x/crypto => golang.org/x/crypto v0.0.0-20220321153916-2c7772ba3064 // CVE-2021-43565
 	golang.org/x/text => golang.org/x/text v0.3.8 // CVE-2022-32149
-	open-cluster-management.io/multicloud-operators-subscription => github.com/stolostron/multicloud-operators-subscription v1.2.4-0-20211122-7277a37.0.20230502154953-3ef589e142b4
 )
