@@ -199,8 +199,8 @@ func main() {
 		LeaderElectionResourceLock: "leases",
 		Cache: cache.Options{
 			ByObject: map[client.Object]cache.ByObject{
-				// Set a field selector so that a watch on secrets will be limited to just the secret with the policy template
-				// encryption key.
+				// Set a field selector so that a watch on secrets will be limited to just the secret with
+				// the policy template encryption key.
 				&corev1.Secret{}: {
 					Field: fields.SelectorFromSet(fields.Set{"metadata.name": propagatorctrl.EncryptionKeySecret}),
 				},
@@ -208,13 +208,8 @@ func main() {
 		},
 	}
 
-	// Add support for MultiNamespace set in WATCH_NAMESPACE (e.g ns1,ns2)
-	// Note that this is not intended to be used for excluding namespaces, this is better done via a Predicate
-	// Also note that you may face performance issues when using this with a high number of namespaces.
-	// More Info: https://godoc.org/github.com/kubernetes-sigs/controller-runtime/pkg/cache#MultiNamespacedCacheBuilder
 	if strings.Contains(namespace, ",") {
-		options.Namespace = ""
-		options.NewCache = cache.MultiNamespacedCacheBuilder(strings.Split(namespace, ","))
+		options.Cache.Namespaces = strings.Split(namespace, ",")
 	}
 
 	mgr, err := ctrl.NewManager(cfg, options)
