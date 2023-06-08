@@ -188,18 +188,6 @@ func main() {
 		}
 	}
 
-	// Set a field selector so that a watch on secrets will be limited to just the secret with the policy template
-	// encryption key.
-	newCacheFunc := cache.BuilderWithOptions(
-		cache.Options{
-			SelectorsByObject: cache.SelectorsByObject{
-				&corev1.Secret{}: {
-					Field: fields.SelectorFromSet(fields.Set{"metadata.name": propagatorctrl.EncryptionKeySecret}),
-				},
-			},
-		},
-	)
-
 	// Set default manager options
 	options := ctrl.Options{
 		Namespace:                  namespace,
@@ -209,7 +197,15 @@ func main() {
 		LeaderElection:             enableLeaderElection,
 		LeaderElectionID:           "policy-propagator.open-cluster-management.io",
 		LeaderElectionResourceLock: "leases",
-		NewCache:                   newCacheFunc,
+		Cache: cache.Options{
+			ByObject: map[client.Object]cache.ByObject{
+				// Set a field selector so that a watch on secrets will be limited to just the secret with the policy template
+				// encryption key.
+				&corev1.Secret{}: {
+					Field: fields.SelectorFromSet(fields.Set{"metadata.name": propagatorctrl.EncryptionKeySecret}),
+				},
+			},
+		},
 	}
 
 	// Add support for MultiNamespace set in WATCH_NAMESPACE (e.g ns1,ns2)

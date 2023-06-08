@@ -42,7 +42,7 @@ func (r *RootPolicyStatusReconciler) SetupWithManager(mgr ctrl.Manager, _ ...sou
 		// modify the eventhandler. Currently we need to enqueue requests for Policies in a very
 		// particular way, so we will define that in a separate "Watches"
 		Watches(
-			&source.Kind{Type: &policiesv1.Policy{}},
+			&policiesv1.Policy{},
 			handler.EnqueueRequestsFromMapFunc(common.PolicyMapper(mgr.GetClient())),
 			builder.WithPredicates(policyStatusPredicate()),
 		).

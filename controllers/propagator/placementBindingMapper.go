@@ -16,7 +16,7 @@ import (
 )
 
 func placementBindingMapper(c client.Client) handler.MapFunc {
-	return func(obj client.Object) []reconcile.Request {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
 		//nolint:forcetypeassert
 		object := obj.(*policiesv1.PlacementBinding)
 		var result []reconcile.Request
@@ -43,7 +43,7 @@ func placementBindingMapper(c client.Client) handler.MapFunc {
 						Namespace: object.GetNamespace(),
 					}
 					policySet := &policiesv1beta1.PolicySet{}
-					err := c.Get(context.TODO(), policySetNamespacedName, policySet)
+					err := c.Get(ctx, policySetNamespacedName, policySet)
 					if err != nil {
 						log.V(2).Info("Failed to retrieve policyset referenced in placementbinding",
 							"policySetName", subject.Name, "error", err)

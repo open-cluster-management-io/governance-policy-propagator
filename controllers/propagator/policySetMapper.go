@@ -4,6 +4,8 @@
 package propagator
 
 import (
+	"context"
+
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -13,7 +15,7 @@ import (
 )
 
 func policySetMapper(_ client.Client) handler.MapFunc {
-	return func(object client.Object) []reconcile.Request {
+	return func(ctx context.Context, object client.Object) []reconcile.Request {
 		log := log.WithValues("policySetName", object.GetName(), "namespace", object.GetNamespace())
 		log.V(2).Info("Reconcile Request for PolicySet")
 

@@ -20,7 +20,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	policyv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
@@ -331,18 +330,18 @@ func (r *PolicySetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&policyv1beta1.PolicySet{},
 			builder.WithPredicates(policySetPredicateFuncs)).
 		Watches(
-			&source.Kind{Type: &policyv1.Policy{}},
+			&policyv1.Policy{},
 			handler.EnqueueRequestsFromMapFunc(policyMapper(mgr.GetClient())),
 			builder.WithPredicates(policyPredicateFuncs)).
 		Watches(
-			&source.Kind{Type: &policyv1.PlacementBinding{}},
+			&policyv1.PlacementBinding{},
 			handler.EnqueueRequestsFromMapFunc(placementBindingMapper(mgr.GetClient())),
 			builder.WithPredicates(pbPredicateFuncs)).
 		Watches(
-			&source.Kind{Type: &appsv1.PlacementRule{}},
+			&appsv1.PlacementRule{},
 			handler.EnqueueRequestsFromMapFunc(placementRuleMapper(mgr.GetClient()))).
 		Watches(
-			&source.Kind{Type: &clusterv1beta1.PlacementDecision{}},
+			&clusterv1beta1.PlacementDecision{},
 			handler.EnqueueRequestsFromMapFunc(placementDecisionMapper(mgr.GetClient()))).
 		Complete(r)
 }

@@ -17,7 +17,7 @@ import (
 )
 
 func placementDecisionMapper(c client.Client) handler.MapFunc {
-	return func(object client.Object) []reconcile.Request {
+	return func(ctx context.Context, object client.Object) []reconcile.Request {
 		log := log.WithValues("placementDecisionName", object.GetName(), "namespace", object.GetNamespace())
 
 		log.V(2).Info("Reconcile request for a placement decision")
@@ -34,7 +34,7 @@ func placementDecisionMapper(c client.Client) handler.MapFunc {
 		opts := client.MatchingFields{"placementRef.name": placementName}
 		opts.ApplyToList(lopts)
 
-		err := c.List(context.TODO(), pbList, lopts)
+		err := c.List(ctx, pbList, lopts)
 		if err != nil {
 			return nil
 		}
@@ -66,7 +66,7 @@ func placementDecisionMapper(c client.Client) handler.MapFunc {
 							Namespace: object.GetNamespace(),
 						}
 						policySet := &policiesv1beta1.PolicySet{}
-						err := c.Get(context.TODO(), policySetNamespacedName, policySet)
+						err := c.Get(ctx, policySetNamespacedName, policySet)
 						if err != nil {
 							log.V(2).Info("Failed to retrieve policyset referenced in placementbinding",
 								"policySetName", subject.Name, "placementBindingName", pb.GetName(), "error", err)

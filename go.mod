@@ -5,23 +5,23 @@ go 1.20
 require (
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/go-logr/logr v1.2.4
-	github.com/go-logr/zapr v1.2.3
-	github.com/onsi/ginkgo/v2 v2.9.4
-	github.com/onsi/gomega v1.27.6
+	github.com/go-logr/zapr v1.2.4
 	github.com/google/go-cmp v0.5.9
+	github.com/onsi/ginkgo/v2 v2.9.5
+	github.com/onsi/gomega v1.27.7
 	github.com/prometheus/client_golang v1.15.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stolostron/go-log-utils v0.1.2
 	github.com/stolostron/go-template-utils/v3 v3.2.1
 	github.com/stolostron/kubernetes-dependency-watches v0.2.1
 	github.com/stretchr/testify v1.8.1
-	k8s.io/api v0.27.1
-	k8s.io/apimachinery v0.27.1
-	k8s.io/client-go v12.0.0+incompatible
+	k8s.io/api v0.27.2
+	k8s.io/apimachinery v0.27.2
+	k8s.io/client-go v0.27.2
 	k8s.io/klog/v2 v2.100.1
 	open-cluster-management.io/api v0.10.1
 	open-cluster-management.io/multicloud-operators-subscription v0.10.0
-	sigs.k8s.io/controller-runtime v0.14.6
+	sigs.k8s.io/controller-runtime v0.15.0
 )
 
 require (
@@ -69,22 +69,22 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/crypto v0.8.0 // indirect
-	golang.org/x/net v0.9.0 // indirect
+	golang.org/x/net v0.10.0 // indirect
 	golang.org/x/oauth2 v0.7.0 // indirect
 	golang.org/x/sync v0.2.0 // indirect
 	golang.org/x/sys v0.8.0 // indirect
 	golang.org/x/term v0.8.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
-	golang.org/x/tools v0.8.0 // indirect
-	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
+	golang.org/x/tools v0.9.1 // indirect
+	gomodules.xyz/jsonpatch/v2 v2.3.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/apiextensions-apiserver v0.27.1 // indirect
-	k8s.io/component-base v0.27.1 // indirect
+	k8s.io/apiextensions-apiserver v0.27.2 // indirect
+	k8s.io/component-base v0.27.2 // indirect
 	k8s.io/klog v1.0.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20230501164219-8b0f38b5fd1f // indirect
 	k8s.io/utils v0.0.0-20230406110748-d93618cff8a2 // indirect
@@ -96,6 +96,5 @@ require (
 replace (
 	golang.org/x/crypto => golang.org/x/crypto v0.0.0-20220321153916-2c7772ba3064 // CVE-2021-43565
 	golang.org/x/text => golang.org/x/text v0.3.8 // CVE-2022-32149
-	k8s.io/api => k8s.io/api v0.26.4 // Replaced so that 'go get -u' works. Remove/bump when upgrading.
-	k8s.io/client-go => k8s.io/client-go v0.26.4
+	open-cluster-management.io/multicloud-operators-subscription => github.com/stolostron/multicloud-operators-subscription v1.2.4-0-20211122-7277a37.0.20230502154953-3ef589e142b4
 )
