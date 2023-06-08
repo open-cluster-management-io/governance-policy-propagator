@@ -38,7 +38,6 @@ var log = ctrl.Log.WithName(ControllerName)
 //+kubebuilder:rbac:groups=cluster.open-cluster-management.io,resources=managedclusters;placementdecisions;placements,verbs=get;list;watch
 //+kubebuilder:rbac:groups=apps.open-cluster-management.io,resources=placementrules,verbs=get;list;watch
 //+kubebuilder:rbac:groups=core,resources=events,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 
 // SetupWithManager sets up the controller with the Manager.
@@ -52,27 +51,27 @@ func (r *PolicyReconciler) SetupWithManager(mgr ctrl.Manager, additionalSources 
 		// modify the eventhandler. Currently we need to enqueue requests for Policies in a very
 		// particular way, so we will define that in a separate "Watches"
 		Watches(
-			&source.Kind{Type: &policiesv1.Policy{}},
+			&policiesv1.Policy{},
 			handler.EnqueueRequestsFromMapFunc(common.PolicyMapper(mgr.GetClient())),
 			builder.WithPredicates(policyPredicates())).
 		Watches(
-			&source.Kind{Type: &policiesv1beta1.PolicySet{}},
+			&policiesv1beta1.PolicySet{},
 			handler.EnqueueRequestsFromMapFunc(policySetMapper(mgr.GetClient())),
 			builder.WithPredicates(policySetPredicateFuncs)).
 		Watches(
-			&source.Kind{Type: &policiesv1.PlacementBinding{}},
+			&policiesv1.PlacementBinding{},
 			handler.EnqueueRequestsFromMapFunc(placementBindingMapper(mgr.GetClient())),
 			builder.WithPredicates(pbPredicateFuncs)).
 		Watches(
-			&source.Kind{Type: &appsv1.PlacementRule{}},
+			&appsv1.PlacementRule{},
 			handler.EnqueueRequestsFromMapFunc(placementRuleMapper(mgr.GetClient()))).
 		Watches(
-			&source.Kind{Type: &clusterv1beta1.PlacementDecision{}},
+			&clusterv1beta1.PlacementDecision{},
 			handler.EnqueueRequestsFromMapFunc(placementDecisionMapper(mgr.GetClient())),
 		)
 
 	for _, source := range additionalSources {
-		builder.Watches(source, &handler.EnqueueRequestForObject{})
+		builder.WatchesRawSource(source, &handler.EnqueueRequestForObject{})
 	}
 
 	return builder.Complete(r)

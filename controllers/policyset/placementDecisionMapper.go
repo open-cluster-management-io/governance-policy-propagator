@@ -16,7 +16,7 @@ import (
 )
 
 func placementDecisionMapper(c client.Client) handler.MapFunc {
-	return func(object client.Object) []reconcile.Request {
+	return func(ctx context.Context, object client.Object) []reconcile.Request {
 		log := log.WithValues("placementDecisionName", object.GetName(), "namespace", object.GetNamespace())
 
 		log.V(2).Info("Reconcile request for a placement decision")
@@ -33,7 +33,7 @@ func placementDecisionMapper(c client.Client) handler.MapFunc {
 		opts := client.MatchingFields{"placementRef.name": placementName}
 		opts.ApplyToList(lopts)
 
-		err := c.List(context.TODO(), pbList, lopts)
+		err := c.List(ctx, pbList, lopts)
 		if err != nil {
 			return nil
 		}

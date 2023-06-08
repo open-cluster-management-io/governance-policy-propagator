@@ -17,7 +17,7 @@ import (
 )
 
 func placementRuleMapper(c client.Client) handler.MapFunc {
-	return func(object client.Object) []reconcile.Request {
+	return func(ctx context.Context, object client.Object) []reconcile.Request {
 		log := log.WithValues("placementRuleName", object.GetName(), "namespace", object.GetNamespace())
 
 		log.V(2).Info("Reconcile Request for PlacementRule")
@@ -26,7 +26,7 @@ func placementRuleMapper(c client.Client) handler.MapFunc {
 		pbList := &policiesv1.PlacementBindingList{}
 
 		// find pb in the same namespace of placementrule
-		err := c.List(context.TODO(), pbList, &client.ListOptions{Namespace: object.GetNamespace()})
+		err := c.List(ctx, pbList, &client.ListOptions{Namespace: object.GetNamespace()})
 		if err != nil {
 			return nil
 		}
@@ -56,7 +56,7 @@ func placementRuleMapper(c client.Client) handler.MapFunc {
 								Namespace: object.GetNamespace(),
 							}
 							policySet := &policiesv1beta1.PolicySet{}
-							err := c.Get(context.TODO(), policySetNamespacedName, policySet)
+							err := c.Get(ctx, policySetNamespacedName, policySet)
 							if err != nil {
 								log.V(2).Info("Failed to retrieve policyset referenced in placementbinding",
 									"policySetName", subject.Name, "placementBindingName", pb.GetName(), "error", err)

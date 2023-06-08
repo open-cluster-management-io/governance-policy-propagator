@@ -15,7 +15,7 @@ import (
 )
 
 func policyMapper(c client.Client) handler.MapFunc {
-	return func(obj client.Object) []reconcile.Request {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
 		//nolint:forcetypeassert
 		policy := obj.(*policiesv1.Policy)
 
@@ -23,7 +23,7 @@ func policyMapper(c client.Client) handler.MapFunc {
 
 		policyAutomationList := &policyv1beta1.PolicyAutomationList{}
 
-		err := c.List(context.TODO(), policyAutomationList, &client.ListOptions{Namespace: policy.GetNamespace()})
+		err := c.List(ctx, policyAutomationList, &client.ListOptions{Namespace: policy.GetNamespace()})
 		if err != nil {
 			return nil
 		}

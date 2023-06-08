@@ -21,7 +21,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	policyv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
@@ -45,7 +44,7 @@ func (r *PolicyAutomationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerName).
 		Watches(
-			&source.Kind{Type: &policyv1.Policy{}},
+			&policyv1.Policy{},
 			&common.EnqueueRequestsFromMapFunc{ToRequests: policyMapper(mgr.GetClient())},
 			builder.WithPredicates(policyPredicateFuncs)).
 		For(
