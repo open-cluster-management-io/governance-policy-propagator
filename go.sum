@@ -179,8 +179,6 @@ github.com/stolostron/go-template-utils/v3 v3.2.1 h1:wRiCgHG1pcRYa4ZOb/rbzP45Quh
 github.com/stolostron/go-template-utils/v3 v3.2.1/go.mod h1:D9uOV787ztGsIqh4FxZzkPfBQgy2zz9vK0cv8uDO5vM=
 github.com/stolostron/kubernetes-dependency-watches v0.2.1 h1:42oLxw+wm/LxHj/3WkJOpyry6dy9Svwgm6jHCttQ6qs=
 github.com/stolostron/kubernetes-dependency-watches v0.2.1/go.mod h1:u2NLFgX12/XwNJvxBpqEhfwGwx8dHWGPxzpDy5L3DIk=
-github.com/stolostron/multicloud-operators-subscription v1.2.4-0-20211122-7277a37.0.20230502154953-3ef589e142b4 h1:84Yzeji2klz4ajM0pSXoSrbRIC8a36EK2t5Cg8GgApY=
-github.com/stolostron/multicloud-operators-subscription v1.2.4-0-20211122-7277a37.0.20230502154953-3ef589e142b4/go.mod h1:0YDADTwQiNoLc7ihyHhTaCNAxx9VSVvrTUQf3W+AyGk=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.4.0/go.mod h1:YvHI0jy2hoMjB+UWwv71VJQ9isScKT/TqJzVSSt89Yw=
 github.com/stretchr/objx v0.5.0/go.mod h1:Yh+to48EsGEfYuaHDzXPcE3xhTkx73EhmCGUpEOglKo=
@@ -362,6 +360,8 @@ k8s.io/utils v0.0.0-20230406110748-d93618cff8a2 h1:qY1Ad8PODbnymg2pRbkyMT/ylpTrC
 k8s.io/utils v0.0.0-20230406110748-d93618cff8a2/go.mod h1:OLgZIPagt7ERELqWJFomSt595RzquPNLL48iOWgYOg0=
 open-cluster-management.io/api v0.10.1 h1:/qv1qfIkAVSz6RQmKGehSv6zYI34Xmb8hK7sIUVmduM=
 open-cluster-management.io/api v0.10.1/go.mod h1:6BB/Y6r3hXlPjpJgDwIs6Ubxyx/kXXOg6D9Cntg1I9E=
+open-cluster-management.io/multicloud-operators-subscription v0.11.0 h1:OLpohu92lMEmWk4LriTyxD1SIJrzHOvuhS3UsnEOElk=
+open-cluster-management.io/multicloud-operators-subscription v0.11.0/go.mod h1:0YDADTwQiNoLc7ihyHhTaCNAxx9VSVvrTUQf3W+AyGk=
 sigs.k8s.io/controller-runtime v0.15.0 h1:ML+5Adt3qZnMSYxZ7gAverBLNPSMQEibtzAgp0UPojU=
 sigs.k8s.io/controller-runtime v0.15.0/go.mod h1:7ngYvp1MLT+9GeZ+6lH3LOlcHkp/+tzA/fmHa4iq9kk=
 sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd h1:EDPBXCAspyGV4jQlpZSudPeMmr1bNJefnuqLsRAsHZo=
