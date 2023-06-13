@@ -38,3 +38,5 @@ spec:
                     There is no try.
                   label-vendor-test: |
                     auto-detect
+                  label-vendor-test-two: |
+                    auto-detect
