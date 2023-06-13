@@ -32,6 +32,8 @@ const (
 	case9PolicyNameCopy               = "case9-test-policy-copy"
 	case9PolicyYamlCopy               = "../resources/case9_templates/case9-test-policy_copy.yaml"
 	case9PolicyYamlCopiedRepl         = "../resources/case9_templates/case9-test-replpolicy_copied-"
+	case9PolicyWithCSLookupName       = "case9-test-policy-cslookup"
+	case9PolicyWithCSLookupYaml       = "../resources/case9_templates/case9-test-policy-cslookup.yaml"
 )
 
 var _ = Describe("Test policy templates", func() {
@@ -436,5 +438,56 @@ var _ = Describe("Test encrypted policy templates with secret copy", func() {
 				utils.Kubectl("delete", "-f", case9PolicyYamlCopy, "-n", testNamespace)
 			})
 		}
+	})
+})
+
+var _ = Describe("Test policy templates with cluster-scoped lookup", func() {
+	Describe("Create policy, placement and referenced resource in ns:"+testNamespace, Ordered, func() {
+		It("should be created in user ns", func() {
+			By("Creating " + case9PolicyWithCSLookupName)
+			utils.Kubectl("apply",
+				"-f", case9PolicyWithCSLookupYaml,
+				"-n", testNamespace)
+			plc := utils.GetWithTimeout(
+				clientHubDynamic, gvrPolicy, case9PolicyWithCSLookupName, testNamespace, true, defaultTimeoutSeconds,
+			)
+			Expect(plc).NotTo(BeNil())
+		})
+		It("should resolve templates and propagate to cluster ns managed1", func() {
+			By("Patching test-policy-plr with decision of cluster managed1")
+			plr := utils.GetWithTimeout(
+				clientHubDynamic, gvrPlacementRule, case9PolicyWithCSLookupName+"-plr", testNamespace,
+				true, defaultTimeoutSeconds,
+			)
+			plr.Object["status"] = utils.GeneratePlrStatus("managed1")
+			_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
+				context.TODO(), plr, metav1.UpdateOptions{},
+			)
+			Expect(err).ToNot(HaveOccurred())
+			plc := utils.GetWithTimeout(
+				clientHubDynamic, gvrPolicy, testNamespace+"."+case9PolicyWithCSLookupName, "managed1",
+				true, defaultTimeoutSeconds,
+			)
+			Expect(plc).NotTo(BeNil())
+
+			By("Verifying the replicated policy was created with the correct error annotation in the template")
+			tmpls, _, _ := unstructured.NestedSlice(plc.Object, "spec", "policy-templates")
+			Expect(tmpls).To(HaveLen(1))
+
+			tmplAnnotations, _, _ := unstructured.NestedStringMap(tmpls[0].(map[string]interface{}),
+				"objectDefinition", "metadata", "annotations")
+			Expect(tmplAnnotations).ToNot(BeEmpty())
+
+			hubTmplErrAnnotation := tmplAnnotations["policy.open-cluster-management.io/hub-templates-error"]
+			Expect(hubTmplErrAnnotation).To(ContainSubstring("error calling lookup"))
+		})
+		AfterAll(func() {
+			utils.Kubectl("delete",
+				"-f", case9PolicyWithCSLookupYaml,
+				"-n", testNamespace,
+				"--ignore-not-found")
+			opt := metav1.ListOptions{}
+			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, defaultTimeoutSeconds)
+		})
 	})
 })
