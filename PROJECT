@@ -15,6 +15,9 @@ resources:
   group: policy
   kind: Policy
   path: open-cluster-management.io/governance-policy-propagator/api/v1
+  webhooks:
+    validation: true
+    webhookVersion: v1
   version: v1
 - api:
     crdVersion: v1

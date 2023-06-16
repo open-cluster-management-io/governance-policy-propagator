@@ -90,12 +90,15 @@ func main() {
 	var enableLeaderElection bool
 	var probeAddr string
 	var keyRotationDays, keyRotationMaxConcurrency, policyMetricsMaxConcurrency, policyStatusMaxConcurrency uint
+	var enableWebhooks bool
 
 	pflag.StringVar(&metricsAddr, "metrics-bind-address", ":8383", "The address the metric endpoint binds to.")
 	pflag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	pflag.BoolVar(&enableLeaderElection, "leader-elect", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	pflag.BoolVar(&enableWebhooks, "enable-webhooks", true,
+		"Enable the policy validating webhook")
 	pflag.UintVar(
 		&keyRotationDays,
 		"encryption-key-rotation",
@@ -299,6 +302,13 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		log.Error(err, "Unable to create controller", "controller", rootpolicystatusctrl.ControllerName)
 		os.Exit(1)
+	}
+
+	if enableWebhooks {
+		if err = (&policyv1.Policy{}).SetupWebhookWithManager(mgr); err != nil {
+			log.Error(err, "unable to create webhook", "webhook", "Policy")
+			os.Exit(1)
+		}
 	}
 
 	//+kubebuilder:scaffold:builder

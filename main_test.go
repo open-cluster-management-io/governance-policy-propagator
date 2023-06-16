@@ -14,7 +14,10 @@ import (
 // TestRunMain wraps the main() function in order to build a test binary and collection coverage for
 // E2E/Integration tests. Controller CLI flags are also passed in here.
 func TestRunMain(t *testing.T) {
-	os.Args = append(os.Args, "--leader-elect=false")
+	os.Args = append(os.Args,
+		"--leader-elect=false",
+		"--enable-webhooks=false",
+	)
 
 	main()
 }
