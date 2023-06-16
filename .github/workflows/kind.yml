@@ -81,8 +81,13 @@ jobs:
 
     - name: Verify Deployment Configuration
       run: |
+        make webhook
         make build-images
         make kind-deploy-controller-dev
+    
+    - name: E2E Tests for Webhook
+      run: |
+        make e2e-test-webhook
 
     - name: Debug
       if: ${{ failure() }}
@@ -93,3 +98,4 @@ jobs:
       if: ${{ always() }}
       run: |
         make kind-delete-cluster
+        

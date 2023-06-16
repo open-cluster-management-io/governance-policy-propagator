@@ -213,10 +213,20 @@ kustomize: ## Download kustomize locally if necessary.
 GINKGO = $(LOCAL_BIN)/ginkgo
 
 .PHONY: kind-bootstrap-cluster
-kind-bootstrap-cluster: kind-create-cluster install-crds kind-deploy-controller install-resources
+kind-bootstrap-cluster: kind-create-cluster install-crds webhook kind-deploy-controller install-resources
 
 .PHONY: kind-bootstrap-cluster-dev
 kind-bootstrap-cluster-dev: kind-create-cluster install-crds install-resources
+
+webhook:
+	-kubectl create ns $(KIND_NAMESPACE)
+	@echo installing cert-manager
+	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.12.0/cert-manager.yaml
+	@echo "wait until pods are up"
+	kubectl wait deployment -n cert-manager cert-manager --for condition=Available=True --timeout=90s
+	kubectl wait --for=condition=Ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=30s 
+	sed 's/namespace: open-cluster-management/namespace: $(KIND_NAMESPACE)/g' deploy/webhook.yaml | kubectl apply -f-
+	
 
 .PHONY: kind-deploy-controller
 kind-deploy-controller: manifests
@@ -277,7 +287,7 @@ e2e-dependencies:
 
 .PHONY: e2e-test
 e2e-test: e2e-dependencies
-	$(GINKGO) -v --fail-fast $(E2E_TEST_ARGS) test/e2e
+	$(GINKGO) -v --fail-fast $(E2E_TEST_ARGS) --label-filter="!webhook" test/e2e
 
 .PHONY: e2e-test-coverage
 e2e-test-coverage: E2E_TEST_ARGS = --json-report=report_e2e.json --output-dir=.
@@ -294,6 +304,9 @@ e2e-run-instrumented: e2e-build-instrumented
 .PHONY: e2e-stop-instrumented
 e2e-stop-instrumented:
 	ps -ef | grep '$(IMG)' | grep -v grep | awk '{print $$2}' | xargs kill
+
+e2e-test-webhook:
+	$(GINKGO) -v --fail-fast --label-filter="webhook" test/e2e 
 
 .PHONY: e2e-debug
 e2e-debug:
