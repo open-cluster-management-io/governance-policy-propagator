@@ -160,11 +160,7 @@ gosec-scan: gosec
 
 .PHONY: build
 build:
-	@build/common/scripts/gobuild.sh build/_output/bin/$(IMG) main.go
-
-.PHONY: local
-local: generate fmt
-	@GOOS=darwin build/common/scripts/gobuild.sh build/_output/bin/$(IMG) main.go
+	@go build -o build/_output/bin/$(IMG) main.go
 
 ############################################################
 # images section
