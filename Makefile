@@ -160,7 +160,7 @@ gosec-scan: gosec
 
 .PHONY: build
 build:
-	@go build -o build/_output/bin/$(IMG) main.go
+	CGO_ENABLED=1 go build -o build/_output/bin/$(IMG) main.go
 
 ############################################################
 # images section
