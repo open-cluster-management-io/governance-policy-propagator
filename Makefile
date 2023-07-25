@@ -223,13 +223,19 @@ webhook:
 	@echo installing cert-manager
 	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.12.0/cert-manager.yaml
 	@echo "wait until pods are up"
-	kubectl wait deployment -n cert-manager cert-manager --for condition=Available=True --timeout=90s
-	kubectl wait --for=condition=Ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=30s 
+	kubectl wait deployment -n cert-manager cert-manager --for condition=Available=True --timeout=180s
+	kubectl wait --for=condition=Ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=180s 
 	sed 's/namespace: open-cluster-management/namespace: $(KIND_NAMESPACE)/g' deploy/webhook.yaml | kubectl apply -f-
-	
+
+HUB_ONLY ?= none
 
 .PHONY: kind-deploy-controller
 kind-deploy-controller: manifests
+	if [ "$(HUB_ONLY)" = "true" ]; then\
+		$(MAKE) webhook;\
+		kubectl delete deployment governance-policy-propagator -n $(KIND_NAMESPACE) ;\
+		kubectl wait --for=delete pod -l name=governance-policy-propagator --timeout=60s -n $(KIND_NAMESPACE);\
+	fi
 	@echo installing $(IMG)
 	-kubectl create ns $(KIND_NAMESPACE)
 	kubectl apply -f deploy/operator.yaml -n $(KIND_NAMESPACE)
