@@ -21,8 +21,8 @@ const (
 	longNamesapce              string = "long-long-long-long-long-long-long"
 	case17PolicyReplicatedName string = "case17-test-policy-replicated-longlong"
 	errMsg                     string = `admission webhook "policy.open-cluster-management.io.webhook" denied the ` +
-		`request: the combined length of the policy namespace and name <namespace>.<name> ` +
-		`cannot exceed 63 characters`
+		`request: the combined length of the policy namespace and name ` +
+		`cannot exceed 62 characters`
 )
 
 var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
