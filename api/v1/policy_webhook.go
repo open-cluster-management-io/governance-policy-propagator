@@ -18,7 +18,7 @@ var (
 	// log is for logging in this package.
 	policylog = logf.Log.WithName("policy-validating-webhook")
 	errName   = errors.New("the combined length of the policy namespace and name " +
-		"<namespace>.<name> cannot exceed 63 characters")
+		"cannot exceed 62 characters")
 )
 
 func (r *Policy) SetupWebhookWithManager(mgr ctrl.Manager) error {
