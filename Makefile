@@ -260,14 +260,19 @@ e2e-test-coverage-compliance-events-api: e2e-test-compliance-events-api
 e2e-test-policyautomation: E2E_LABEL_FILTER = --label-filter="policyautomation"
 e2e-test-policyautomation: e2e-test
 
+.PHONY: e2e-test-coverage-foreground
+e2e-test-coverage-foreground: LOG_REDIRECT = 
+e2e-test-coverage-foreground: e2e-test-coverage
+
 .PHONY: e2e-build-instrumented
 e2e-build-instrumented:
 	go test -covermode=atomic -coverpkg=$(shell cat go.mod | head -1 | cut -d ' ' -f 2)/... -c -tags e2e ./ -o build/_output/bin/$(IMG)-instrumented
 
 TEST_COVERAGE_OUT = coverage_e2e.out
 .PHONY: e2e-run-instrumented
+LOG_REDIRECT ?= &>build/_output/controller.log
 e2e-run-instrumented: e2e-build-instrumented
-	WATCH_NAMESPACE="$(WATCH_NAMESPACE)" ./build/_output/bin/$(IMG)-instrumented -test.run "^TestRunMain$$" -test.coverprofile=$(TEST_COVERAGE_OUT) &>build/_output/controller.log &
+	WATCH_NAMESPACE="$(WATCH_NAMESPACE)" ./build/_output/bin/$(IMG)-instrumented -test.run "^TestRunMain$$" -test.coverprofile=$(TEST_COVERAGE_OUT) $(LOG_REDIRECT) &
 
 .PHONY: e2e-stop-instrumented
 e2e-stop-instrumented:
