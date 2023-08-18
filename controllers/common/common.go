@@ -273,10 +273,9 @@ func GetRolloutClusters(
 	if !HasValidPlacementRef(pb) {
 		log.Info(fmt.Sprintf("PlacementBinding %s/%s placementRef is not valid. Ignoring.", pb.Namespace, pb.Name))
 
-		return nil, nil
+		return rolloutResult, nil
 	}
 
-	clusterDecisions := make([]string, 0)
 	refNN := types.NamespacedName{
 		Namespace: pb.GetNamespace(),
 		Name:      pb.PlacementRef.Name,
@@ -328,10 +327,6 @@ func GetRolloutClusters(
 		rolloutResult.ClustersToRollout = map[string]clusterv1alpha1.ClusterRolloutStatus{}
 		for _, decision := range plr.Status.Decisions {
 			rolloutResult.ClustersToRollout[decision.ClusterName] = GetClusterRolloutStatus(decision.ClusterName)
-		}
-
-		for _, cluster := range plr.Status.Decisions {
-			clusterDecisions = append(clusterDecisions, cluster.ClusterName)
 		}
 
 		// if the PlacementRule was not found, the decisions will be empty

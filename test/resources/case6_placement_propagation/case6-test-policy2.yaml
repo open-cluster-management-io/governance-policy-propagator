@@ -53,3 +53,4 @@ metadata:
   name: case6-test-policy-plr-1
   labels:
     cluster.open-cluster-management.io/placement: case6-test-policy-plr
+    cluster.open-cluster-management.io/decision-group-index: "0"

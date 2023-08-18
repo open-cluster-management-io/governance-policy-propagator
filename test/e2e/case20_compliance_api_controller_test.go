@@ -94,11 +94,7 @@ var _ = Describe("Test governance-policy-database secret changes and DB annotati
 			true,
 			defaultTimeoutSeconds,
 		)
-		pld.Object["status"] = utils.GeneratePldStatus(pld.GetName(), pld.GetNamespace(), "managed1")
-		_, err = clientHubDynamic.Resource(gvrPlacementDecision).Namespace(nsName).UpdateStatus(
-			ctx, pld, metav1.UpdateOptions{},
-		)
-		Expect(err).ToNot(HaveOccurred())
+		utils.GeneratePldStatus(clientHubDynamic.Resource(gvrPlacementDecision).Namespace(nsName), pld, "managed1")
 
 		By("Waiting for the replicated policy")
 		replicatedPolicy := utils.GetWithTimeout(

@@ -111,7 +111,7 @@ func GetPolicyRolloutClusters(ctx context.Context, c client.Client,
 	if !HasValidPlacementRef(pb) {
 		log.Info(fmt.Sprintf("Placement binding %s/%s placementRef is not valid. Ignoring.", pb.Namespace, pb.Name))
 
-		return nil, nil, nil
+		return rolloutResult, nil, nil
 	}
 
 	// If the placementRef exists, then it needs to be added to the placement item
