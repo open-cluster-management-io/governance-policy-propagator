@@ -11,11 +11,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-logr/logr"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	clusterv1alpha1 "open-cluster-management.io/api/cluster/v1alpha1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -206,11 +209,66 @@ func HasValidPlacementRef(pb *policiesv1.PlacementBinding) bool {
 	}
 }
 
-// GetDecisions returns the placement decisions from the Placement or PlacementRule referred to by
-// the PlacementBinding
-func GetDecisions(
+// The placementDecisionGetter is an implementation of the cluster PlacementDecisionGetter
+type placementDecisionGetter struct {
+	c client.Client
+}
+
+// List the PlacementDecisions using the method signature from the cluster PlacementDecisionGetter
+// interface. (The signature was originally written to retrieve from a cache, so we need to convert
+// the returned values to an array of pointers.)
+func (pd placementDecisionGetter) List(
+	selector labels.Selector, namespace string,
+) ([]*clusterv1beta1.PlacementDecision, error) {
+	pdList := &clusterv1beta1.PlacementDecisionList{}
+	pdPtrList := []*clusterv1beta1.PlacementDecision{}
+	lopts := &client.ListOptions{
+		LabelSelector: selector,
+		Namespace:     namespace,
+	}
+
+	err := pd.c.List(context.TODO(), pdList, lopts)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, pd := range pdList.Items {
+		pdPtr := pd
+		pdPtrList = append(pdPtrList, &pdPtr)
+	}
+
+	return pdPtrList, nil
+}
+
+// GetRolloutHandler returns a rollout handler from the Placement library to retrieve rollout results
+func GetRolloutHandler(
+	c client.Client, placement *clusterv1beta1.Placement, log logr.Logger,
+) (*clusterv1alpha1.RolloutHandler, error) {
+	pdTracker := clusterv1beta1.NewPlacementDecisionClustersTracker(placement, placementDecisionGetter{c}, nil)
+
+	err := pdTracker.Refresh()
+	if err != nil {
+		log.Error(err, "Error retrieving PlacementDecisions from tracker")
+	}
+
+	return clusterv1alpha1.NewRolloutHandler(pdTracker)
+}
+
+// GetClusterRolloutStatus is the implementation of the cluster ClusterRolloutStatusFunc used to
+// specify policy-specific rollout status for a particular cluster
+var GetClusterRolloutStatus clusterv1alpha1.ClusterRolloutStatusFunc = func(
+	clusterName string,
+) clusterv1alpha1.ClusterRolloutStatus {
+	return clusterv1alpha1.ClusterRolloutStatus{}
+}
+
+// GetRolloutClusters returns the clusters for the current rollout (i.e. the rollout result) from
+// the Placement or PlacementRule referred to by the PlacementBinding
+func GetRolloutClusters(
 	ctx context.Context, c client.Client, pb *policiesv1.PlacementBinding,
-) ([]string, error) {
+) (clusterv1alpha1.RolloutResult, error) {
+	rolloutResult := clusterv1alpha1.RolloutResult{}
+
 	// If the PlacementRef is invalid, log and return. (This is not recoverable.)
 	if !HasValidPlacementRef(pb) {
 		log.Info(fmt.Sprintf("PlacementBinding %s/%s placementRef is not valid. Ignoring.", pb.Namespace, pb.Name))
@@ -230,35 +288,46 @@ func GetDecisions(
 
 		err := c.Get(ctx, refNN, pl)
 		if err != nil && !k8serrors.IsNotFound(err) {
-			return nil, fmt.Errorf("failed to get Placement '%v': %w", pb.PlacementRef.Name, err)
+			return rolloutResult, fmt.Errorf("failed to get Placement '%v': %w", pb.PlacementRef.Name, err)
 		}
 
 		if k8serrors.IsNotFound(err) {
-			return nil, nil
+			return rolloutResult, nil
 		}
 
-		list := &clusterv1beta1.PlacementDecisionList{}
-		lopts := &client.ListOptions{Namespace: pb.GetNamespace()}
+		rolloutHandler, err := GetRolloutHandler(c, pl, log)
+		if err != nil {
+			log.Error(err, "Failed to instantiate the cluster rollout handler")
 
-		opts := client.MatchingLabels{"cluster.open-cluster-management.io/placement": pl.GetName()}
-		opts.ApplyToList(lopts)
-
-		err = c.List(ctx, list, lopts)
-		if err != nil && !k8serrors.IsNotFound(err) {
-			return nil, fmt.Errorf("failed to list the PlacementDecisions for '%v', %w", pb.PlacementRef.Name, err)
+			return rolloutResult, err
 		}
 
-		for _, item := range list.Items {
-			for _, cluster := range item.Status.Decisions {
-				clusterDecisions = append(clusterDecisions, cluster.ClusterName)
-			}
+		// Set the RolloutStrategy to "All"
+		// (this will be configurable in the future)
+		defaultRolloutStrategy := clusterv1alpha1.RolloutStrategy{
+			Type: clusterv1alpha1.All,
 		}
 
-		return clusterDecisions, nil
+		strategy, rolloutResult, err := rolloutHandler.GetRolloutCluster(
+			defaultRolloutStrategy, GetClusterRolloutStatus)
+		if err != nil {
+			log.Error(err, "Failed to retrieve clusters from rollout handler")
+
+			return clusterv1alpha1.RolloutResult{}, err
+		}
+
+		log.V(1).Info(fmt.Sprintf("Rolling out policies using rollout strategy %s", strategy.Type))
+
+		return rolloutResult, nil
 	case "PlacementRule":
 		plr := &appsv1.PlacementRule{}
 		if err := c.Get(ctx, refNN, plr); err != nil && !k8serrors.IsNotFound(err) {
-			return nil, fmt.Errorf("failed to get PlacementRule '%v': %w", pb.PlacementRef.Name, err)
+			return rolloutResult, fmt.Errorf("failed to get PlacementRule '%v': %w", pb.PlacementRef.Name, err)
+		}
+
+		rolloutResult.ClustersToRollout = map[string]clusterv1alpha1.ClusterRolloutStatus{}
+		for _, decision := range plr.Status.Decisions {
+			rolloutResult.ClustersToRollout[decision.ClusterName] = GetClusterRolloutStatus(decision.ClusterName)
 		}
 
 		for _, cluster := range plr.Status.Decisions {
@@ -266,10 +335,10 @@ func GetDecisions(
 		}
 
 		// if the PlacementRule was not found, the decisions will be empty
-		return clusterDecisions, nil
+		return rolloutResult, nil
 	}
 
-	return nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Namespace, pb.Name)
+	return rolloutResult, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Namespace, pb.Name)
 }
 
 func ParseRootPolicyLabel(rootPlc string) (name, namespace string, err error) {
@@ -302,17 +371,17 @@ func FullNameForPolicy(plc *policiesv1.Policy) string {
 func GetRepPoliciesInPlacementBinding(
 	ctx context.Context, c client.Client, pb *policiesv1.PlacementBinding,
 ) []reconcile.Request {
-	decisions, err := GetDecisions(ctx, c, pb)
+	rolloutResult, err := GetRolloutClusters(ctx, c, pb)
 	if err != nil {
 		return []reconcile.Request{}
 	}
 	// Use this for removing duplicated policies
 	rootPolicyRequest := GetPoliciesInPlacementBinding(ctx, c, pb)
 
-	result := make([]reconcile.Request, 0, len(rootPolicyRequest)*len(decisions))
+	result := make([]reconcile.Request, 0, len(rootPolicyRequest)*len(rolloutResult.ClustersToRollout))
 
 	for _, rp := range rootPolicyRequest {
-		for _, clusterName := range decisions {
+		for clusterName := range rolloutResult.ClustersToRollout {
 			result = append(result, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      rp.Namespace + "." + rp.Name,
 				Namespace: clusterName,

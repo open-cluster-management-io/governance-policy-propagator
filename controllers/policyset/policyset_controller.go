@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	clusterv1alpha1 "open-cluster-management.io/api/cluster/v1alpha1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -189,13 +190,15 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 					log.V(1).Info("Error getting placement binding " + pbName)
 				}
 
-				var clusterDecisions []string
-				clusterDecisions, err = common.GetDecisions(ctx, r.Client, pb)
+				var rolloutResult clusterv1alpha1.RolloutResult
+				rolloutResult, err = common.GetRolloutClusters(ctx, r.Client, pb)
 				if err != nil {
 					log.Error(err, "Error getting placement decisions for binding "+pbName)
 				}
 
-				clusters = append(clusters, clusterDecisions...)
+				for clusterName := range rolloutResult.ClustersToRollout {
+					clusters = append(clusters, clusterName)
+				}
 			}
 
 			// aggregate compliance state

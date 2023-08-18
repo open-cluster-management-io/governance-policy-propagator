@@ -10,6 +10,7 @@ import (
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	clusterv1alpha1 "open-cluster-management.io/api/cluster/v1alpha1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -22,7 +23,7 @@ import (
 func RootStatusUpdate(ctx context.Context, c client.Client, rootPolicy *policiesv1.Policy) (DecisionSet, error) {
 	placements, decisions, err := GetClusterDecisions(ctx, c, rootPolicy)
 	if err != nil {
-		log.Info("Failed to get any placement decisions. Giving up on the request.")
+		log.Info("Failed to get any clusters from the placement. Giving up on the request.")
 
 		return nil, err
 	}
@@ -63,12 +64,13 @@ func RootStatusUpdate(ctx context.Context, c client.Client, rootPolicy *policies
 	return decisions, nil
 }
 
-// GetPolicyPlacementDecisions retrieves the placement decisions for a input PlacementBinding when
-// the policy is bound within it. It can return an error if the PlacementBinding is invalid, or if
-// a required lookup fails.
-func GetPolicyPlacementDecisions(ctx context.Context, c client.Client,
+// GetPolicyRolloutClusters retrieves the clusters for the current rollout (i.e. the rollout result)
+// for a input PlacementBinding when the policy is bound within it. It can return an error if the
+// PlacementBinding is invalid, or if a required lookup fails.
+func GetPolicyRolloutClusters(ctx context.Context, c client.Client,
 	instance *policiesv1.Policy, pb *policiesv1.PlacementBinding,
-) (clusterDecisions []string, placements []*policiesv1.Placement, err error) {
+) (rolloutResult clusterv1alpha1.RolloutResult, placements []*policiesv1.Placement, err error) {
+	rolloutResult = clusterv1alpha1.RolloutResult{}
 	policySubjectFound := false
 	policySetSubjects := make(map[string]struct{}) // a set, to prevent duplicates
 
@@ -102,7 +104,7 @@ func GetPolicyPlacementDecisions(ctx context.Context, c client.Client,
 
 	if len(placements) == 0 {
 		// None of the subjects in the PlacementBinding were relevant to this Policy.
-		return nil, nil, nil
+		return rolloutResult, nil, nil
 	}
 
 	// If the PlacementRef is invalid, log and return. (This is not recoverable.)
@@ -122,7 +124,8 @@ func GetPolicyPlacementDecisions(ctx context.Context, c client.Client,
 	case "PlacementRule":
 		plr := &appsv1.PlacementRule{}
 		if err := c.Get(ctx, refNN, plr); err != nil && !k8serrors.IsNotFound(err) {
-			return nil, nil, fmt.Errorf("failed to check for PlacementRule '%v': %w", pb.PlacementRef.Name, err)
+			return rolloutResult, nil,
+				fmt.Errorf("failed to check for PlacementRule '%v': %w", pb.PlacementRef.Name, err)
 		}
 
 		for i := range placements {
@@ -131,7 +134,7 @@ func GetPolicyPlacementDecisions(ctx context.Context, c client.Client,
 	case "Placement":
 		pl := &clusterv1beta1.Placement{}
 		if err := c.Get(ctx, refNN, pl); err != nil && !k8serrors.IsNotFound(err) {
-			return nil, nil, fmt.Errorf("failed to check for Placement '%v': %w", pb.PlacementRef.Name, err)
+			return rolloutResult, nil, fmt.Errorf("failed to check for Placement '%v': %w", pb.PlacementRef.Name, err)
 		}
 
 		for i := range placements {
@@ -141,17 +144,17 @@ func GetPolicyPlacementDecisions(ctx context.Context, c client.Client,
 
 	// If there are no placements, then the PlacementBinding is not for this Policy.
 	if len(placements) == 0 {
-		return nil, nil, nil
+		return rolloutResult, nil, nil
 	}
 
 	// If the policy is disabled, don't return any decisions, so that the policy isn't put on any clusters
 	if instance.Spec.Disabled {
-		return nil, placements, nil
+		return rolloutResult, placements, nil
 	}
 
-	clusterDecisions, err = GetDecisions(ctx, c, pb)
+	rolloutResult, err = GetRolloutClusters(ctx, c, pb)
 
-	return clusterDecisions, placements, err
+	return rolloutResult, placements, err
 }
 
 type DecisionSet map[string]bool
@@ -188,18 +191,18 @@ func GetClusterDecisions(
 			continue
 		}
 
-		plcDecisions, plcPlacements, err := GetPolicyPlacementDecisions(ctx, c, rootPolicy, &pbList.Items[i])
+		plcRolloutClusters, plcPlacements, err := GetPolicyRolloutClusters(ctx, c, rootPolicy, &pbList.Items[i])
 		if err != nil {
 			return nil, nil, err
 		}
 
-		if len(plcDecisions) == 0 {
-			log.Info("No placement decisions to process for this policy from this non-restricted binding",
+		if len(plcRolloutClusters.ClustersToRollout) == 0 {
+			log.Info("No clusters to process from the placement for this policy from this non-restricted binding",
 				"policyName", rootPolicy.GetName(), "bindingName", pb.GetName())
 		}
 
 		// Decisions are all unique
-		for _, clusterName := range plcDecisions {
+		for clusterName := range plcRolloutClusters.ClustersToRollout {
 			decisions[clusterName] = true
 		}
 
@@ -214,18 +217,18 @@ func GetClusterDecisions(
 
 		foundInDecisions := false
 
-		plcDecisions, plcPlacements, err := GetPolicyPlacementDecisions(ctx, c, rootPolicy, &pbList.Items[i])
+		plcRolloutClusters, plcPlacements, err := GetPolicyRolloutClusters(ctx, c, rootPolicy, &pbList.Items[i])
 		if err != nil {
 			return nil, nil, err
 		}
 
-		if len(plcDecisions) == 0 {
-			log.Info("No placement decisions to process for this policy from this restricted binding",
+		if len(plcRolloutClusters.ClustersToRollout) == 0 {
+			log.Info("No clusters to process from the placement for this policy from this restricted binding",
 				"policyName", rootPolicy.GetName(), "bindingName", pb.GetName())
 		}
 
 		// Decisions are all unique
-		for _, clusterName := range plcDecisions {
+		for clusterName := range plcRolloutClusters.ClustersToRollout {
 			if _, ok := decisions[clusterName]; ok {
 				foundInDecisions = true
 			}
