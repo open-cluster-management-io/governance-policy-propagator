@@ -39,6 +39,7 @@ import (
 	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	policyv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
 	automationctrl "open-cluster-management.io/governance-policy-propagator/controllers/automation"
+	"open-cluster-management.io/governance-policy-propagator/controllers/complianceeventsapi"
 	encryptionkeysctrl "open-cluster-management.io/governance-policy-propagator/controllers/encryptionkeys"
 	metricsctrl "open-cluster-management.io/governance-policy-propagator/controllers/policymetrics"
 	policysetctrl "open-cluster-management.io/governance-policy-propagator/controllers/policyset"
@@ -90,13 +91,15 @@ func main() {
 	var enableLeaderElection bool
 	var probeAddr string
 	var keyRotationDays, keyRotationMaxConcurrency, policyMetricsMaxConcurrency, policyStatusMaxConcurrency uint
-	var enableWebhooks bool
+	var enableComplianceEventsStore, enableWebhooks bool
 
 	pflag.StringVar(&metricsAddr, "metrics-bind-address", ":8383", "The address the metric endpoint binds to.")
 	pflag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	pflag.BoolVar(&enableLeaderElection, "leader-elect", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	pflag.BoolVar(&enableComplianceEventsStore, "enable-compliance-events-store", false,
+		"Enable the compliance events store")
 	pflag.BoolVar(&enableWebhooks, "enable-webhooks", true,
 		"Enable the policy validating webhook")
 	pflag.UintVar(
@@ -347,6 +350,13 @@ func main() {
 	<-dynamicWatcher.Started()
 
 	log.Info("Starting manager")
+
+	if enableComplianceEventsStore {
+		err = complianceeventsapi.StartManager(controllerCtx, cfg, enableLeaderElection)
+		if err != nil {
+			log.Error(err, "Ignoring since this is technical preview")
+		}
+	}
 
 	if err := mgr.Start(controllerCtx); err != nil {
 		log.Error(err, "Problem running manager")

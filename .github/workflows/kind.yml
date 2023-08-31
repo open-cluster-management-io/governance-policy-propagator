@@ -72,7 +72,12 @@ jobs:
       run: |
         export GOPATH=$(go env GOPATH)
         make e2e-test-coverage
-        
+
+    - name: E2E Tests for Compliance Events API
+      run: |
+        make postgres
+        make e2e-test-coverage-compliance-events-api
+
     - name: Test Coverage Verification
       if: ${{ github.event_name == 'pull_request' }}
       run: |

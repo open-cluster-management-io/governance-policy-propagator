@@ -96,6 +96,27 @@ The following environment variables can be set to configure the controller:
 - `CONTROLLER_CONFIG_RETRY_ATTEMPTS` - The number of times to retry a failed Kubernetes API call when processing a
   placement decision. This defaults to `3`.
 
+## Running the Compliance Events API
+
+Create the KinD cluster and install Postgres with the following commands:
+
+```bash
+make kind-bootstrap-cluster-dev
+make postgres
+```
+
+You can connect to the Postgres server with the following command:
+
+```bash
+psql "host=localhost dbname=ocm-compliance-history user=grc password=grc"
+```
+
+Run the Governance Policy Propagator with the following command:
+
+```bash
+WATCH_NAMESPACE="" WATCH_NAMESPACE_COMPLIANCE_EVENTS_STORE="open-cluster-management" go run main.go --leader-elect=false --enable-compliance-events-store  --enable-webhooks=false
+```
+
 ## References
 
 - The `governance-policy-propagator` is part of the `open-cluster-management` community. For more information, visit:
