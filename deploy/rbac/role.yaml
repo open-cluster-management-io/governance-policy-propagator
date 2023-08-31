@@ -61,6 +61,16 @@ rules:
 - apiGroups:
   - ""
   resourceNames:
+  - governance-policy-database
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resourceNames:
   - policy-encryption-key
   resources:
   - secrets

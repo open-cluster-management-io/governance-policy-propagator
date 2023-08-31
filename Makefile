@@ -40,6 +40,9 @@ else ifneq ($(KIND_VERSION), latest)
 else
 	KIND_ARGS =
 endif
+
+KIND_ARGS += --config build/kind/kind-config.yaml
+
 # Test coverage threshold
 export COVERAGE_MIN ?= 75
 
@@ -218,13 +221,33 @@ kind-bootstrap-cluster: kind-create-cluster install-crds webhook kind-deploy-con
 .PHONY: kind-bootstrap-cluster-dev
 kind-bootstrap-cluster-dev: kind-create-cluster install-crds install-resources
 
-webhook:
-	-kubectl create ns $(KIND_NAMESPACE)
-	@echo installing cert-manager
+cert-manager:
+	@echo Installing cert-manager
 	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.12.0/cert-manager.yaml
-	@echo "wait until pods are up"
+	@echo "Waiting until the pods are up"
 	kubectl wait deployment -n cert-manager cert-manager --for condition=Available=True --timeout=180s
 	kubectl wait --for=condition=Ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=180s 
+
+postgres: cert-manager
+	@echo "Installing Postgres"
+	-kubectl create ns $(KIND_NAMESPACE)
+	sed 's/open-cluster-management/$(KIND_NAMESPACE)/g' build/kind/postgres.yaml | kubectl apply --timeout=180s -f-
+
+	@echo "Waiting until the pods are up"
+	@sleep 3
+	kubectl -n $(KIND_NAMESPACE) wait --for=condition=Ready pod -l app=postgres
+
+	@echo "Creating the governance-policy-database secret"
+	@kubectl -n $(KIND_NAMESPACE) get secret governance-policy-database || \
+	kubectl -n $(KIND_NAMESPACE) create secret generic governance-policy-database \
+		--from-literal="user=grc" \
+		--from-literal="password=grc" \
+		--from-literal="host=localhost" \
+		--from-literal="dbname=ocm-compliance-history" \
+		--from-literal="ca=$$(kubectl -n $(KIND_NAMESPACE) get secret postgres-cert -o json | jq -r '.data["ca.crt"]' | base64 -d)"
+
+webhook: cert-manager
+	-kubectl create ns $(KIND_NAMESPACE)
 	sed 's/namespace: open-cluster-management/namespace: $(KIND_NAMESPACE)/g' deploy/webhook.yaml | kubectl apply -f-
 
 HUB_ONLY ?= none
@@ -293,7 +316,7 @@ e2e-dependencies:
 
 .PHONY: e2e-test
 e2e-test: e2e-dependencies
-	$(GINKGO) -v --fail-fast $(E2E_TEST_ARGS) --label-filter="!webhook" test/e2e
+	$(GINKGO) -v --fail-fast $(E2E_TEST_ARGS) --label-filter="!webhook && !compliance-events-api" test/e2e
 
 .PHONY: e2e-test-coverage
 e2e-test-coverage: E2E_TEST_ARGS = --json-report=report_e2e.json --output-dir=.
@@ -313,6 +336,14 @@ e2e-stop-instrumented:
 
 e2e-test-webhook:
 	$(GINKGO) -v --fail-fast --label-filter="webhook" test/e2e 
+
+.PHONY: e2e-test-compliance-events-api
+e2e-test-compliance-events-api:
+	$(GINKGO) -v --fail-fast $(E2E_TEST_ARGS) --label-filter="compliance-events-api" test/e2e
+
+.PHONY: e2e-test-coverage-compliance-events-api
+e2e-test-coverage-compliance-events-api: E2E_TEST_ARGS = --json-report=report_e2e_compliance_events_api.json --covermode=atomic --coverpkg=open-cluster-management.io/governance-policy-propagator/controllers/complianceeventsapi --coverprofile=coverage_e2e_compliance_events_api.out --output-dir=.
+e2e-test-coverage-compliance-events-api: e2e-test-compliance-events-api
 
 .PHONY: e2e-debug
 e2e-debug:
