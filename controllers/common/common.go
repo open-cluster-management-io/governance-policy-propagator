@@ -17,8 +17,10 @@ import (
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
+	policiesv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
 )
 
 const (
@@ -60,36 +62,79 @@ func IsReplicatedPolicy(c client.Client, policy client.Object) (bool, error) {
 	return IsInClusterNamespace(c, policy.GetNamespace())
 }
 
-// IsPbForPoicy compares group and kind with policy group and kind for given pb
-func IsPbForPoicy(pb *policiesv1.PlacementBinding) bool {
-	found := false
+// IsForPolicyOrPolicySet returns true if any of the subjects of the PlacementBinding are Policies
+// or PolicySets.
+func IsForPolicyOrPolicySet(pb *policiesv1.PlacementBinding) bool {
+	if pb == nil {
+		return false
+	}
 
-	subjects := pb.Subjects
-	for _, subject := range subjects {
-		if subject.Kind == policiesv1.Kind && subject.APIGroup == policiesv1.SchemeGroupVersion.Group {
-			found = true
-
-			break
+	for _, subject := range pb.Subjects {
+		if subject.APIGroup == policiesv1.SchemeGroupVersion.Group &&
+			(subject.Kind == policiesv1.Kind || subject.Kind == policiesv1.PolicySetKind) {
+			return true
 		}
 	}
 
-	return found
+	return false
 }
 
-// IsPbForPoicySet compares group and kind with policyset group and kind for given pb
-func IsPbForPoicySet(pb *policiesv1.PlacementBinding) bool {
-	found := false
+// IsPbForPolicySet compares group and kind with policyset group and kind for given pb
+func IsPbForPolicySet(pb *policiesv1.PlacementBinding) bool {
+	if pb == nil {
+		return false
+	}
 
 	subjects := pb.Subjects
 	for _, subject := range subjects {
 		if subject.Kind == policiesv1.PolicySetKind && subject.APIGroup == policiesv1.SchemeGroupVersion.Group {
-			found = true
-
-			break
+			return true
 		}
 	}
 
-	return found
+	return false
+}
+
+// GetPoliciesInPlacementBinding returns a list of the Policies that are either direct subjects of
+// the given PlacementBinding, or are in PolicySets that are subjects of the PlacementBinding.
+// The list items are not guaranteed to be unique (for example if a policy is in multiple sets).
+func GetPoliciesInPlacementBinding(
+	ctx context.Context, c client.Client, pb *policiesv1.PlacementBinding,
+) []reconcile.Request {
+	result := make([]reconcile.Request, 0)
+
+	for _, subject := range pb.Subjects {
+		if subject.APIGroup != policiesv1.SchemeGroupVersion.Group {
+			continue
+		}
+
+		switch subject.Kind {
+		case policiesv1.Kind:
+			result = append(result, reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      subject.Name,
+				Namespace: pb.GetNamespace(),
+			}})
+		case policiesv1.PolicySetKind:
+			setNN := types.NamespacedName{
+				Name:      subject.Name,
+				Namespace: pb.GetNamespace(),
+			}
+
+			policySet := policiesv1beta1.PolicySet{}
+			if err := c.Get(ctx, setNN, &policySet); err != nil {
+				continue
+			}
+
+			for _, plc := range policySet.Spec.Policies {
+				result = append(result, reconcile.Request{NamespacedName: types.NamespacedName{
+					Name:      string(plc),
+					Namespace: pb.GetNamespace(),
+				}})
+			}
+		}
+	}
+
+	return result
 }
 
 // FindNonCompliantClustersForPolicy returns cluster in noncompliant status with given policy

@@ -6,14 +6,13 @@ package propagator
 import (
 	"context"
 
-	"k8s.io/apimachinery/pkg/types"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
-	policiesv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
+	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
 func placementDecisionMapper(c client.Client) handler.MapFunc {
@@ -40,52 +39,14 @@ func placementDecisionMapper(c client.Client) handler.MapFunc {
 		}
 
 		var result []reconcile.Request
-		// loop through pb to find if current placement is used for policy
+		// loop through pbs and collect policies from each matching one.
 		for _, pb := range pbList.Items {
 			if pb.PlacementRef.APIGroup != clusterv1beta1.SchemeGroupVersion.Group ||
 				pb.PlacementRef.Kind != "Placement" || pb.PlacementRef.Name != placementName {
 				continue
 			}
 
-			// found matching placement in pb -- check if it is for policy or policyset
-			subjects := pb.Subjects
-			for _, subject := range subjects {
-				if subject.APIGroup == policiesv1.SchemeGroupVersion.Group {
-					if subject.Kind == policiesv1.Kind {
-						log.V(2).Info("Found reconciliation request from policy a placement decision",
-							"policyName", subject.Name)
-						// generate reconcile request for policy referenced by pb
-						request := reconcile.Request{NamespacedName: types.NamespacedName{
-							Name:      subject.Name,
-							Namespace: object.GetNamespace(),
-						}}
-						result = append(result, request)
-					} else if subject.Kind == policiesv1.PolicySetKind {
-						policySetNamespacedName := types.NamespacedName{
-							Name:      subject.Name,
-							Namespace: object.GetNamespace(),
-						}
-						policySet := &policiesv1beta1.PolicySet{}
-						err := c.Get(ctx, policySetNamespacedName, policySet)
-						if err != nil {
-							log.V(2).Info("Failed to retrieve policyset referenced in placementbinding",
-								"policySetName", subject.Name, "placementBindingName", pb.GetName(), "error", err)
-
-							continue
-						}
-						policies := policySet.Spec.Policies
-						for _, plc := range policies {
-							log.V(2).Info("Found reconciliation request from a policyset placement decision",
-								"policySetName", subject.Name, "policyName", string(plc))
-							request := reconcile.Request{NamespacedName: types.NamespacedName{
-								Name:      string(plc),
-								Namespace: object.GetNamespace(),
-							}}
-							result = append(result, request)
-						}
-					}
-				}
-			}
+			result = append(result, common.GetPoliciesInPlacementBinding(ctx, c, &pb)...)
 		}
 
 		return result

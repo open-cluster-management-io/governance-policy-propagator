@@ -102,7 +102,7 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 	lock, _ := r.RootPolicyLocks.LoadOrStore(request.NamespacedName, &sync.Mutex{})
 
 	lock.(*sync.Mutex).Lock()
-	defer func() { lock.(*sync.Mutex).Unlock() }()
+	defer lock.(*sync.Mutex).Unlock()
 
 	// Set the hub template watch metric after reconcile
 	defer func() {
