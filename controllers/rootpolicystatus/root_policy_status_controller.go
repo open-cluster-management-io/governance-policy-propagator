@@ -74,7 +74,7 @@ func (r *RootPolicyStatusReconciler) Reconcile(ctx context.Context, request ctrl
 	lock, _ := r.RootPolicyLocks.LoadOrStore(request.NamespacedName, &sync.Mutex{})
 
 	lock.(*sync.Mutex).Lock()
-	defer func() { lock.(*sync.Mutex).Unlock() }()
+	defer lock.(*sync.Mutex).Unlock()
 
 	rootPolicy := &policiesv1.Policy{}
 

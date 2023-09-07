@@ -19,18 +19,18 @@ var pbPredicateFuncs = predicate.Funcs{
 		//nolint:forcetypeassert
 		pbObjOld := e.ObjectOld.(*policiesv1.PlacementBinding)
 
-		return common.IsPbForPoicySet(pbObjNew) || common.IsPbForPoicySet(pbObjOld)
+		return common.IsPbForPolicySet(pbObjNew) || common.IsPbForPolicySet(pbObjOld)
 	},
 	CreateFunc: func(e event.CreateEvent) bool {
 		//nolint:forcetypeassert
 		pbObj := e.Object.(*policiesv1.PlacementBinding)
 
-		return common.IsPbForPoicySet(pbObj)
+		return common.IsPbForPolicySet(pbObj)
 	},
 	DeleteFunc: func(e event.DeleteEvent) bool {
 		//nolint:forcetypeassert
 		pbObj := e.Object.(*policiesv1.PlacementBinding)
 
-		return common.IsPbForPoicySet(pbObj)
+		return common.IsPbForPolicySet(pbObj)
 	},
 }
