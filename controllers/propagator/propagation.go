@@ -288,45 +288,88 @@ func (set decisionSet) namespaces() []string {
 // getPolicyPlacementDecisions retrieves the placement decisions for a input
 // placement binding when the policy is bound within it.
 func (r *PolicyReconciler) getPolicyPlacementDecisions(
-	instance *policiesv1.Policy, pb policiesv1.PlacementBinding,
-) ([]appsv1.PlacementDecision, []*policiesv1.Placement, error) {
-	log := log.WithValues(
-		"policyName", instance.GetName(),
-		"policyNamespace", instance.GetNamespace(),
-		"placementBindingName", pb.GetName(),
-		"placementBidningNamespace", pb.GetNamespace(),
-	)
-	var decisions []appsv1.PlacementDecision
-	var placements []*policiesv1.Placement
-	var err error
+	instance *policiesv1.Policy, pb *policiesv1.PlacementBinding,
+) (decisions []appsv1.PlacementDecision, placements []*policiesv1.Placement, err error) {
+	if !common.HasValidPlacementRef(pb) {
+		return nil, nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Name, pb.Namespace)
+	}
 
-	subjects := pb.Subjects
-	for _, subject := range subjects {
-		if !(subject.APIGroup == policiesv1.SchemeGroupVersion.Group &&
-			subject.Kind == policiesv1.Kind &&
-			subject.Name == instance.GetName()) && !r.isPolicySetSubject(instance, subject) {
+	policySubjectFound := false
+	policySetSubjects := make(map[string]struct{}) // a set, to prevent duplicates
+
+	for _, subject := range pb.Subjects {
+		if subject.APIGroup != policiesv1.SchemeGroupVersion.Group {
 			continue
 		}
 
-		decisions, placements, err = getPlacementDecisions(r.Client, pb, instance)
-		if err != nil {
-			return nil, nil, err
-		}
+		switch subject.Kind {
+		case policiesv1.Kind:
+			if !policySubjectFound && subject.Name == instance.GetName() {
+				policySubjectFound = true
 
-		if instance.Spec.Disabled {
-			// Only handle the first match in pb.spec.subjects
-			return nil, placements, nil
-		}
+				placements = append(placements, &policiesv1.Placement{
+					PlacementBinding: pb.GetName(),
+				})
+			}
+		case policiesv1.PolicySetKind:
+			if _, exists := policySetSubjects[subject.Name]; !exists {
+				policySetSubjects[subject.Name] = struct{}{}
 
-		if len(decisions) == 0 {
-			log.Info("No placement decisions to process on this policy")
+				if r.isPolicyInPolicySet(instance.GetName(), subject.Name, pb.GetNamespace()) {
+					placements = append(placements, &policiesv1.Placement{
+						PlacementBinding: pb.GetName(),
+						PolicySet:        subject.Name,
+					})
+				}
+			}
 		}
-
-		// Only handle the first match in pb.spec.subjects
-		break
 	}
 
-	return decisions, placements, nil
+	if len(placements) == 0 {
+		// None of the subjects in the PlacementBinding were relevant to this Policy.
+		return nil, nil, nil
+	}
+
+	// If the placementRef exists, then it needs to be added to the placement item
+	refNN := types.NamespacedName{
+		Namespace: pb.GetNamespace(),
+		Name:      pb.PlacementRef.Name,
+	}
+
+	switch pb.PlacementRef.Kind {
+	case "PlacementRule":
+		plr := &appsv1.PlacementRule{}
+		if err := r.Get(context.TODO(), refNN, plr); err != nil && !k8serrors.IsNotFound(err) {
+			return nil, nil, fmt.Errorf("failed to check for PlacementRule '%v': %w", pb.PlacementRef.Name, err)
+		}
+
+		for i := range placements {
+			placements[i].PlacementRule = plr.Name // will be empty if the PlacementRule was not found
+		}
+	case "Placement":
+		pl := &clusterv1beta1.Placement{}
+		if err := r.Get(context.TODO(), refNN, pl); err != nil && !k8serrors.IsNotFound(err) {
+			return nil, nil, fmt.Errorf("failed to check for Placement '%v': %w", pb.PlacementRef.Name, err)
+		}
+
+		for i := range placements {
+			placements[i].Placement = pl.Name // will be empty if the Placement was not found
+		}
+	}
+
+	// If there are no placements, then the PlacementBinding is not for this Policy.
+	if len(placements) == 0 {
+		return nil, nil, nil
+	}
+
+	// If the policy is disabled, don't return any decisions, so that the policy isn't put on any clusters
+	if instance.Spec.Disabled {
+		return nil, placements, nil
+	}
+
+	decisions, err = common.GetDecisions(r.Client, pb)
+
+	return decisions, placements, err
 }
 
 // getAllClusterDecisions retrieves all cluster decisions for the input policy, taking into
@@ -350,21 +393,22 @@ func (r *PolicyReconciler) getAllClusterDecisions(
 ) (
 	allClusterDecisions []clusterDecision, placements []*policiesv1.Placement, err error,
 ) {
-	var pbsWithSubFilter []policiesv1.PlacementBinding
-
 	allClusterDecisionsMap := map[appsv1.PlacementDecision]policiesv1.BindingOverrides{}
 
 	// Process all placement bindings without subFilter
 	for _, pb := range pbList.Items {
 		if pb.SubFilter == policiesv1.Restricted {
-			pbsWithSubFilter = append(pbsWithSubFilter, pb)
-
 			continue
 		}
 
-		plcDecisions, plcPlacements, err := r.getPolicyPlacementDecisions(instance, pb)
+		plcDecisions, plcPlacements, err := r.getPolicyPlacementDecisions(instance, &pb)
 		if err != nil {
 			return nil, nil, err
+		}
+
+		if len(plcDecisions) == 0 {
+			log.Info("No placement decisions to process for this policy from this binding",
+				"policyName", instance.GetName(), "bindingName", pb.GetName())
 		}
 
 		for _, decision := range plcDecisions {
@@ -387,12 +431,21 @@ func (r *PolicyReconciler) getAllClusterDecisions(
 	}
 
 	// Process all placement bindings with subFilter:restricted
-	for _, pb := range pbsWithSubFilter {
+	for _, pb := range pbList.Items {
+		if pb.SubFilter != policiesv1.Restricted {
+			continue
+		}
+
 		foundInDecisions := false
 
-		plcDecisions, plcPlacements, err := r.getPolicyPlacementDecisions(instance, pb)
+		plcDecisions, plcPlacements, err := r.getPolicyPlacementDecisions(instance, &pb)
 		if err != nil {
 			return nil, nil, err
+		}
+
+		if len(plcDecisions) == 0 {
+			log.Info("No placement decisions to process for this policy from this binding",
+				"policyName", instance.GetName(), "bindingName", pb.GetName())
 		}
 
 		for _, decision := range plcDecisions {
@@ -421,7 +474,7 @@ func (r *PolicyReconciler) getAllClusterDecisions(
 		allClusterDecisions = append(allClusterDecisions, decision)
 	}
 
-	return
+	return allClusterDecisions, placements, nil
 }
 
 // handleDecisions will get all the placement decisions based on the input policy and placement
@@ -679,186 +732,6 @@ func (r *PolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) error {
 	log.Info("Reconciliation complete")
 
 	return nil
-}
-
-// getApplicationPlacements return the placements from an application
-// lifecycle placementrule
-func getApplicationPlacements(
-	c client.Client, pb policiesv1.PlacementBinding, instance *policiesv1.Policy,
-) ([]*policiesv1.Placement, error) {
-	plr := &appsv1.PlacementRule{}
-
-	err := c.Get(context.TODO(), types.NamespacedName{
-		Namespace: instance.GetNamespace(),
-		Name:      pb.PlacementRef.Name,
-	}, plr)
-	// no error when not found
-	if err != nil && !k8serrors.IsNotFound(err) {
-		log.Error(
-			err,
-			"Failed to get the PlacementRule",
-			"namespace", instance.GetNamespace(),
-			"name", pb.PlacementRef.Name,
-		)
-
-		return nil, err
-	}
-
-	var placements []*policiesv1.Placement
-
-	plcPlacementAdded := false
-
-	for _, subject := range pb.Subjects {
-		if subject.Kind == policiesv1.PolicySetKind {
-			// retrieve policyset to see if policy is part of it
-			plcset := &policiesv1beta1.PolicySet{}
-			err := c.Get(context.TODO(), types.NamespacedName{
-				Namespace: instance.GetNamespace(),
-				Name:      subject.Name,
-			}, plcset)
-			// no error when not found
-			if err != nil && !k8serrors.IsNotFound(err) {
-				log.Error(
-					err,
-					"Failed to get the policyset",
-					"namespace", instance.GetNamespace(),
-					"name", subject.Name,
-				)
-
-				continue
-			}
-
-			for _, plcName := range plcset.Spec.Policies {
-				if plcName == policiesv1beta1.NonEmptyString(instance.Name) {
-					// found matching policy in policyset, add placement to it
-					placement := &policiesv1.Placement{
-						PlacementBinding: pb.GetName(),
-						PlacementRule:    plr.GetName(),
-						PolicySet:        subject.Name,
-					}
-					placements = append(placements, placement)
-
-					break
-				}
-			}
-		} else if subject.Kind == policiesv1.Kind && subject.Name == instance.GetName() && !plcPlacementAdded {
-			placement := &policiesv1.Placement{
-				PlacementBinding: pb.GetName(),
-				PlacementRule:    plr.GetName(),
-			}
-			placements = append(placements, placement)
-			// should only add policy placement once in case placement binding subjects contains duplicated policies
-			plcPlacementAdded = true
-		}
-	}
-
-	return placements, nil
-}
-
-// getClusterPlacements return the placement decisions from an application
-// lifecycle placementrule
-func getClusterPlacements(
-	c client.Client, pb policiesv1.PlacementBinding, instance *policiesv1.Policy,
-) ([]*policiesv1.Placement, error) {
-	log := log.WithValues("name", pb.PlacementRef.Name, "namespace", instance.GetNamespace())
-	pl := &clusterv1beta1.Placement{}
-
-	err := c.Get(context.TODO(), types.NamespacedName{
-		Namespace: instance.GetNamespace(),
-		Name:      pb.PlacementRef.Name,
-	}, pl)
-	// no error when not found
-	if err != nil && !k8serrors.IsNotFound(err) {
-		log.Error(err, "Failed to get the Placement")
-
-		return nil, err
-	}
-
-	var placements []*policiesv1.Placement
-
-	plcPlacementAdded := false
-
-	for _, subject := range pb.Subjects {
-		if subject.Kind == policiesv1.PolicySetKind {
-			// retrieve policyset to see if policy is part of it
-			plcset := &policiesv1beta1.PolicySet{}
-			err := c.Get(context.TODO(), types.NamespacedName{
-				Namespace: instance.GetNamespace(),
-				Name:      subject.Name,
-			}, plcset)
-			// no error when not found
-			if err != nil && !k8serrors.IsNotFound(err) {
-				log.Error(
-					err,
-					"Failed to get the policyset",
-					"namespace", instance.GetNamespace(),
-					"name", subject.Name,
-				)
-
-				continue
-			}
-
-			for _, plcName := range plcset.Spec.Policies {
-				if plcName == policiesv1beta1.NonEmptyString(instance.Name) {
-					// found matching policy in policyset, add placement to it
-					placement := &policiesv1.Placement{
-						PlacementBinding: pb.GetName(),
-						Placement:        pl.GetName(),
-						PolicySet:        subject.Name,
-					}
-					placements = append(placements, placement)
-
-					break
-				}
-			}
-		} else if subject.Kind == policiesv1.Kind && subject.Name == instance.GetName() && !plcPlacementAdded {
-			// add current Placement to placement, if not found no decisions will be found
-			placement := &policiesv1.Placement{
-				PlacementBinding: pb.GetName(),
-				Placement:        pl.GetName(),
-			}
-			placements = append(placements, placement)
-			// should only add policy placement once in case placement binding subjects contains duplicated policies
-			plcPlacementAdded = true
-		}
-	}
-
-	return placements, nil
-}
-
-// getPlacementDecisions gets the PlacementDecisions for a PlacementBinding
-func getPlacementDecisions(c client.Client, pb policiesv1.PlacementBinding,
-	instance *policiesv1.Policy,
-) ([]appsv1.PlacementDecision, []*policiesv1.Placement, error) {
-	if pb.PlacementRef.APIGroup == appsv1.SchemeGroupVersion.Group &&
-		pb.PlacementRef.Kind == "PlacementRule" {
-		d, err := common.GetApplicationPlacementDecisions(c, pb, instance, log)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		placement, err := getApplicationPlacements(c, pb, instance)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		return d, placement, nil
-	} else if pb.PlacementRef.APIGroup == clusterv1beta1.SchemeGroupVersion.Group &&
-		pb.PlacementRef.Kind == "Placement" {
-		d, err := common.GetClusterPlacementDecisions(c, pb, instance, log)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		placement, err := getClusterPlacements(c, pb, instance)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		return d, placement, nil
-	}
-
-	return nil, nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Name, pb.Namespace)
 }
 
 // handleDecision puts the policy on the cluster, creating it or updating it as required,
@@ -1226,30 +1099,24 @@ func isConfigurationPolicy(policyT *policiesv1.PolicyTemplate) bool {
 	return jsonDef != nil && jsonDef["kind"] == "ConfigurationPolicy"
 }
 
-func (r *PolicyReconciler) isPolicySetSubject(instance *policiesv1.Policy, subject policiesv1.Subject) bool {
-	log := log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
+func (r *PolicyReconciler) isPolicyInPolicySet(policyName, policySetName, namespace string) bool {
+	log := log.WithValues("policyName", policyName, "policySetName", policySetName, "policyNamespace", namespace)
 
-	if subject.APIGroup == policiesv1.SchemeGroupVersion.Group &&
-		subject.Kind == policiesv1.PolicySetKind {
-		policySetNamespacedName := types.NamespacedName{
-			Name:      subject.Name,
-			Namespace: instance.GetNamespace(),
-		}
+	policySet := policiesv1beta1.PolicySet{}
+	setNN := types.NamespacedName{
+		Name:      policySetName,
+		Namespace: namespace,
+	}
 
-		policySet := &policiesv1beta1.PolicySet{}
+	if err := r.Get(context.TODO(), setNN, &policySet); err != nil {
+		log.Error(err, "Failed to get the policyset")
 
-		err := r.Get(context.TODO(), policySetNamespacedName, policySet)
-		if err != nil {
-			log.Error(err, "Failed to get the policyset", "policySetName", subject.Name, "policyName",
-				instance.GetName(), "policyNamespace", instance.GetNamespace())
+		return false
+	}
 
-			return false
-		}
-
-		for _, plc := range policySet.Spec.Policies {
-			if string(plc) == instance.GetName() {
-				return true
-			}
+	for _, plc := range policySet.Spec.Policies {
+		if string(plc) == policyName {
+			return true
 		}
 	}
 

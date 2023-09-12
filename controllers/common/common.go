@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/go-logr/logr"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -150,80 +149,76 @@ func FindNonCompliantClustersForPolicy(plc *policiesv1.Policy) []string {
 	return clusterList
 }
 
-// GetClusterPlacementDecisions return the placement decisions from cluster
-// placement decisions
-func GetClusterPlacementDecisions(
-	c client.Client, pb policiesv1.PlacementBinding, instance *policiesv1.Policy, log logr.Logger,
-) ([]appsv1.PlacementDecision, error) {
-	log = log.WithValues("name", pb.PlacementRef.Name, "namespace", instance.GetNamespace())
-	pl := &clusterv1beta1.Placement{}
-
-	err := c.Get(context.TODO(), types.NamespacedName{
-		Namespace: instance.GetNamespace(),
-		Name:      pb.PlacementRef.Name,
-	}, pl)
-	// no error when not found
-	if err != nil && !k8serrors.IsNotFound(err) {
-		log.Error(err, "Failed to get the Placement")
-
-		return nil, err
+func HasValidPlacementRef(pb *policiesv1.PlacementBinding) bool {
+	switch pb.PlacementRef.Kind {
+	case "PlacementRule":
+		return pb.PlacementRef.APIGroup == appsv1.SchemeGroupVersion.Group
+	case "Placement":
+		return pb.PlacementRef.APIGroup == clusterv1beta1.SchemeGroupVersion.Group
+	default:
+		return false
 	}
-
-	list := &clusterv1beta1.PlacementDecisionList{}
-	lopts := &client.ListOptions{Namespace: instance.GetNamespace()}
-
-	opts := client.MatchingLabels{"cluster.open-cluster-management.io/placement": pl.GetName()}
-	opts.ApplyToList(lopts)
-	err = c.List(context.TODO(), list, lopts)
-
-	// do not error out if not found
-	if err != nil && !k8serrors.IsNotFound(err) {
-		log.Error(err, "Failed to get the PlacementDecision")
-
-		return nil, err
-	}
-
-	var decisions []appsv1.PlacementDecision
-	decisions = make([]appsv1.PlacementDecision, 0, len(list.Items))
-
-	for _, item := range list.Items {
-		for _, cluster := range item.Status.Decisions {
-			decided := &appsv1.PlacementDecision{
-				ClusterName:      cluster.ClusterName,
-				ClusterNamespace: cluster.ClusterName,
-			}
-			decisions = append(decisions, *decided)
-		}
-	}
-
-	return decisions, nil
 }
 
-// GetApplicationPlacementDecisions return the placement decisions from an application
-// lifecycle placementrule
-func GetApplicationPlacementDecisions(
-	c client.Client, pb policiesv1.PlacementBinding, instance *policiesv1.Policy, log logr.Logger,
-) ([]appsv1.PlacementDecision, error) {
-	log = log.WithValues("name", pb.PlacementRef.Name, "namespace", instance.GetNamespace())
-	plr := &appsv1.PlacementRule{}
-
-	err := c.Get(context.TODO(), types.NamespacedName{
-		Namespace: instance.GetNamespace(),
-		Name:      pb.PlacementRef.Name,
-	}, plr)
-	// no error when not found
-	if err != nil && !k8serrors.IsNotFound(err) {
-		log.Error(
-			err,
-			"Failed to get the PlacementRule",
-			"namespace", instance.GetNamespace(),
-			"name", pb.PlacementRef.Name,
-		)
-
-		return nil, err
+// GetDecisions returns the placement decisions from the Placement or PlacementRule referred to by
+// the PlacementBinding
+func GetDecisions(c client.Client, pb *policiesv1.PlacementBinding) ([]appsv1.PlacementDecision, error) {
+	if !HasValidPlacementRef(pb) {
+		return nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Name, pb.Namespace)
 	}
 
-	return plr.Status.Decisions, nil
+	refNN := types.NamespacedName{
+		Namespace: pb.GetNamespace(),
+		Name:      pb.PlacementRef.Name,
+	}
+
+	switch pb.PlacementRef.Kind {
+	case "Placement":
+		pl := &clusterv1beta1.Placement{}
+
+		err := c.Get(context.TODO(), refNN, pl)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return nil, fmt.Errorf("failed to get Placement '%v': %w", pb.PlacementRef.Name, err)
+		}
+
+		if k8serrors.IsNotFound(err) {
+			return nil, nil
+		}
+
+		list := &clusterv1beta1.PlacementDecisionList{}
+		lopts := &client.ListOptions{Namespace: pb.GetNamespace()}
+
+		opts := client.MatchingLabels{"cluster.open-cluster-management.io/placement": pl.GetName()}
+		opts.ApplyToList(lopts)
+
+		err = c.List(context.TODO(), list, lopts)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return nil, fmt.Errorf("failed to list the PlacementDecisions for '%v', %w", pb.PlacementRef.Name, err)
+		}
+
+		decisions := make([]appsv1.PlacementDecision, 0)
+
+		for _, item := range list.Items {
+			for _, cluster := range item.Status.Decisions {
+				decisions = append(decisions, appsv1.PlacementDecision{
+					ClusterName:      cluster.ClusterName,
+					ClusterNamespace: cluster.ClusterName,
+				})
+			}
+		}
+
+		return decisions, nil
+	case "PlacementRule":
+		plr := &appsv1.PlacementRule{}
+		if err := c.Get(context.TODO(), refNN, plr); err != nil && !k8serrors.IsNotFound(err) {
+			return nil, fmt.Errorf("failed to get PlacementRule '%v': %w", pb.PlacementRef.Name, err)
+		}
+
+		// if the PlacementRule was not found, the decisions will be empty
+		return plr.Status.Decisions, nil
+	}
+
+	return nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Name, pb.Namespace)
 }
 
 // GetNumWorkers is a helper function to return the number of workers to handle concurrent tasks

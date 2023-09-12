@@ -190,7 +190,7 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 				}
 
 				var decisions []appsv1.PlacementDecision
-				decisions, err = getDecisions(r.Client, *pb, childPlc)
+				decisions, err = common.GetDecisions(r.Client, pb)
 				if err != nil {
 					log.Error(err, "Error getting placement decisions for binding "+pbName)
 				}
@@ -295,31 +295,6 @@ func showCompliance(compliancesFound []string, unknown []string, pending []strin
 	}
 
 	return false
-}
-
-// getDecisions gets the PlacementDecisions for a PlacementBinding
-func getDecisions(c client.Client, pb policyv1.PlacementBinding,
-	instance *policyv1.Policy,
-) ([]appsv1.PlacementDecision, error) {
-	if pb.PlacementRef.APIGroup == appsv1.SchemeGroupVersion.Group &&
-		pb.PlacementRef.Kind == "PlacementRule" {
-		d, err := common.GetApplicationPlacementDecisions(c, pb, instance, log)
-		if err != nil {
-			return nil, err
-		}
-
-		return d, nil
-	} else if pb.PlacementRef.APIGroup == clusterv1beta1.SchemeGroupVersion.Group &&
-		pb.PlacementRef.Kind == "Placement" {
-		d, err := common.GetClusterPlacementDecisions(c, pb, instance, log)
-		if err != nil {
-			return nil, err
-		}
-
-		return d, nil
-	}
-
-	return nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Name, pb.Namespace)
 }
 
 // SetupWithManager sets up the controller with the Manager.
