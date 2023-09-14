@@ -28,7 +28,7 @@ func TestGetEncryptionKeyNoSecret(_ *testing.T) {
 	RegisterFailHandler(Fail)
 
 	client := fake.NewClientBuilder().Build()
-	r := PolicyReconciler{Client: client}
+	r := Propagator{Client: client}
 	key, err := r.getEncryptionKey(clusterName)
 
 	Expect(err).ToNot(HaveOccurred())
@@ -68,7 +68,7 @@ func TestGetEncryptionKeySecretExists(_ *testing.T) {
 
 	client := fake.NewClientBuilder().WithObjects(encryptionSecret).Build()
 
-	r := PolicyReconciler{Client: client}
+	r := Propagator{Client: client}
 	key, err = r.getEncryptionKey(clusterName)
 
 	Expect(err).ToNot(HaveOccurred())
@@ -103,7 +103,7 @@ func TestGetInitializationVector(t *testing.T) {
 		},
 	}
 
-	r := PolicyReconciler{}
+	r := Propagator{}
 
 	for _, test := range tests {
 		subTest := test

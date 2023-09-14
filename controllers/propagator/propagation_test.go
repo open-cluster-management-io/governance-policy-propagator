@@ -355,7 +355,7 @@ func TestGetAllClusterDecisions(t *testing.T) {
 		t.Fatalf("Unexpected error building scheme: %v", err)
 	}
 
-	reconciler := &PolicyReconciler{
+	reconciler := &Propagator{
 		Client: fake.NewClientBuilder().
 			WithScheme(testscheme).
 			WithObjects(&prInitial, &prSub, &prSub2, &prExtended).
