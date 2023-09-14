@@ -258,6 +258,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&propagatorctrl.PlacementChangeReconciler{
+		Propagator: propagator,
+	}).SetupWithManager(mgr); err != nil {
+		log.Error(err, "Unable to create the controller", "controller", "placement-change-reconciler")
+		os.Exit(1)
+	}
+
 	if reportMetrics() {
 		if err = (&metricsctrl.MetricReconciler{
 			Client:                  mgr.GetClient(),
