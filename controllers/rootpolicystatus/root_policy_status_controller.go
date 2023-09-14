@@ -69,12 +69,17 @@ func (r *RootPolicyStatusReconciler) Reconcile(ctx context.Context, request ctrl
 	log := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	log.V(1).Info("Reconciling the root policy status")
 
-	log.V(3).Info("Acquiring the lock for the root policy")
-
 	lock, _ := r.RootPolicyLocks.LoadOrStore(request.NamespacedName, &sync.Mutex{})
 
-	lock.(*sync.Mutex).Lock()
-	defer lock.(*sync.Mutex).Unlock()
+	if lock.(*sync.Mutex).TryLock() {
+		log.V(3).Info("Acquired the lock for the root policy")
+
+		defer lock.(*sync.Mutex).Unlock()
+	} else {
+		log.V(3).Info("Could not acquire lock for the root policy, requeueing")
+
+		return reconcile.Result{Requeue: true}, nil
+	}
 
 	rootPolicy := &policiesv1.Policy{}
 
