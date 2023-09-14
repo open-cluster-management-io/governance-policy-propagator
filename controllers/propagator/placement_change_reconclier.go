@@ -178,7 +178,7 @@ func (r *PlacementChangeReconciler) Reconcile(ctx context.Context, request ctrl.
 		return reconcile.Result{}, err
 	}
 
-	if err := r.handleRootPolicy(instance); err != nil { // TODO: this handling can be slimmer than "usual"
+	if err := r.handleRootPolicy(instance, false); err != nil {
 		log.Error(err, "Failure during root policy handling")
 
 		propagationFailureMetric.WithLabelValues(instance.GetName(), instance.GetNamespace()).Inc()
