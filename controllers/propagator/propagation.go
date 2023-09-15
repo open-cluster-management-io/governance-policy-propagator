@@ -30,6 +30,7 @@ import (
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	policiesv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
@@ -67,10 +68,11 @@ func Initialize(kubeconfig *rest.Config, kubeclient *kubernetes.Interface) {
 
 type Propagator struct {
 	client.Client
-	Scheme          *runtime.Scheme
-	Recorder        record.EventRecorder
-	DynamicWatcher  k8sdepwatches.DynamicWatcher
-	RootPolicyLocks *sync.Map
+	Scheme                  *runtime.Scheme
+	Recorder                record.EventRecorder
+	DynamicWatcher          k8sdepwatches.DynamicWatcher
+	RootPolicyLocks         *sync.Map
+	ReplicatedPolicyUpdates chan event.GenericEvent
 }
 
 // getTemplateCfg returns the default policy template configuration.

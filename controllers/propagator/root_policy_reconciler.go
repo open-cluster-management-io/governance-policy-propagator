@@ -18,7 +18,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	policiesv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
@@ -34,10 +33,16 @@ import (
 //+kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *RootPolicyReconciler) SetupWithManager(mgr ctrl.Manager, additionalSources ...source.Source) error {
-	// policyPredicates filters out updates to policies that are pure status updates.
+func (r *RootPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// only consider updates to *root* policies, which are not pure status updates.
 	policyPredicates := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
+			replicated, err := common.IsReplicatedPolicy(r.Client, e.ObjectNew)
+			if replicated && err == nil {
+				// If there was an error, better consider it for a reconcile.
+				return false
+			}
+
 			//nolint:forcetypeassert
 			oldPolicy := e.ObjectOld.(*policiesv1.Policy)
 			//nolint:forcetypeassert
@@ -47,6 +52,40 @@ func (r *RootPolicyReconciler) SetupWithManager(mgr ctrl.Manager, additionalSour
 			return oldPolicy.Generation != updatedPolicy.Generation ||
 				!equality.Semantic.DeepEqual(oldPolicy.ObjectMeta.Labels, updatedPolicy.ObjectMeta.Labels) ||
 				!equality.Semantic.DeepEqual(oldPolicy.ObjectMeta.Annotations, updatedPolicy.ObjectMeta.Annotations)
+		},
+	}
+
+	placementBindingMapper := func(ctx context.Context, obj client.Object) []reconcile.Request {
+		//nolint:forcetypeassert
+		pb := obj.(*policiesv1.PlacementBinding)
+
+		log := log.WithValues("placementBindingName", pb.GetName(), "namespace", pb.GetNamespace())
+		log.V(2).Info("Reconcile request for a PlacementBinding")
+
+		return common.GetPoliciesInPlacementBinding(ctx, r.Client, pb)
+	}
+
+	// only reconcile when the pb contains a policy or a policyset as a subject
+	pbPredicateFuncs := predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			//nolint:forcetypeassert
+			pbObjNew := e.ObjectNew.(*policiesv1.PlacementBinding)
+			//nolint:forcetypeassert
+			pbObjOld := e.ObjectOld.(*policiesv1.PlacementBinding)
+
+			return common.IsForPolicyOrPolicySet(pbObjNew) || common.IsForPolicyOrPolicySet(pbObjOld)
+		},
+		CreateFunc: func(e event.CreateEvent) bool {
+			//nolint:forcetypeassert
+			pbObj := e.Object.(*policiesv1.PlacementBinding)
+
+			return common.IsForPolicyOrPolicySet(pbObj)
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			//nolint:forcetypeassert
+			pbObj := e.Object.(*policiesv1.PlacementBinding)
+
+			return common.IsForPolicyOrPolicySet(pbObj)
 		},
 	}
 
@@ -87,28 +126,20 @@ func (r *RootPolicyReconciler) SetupWithManager(mgr ctrl.Manager, additionalSour
 		},
 	}
 
-	builder := ctrl.NewControllerManagedBy(mgr).
+	return ctrl.NewControllerManagedBy(mgr).
 		Named("root-policy-reconciler").
 		For(
 			&policiesv1.Policy{},
-			builder.WithPredicates(common.NeverEnqueue)).
-		// This is a workaround - the controller-runtime requires a "For", but does not allow it to
-		// modify the eventhandler. Currently we need to enqueue requests for Policies in a very
-		// particular way, so we will define that in a separate "Watches"
-		Watches(
-			&policiesv1.Policy{},
-			handler.EnqueueRequestsFromMapFunc(common.PolicyMapper(mgr.GetClient())),
 			builder.WithPredicates(policyPredicates)).
+		Watches(
+			&policiesv1.PlacementBinding{},
+			handler.EnqueueRequestsFromMapFunc(placementBindingMapper),
+			builder.WithPredicates(pbPredicateFuncs)).
 		Watches(
 			&policiesv1beta1.PolicySet{},
 			handler.EnqueueRequestsFromMapFunc(policySetMapper),
-			builder.WithPredicates(policySetPredicateFuncs))
-
-	for _, source := range additionalSources {
-		builder.WatchesRawSource(source, &handler.EnqueueRequestForObject{})
-	}
-
-	return builder.Complete(r)
+			builder.WithPredicates(policySetPredicateFuncs)).
+		Complete(r)
 }
 
 // blank assignment to verify that ReconcilePolicy implements reconcile.Reconciler
