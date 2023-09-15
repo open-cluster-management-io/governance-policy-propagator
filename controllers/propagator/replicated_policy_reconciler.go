@@ -23,7 +23,7 @@ import (
 //+kubebuilder:rbac:groups=apps.open-cluster-management.io,resources=placementrules,verbs=get;list;watch
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *PlacementChangeReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *ReplicatedPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	placementBindingMapper := func(ctx context.Context, obj client.Object) []reconcile.Request {
 		//nolint:forcetypeassert
 		pb := obj.(*policiesv1.PlacementBinding)
@@ -125,7 +125,7 @@ func (r *PlacementChangeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		Named("placement-change-reconciler").
+		Named("replicated-policy-reconciler").
 		For(
 			&policiesv1.Policy{},
 			builder.WithPredicates(common.NeverEnqueue)).
@@ -145,13 +145,13 @@ func (r *PlacementChangeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-var _ reconcile.Reconciler = &PlacementChangeReconciler{}
+var _ reconcile.Reconciler = &ReplicatedPolicyReconciler{}
 
-type PlacementChangeReconciler struct {
+type ReplicatedPolicyReconciler struct {
 	Propagator
 }
 
-func (r *PlacementChangeReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
+func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	log := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 
 	lock, _ := r.RootPolicyLocks.LoadOrStore(request.NamespacedName, &sync.Mutex{})

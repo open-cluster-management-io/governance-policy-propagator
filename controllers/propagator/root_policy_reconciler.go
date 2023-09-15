@@ -88,7 +88,7 @@ func (r *RootPolicyReconciler) SetupWithManager(mgr ctrl.Manager, additionalSour
 	}
 
 	builder := ctrl.NewControllerManagedBy(mgr).
-		Named(ControllerName).
+		Named("root-policy-reconciler").
 		For(
 			&policiesv1.Policy{},
 			builder.WithPredicates(common.NeverEnqueue)).
