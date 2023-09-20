@@ -301,12 +301,19 @@ func (r *Propagator) getPolicyPlacementDecisions(
 //   - remediationAction: If any placement binding that the cluster is bound to has
 //     bindingOverrides.remediationAction set to "enforce", the remediationAction
 //     for the replicated policy will be set to "enforce".
-func (r *Propagator) getAllClusterDecisions(
-	instance *policiesv1.Policy, pbList *policiesv1.PlacementBindingList,
-) (
+func (r *Propagator) getAllClusterDecisions(instance *policiesv1.Policy) (
 	allClusterDecisions []clusterDecision, placements []*policiesv1.Placement, err error,
 ) {
 	allClusterDecisionsMap := map[appsv1.PlacementDecision]policiesv1.BindingOverrides{}
+
+	pbList := &policiesv1.PlacementBindingList{}
+
+	err = r.List(context.TODO(), pbList, &client.ListOptions{Namespace: instance.GetNamespace()})
+	if err != nil {
+		log.Error(err, "Could not list the placement bindings")
+
+		return nil, nil, err
+	}
 
 	// Process all placement bindings without subFilter
 	for _, pb := range pbList.Items {
@@ -392,6 +399,11 @@ func (r *Propagator) getAllClusterDecisions(
 		allClusterDecisions = append(allClusterDecisions, decision)
 	}
 
+	// loop through all pb, update status.placement
+	sort.Slice(placements, func(i, j int) bool {
+		return placements[i].PlacementBinding < placements[j].PlacementBinding
+	})
+
 	return allClusterDecisions, placements, nil
 }
 
@@ -402,14 +414,10 @@ func (r *Propagator) getAllClusterDecisions(
 //   - allDecisions - a set of all the placement decisions encountered
 //   - failedClusters - a set of all the clusters that encountered an error during propagation
 //   - allFailed - a bool that determines if all clusters encountered an error during propagation
-func (r *Propagator) handleDecisions(
-	instance *policiesv1.Policy, pbList *policiesv1.PlacementBindingList, _ bool,
-) (
-	[]*policiesv1.Placement, error,
-) {
+func (r *Propagator) handleDecisions(instance *policiesv1.Policy) ([]*policiesv1.Placement, error) {
 	log := log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
 
-	allClusterDecisions, placements, err := r.getAllClusterDecisions(instance, pbList)
+	allClusterDecisions, placements, err := r.getAllClusterDecisions(instance)
 	if err != nil {
 		return placements, err
 	}
@@ -437,7 +445,7 @@ func (r *Propagator) handleDecisions(
 }
 
 // handleRootPolicy will properly replicate or clean up when a root policy is updated.
-func (r *RootPolicyReconciler) handleRootPolicy(instance *policiesv1.Policy, checkFullSpec bool) error {
+func (r *RootPolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) error {
 	// Generate a metric for elapsed handling time for each policy
 	entryTS := time.Now()
 	defer func() {
@@ -458,29 +466,12 @@ func (r *RootPolicyReconciler) handleRootPolicy(instance *policiesv1.Policy, che
 		}
 	}
 
-	// Get the placement binding in order to later get the placement decisions
-	pbList := &policiesv1.PlacementBindingList{}
-
-	log.V(1).Info("Getting the placement bindings", "namespace", instance.GetNamespace())
-
-	err := r.List(context.TODO(), pbList, &client.ListOptions{Namespace: instance.GetNamespace()})
-	if err != nil {
-		log.Error(err, "Could not list the placement bindings")
-
-		return err
-	}
-
-	placements, err := r.handleDecisions(instance, pbList, checkFullSpec)
+	placements, err := r.handleDecisions(instance)
 	if err != nil {
 		log.Info("Failed to get any placement decisions. Giving up on the request.")
 
 		return errors.New("could not get the placement decisions")
 	}
-
-	// loop through all pb, update status.placement
-	sort.Slice(placements, func(i, j int) bool {
-		return placements[i].PlacementBinding < placements[j].PlacementBinding
-	})
 
 	err = r.Get(context.TODO(), types.NamespacedName{Namespace: instance.Namespace, Name: instance.Name}, instance)
 	if err != nil {
@@ -503,7 +494,7 @@ func (r *RootPolicyReconciler) handleRootPolicy(instance *policiesv1.Policy, che
 // including resolving hub templates. It will return an error if an API call fails; no
 // internal states will result in errors (eg invalid templates don't cause errors here)
 func (r *Propagator) handleDecision(
-	rootPlc *policiesv1.Policy, clusterDec clusterDecision, checkFullSpec bool,
+	rootPlc *policiesv1.Policy, clusterDec clusterDecision,
 ) (
 	map[k8sdepwatches.ObjectIdentifier]bool, error,
 ) {
@@ -560,34 +551,6 @@ func (r *Propagator) handleDecision(
 		log.Error(err, "Failed to get the replicated policy")
 
 		return nil, err
-	}
-
-	if !checkFullSpec { // Only check that the remediationAction is correct
-		correctRemediationAction := policiesv1.Inform
-
-		shouldEnforce := rootPlc.Spec.RemediationAction == policiesv1.Enforce ||
-			strings.EqualFold(clusterDec.PolicyOverrides.RemediationAction, string(policiesv1.Enforce))
-
-		if shouldEnforce {
-			correctRemediationAction = policiesv1.Enforce
-		}
-
-		if replicatedPlc.Spec.RemediationAction != correctRemediationAction {
-			replicatedPlc.Spec.RemediationAction = correctRemediationAction
-
-			err = r.Update(context.TODO(), replicatedPlc)
-			if err != nil {
-				log.Error(err, "Failed to update the replicated policy")
-
-				return nil, err
-			}
-
-			r.Recorder.Event(rootPlc, "Normal", "PolicyPropagation",
-				fmt.Sprintf("Policy %s/%s was updated for cluster %s/%s", rootPlc.GetNamespace(),
-					rootPlc.GetName(), decision.ClusterNamespace, decision.ClusterName))
-		}
-
-		return nil, nil
 	}
 
 	// replicated policy already created, need to compare and patch

@@ -122,6 +122,9 @@ func (r *RootPolicyStatusReconciler) Reconcile(ctx context.Context, request ctrl
 		return reconcile.Result{}, err
 	}
 
+	// In order to do something like this, we need to put a propagator into this reconciler's type
+	// _, placements, err := r.getAllClusterDecisions(rootPolicy)
+
 	cpcs := make([]*policiesv1.CompliancePerClusterStatus, len(replicatedPolicyList.Items))
 
 	for i := range replicatedPolicyList.Items {

@@ -224,7 +224,7 @@ func (r *RootPolicyReconciler) Reconcile(ctx context.Context, request ctrl.Reque
 	}
 
 	if !inClusterNs {
-		err := r.handleRootPolicy(instance, true)
+		err := r.handleRootPolicy(instance)
 		if err != nil {
 			log.Error(err, "Failure during root policy handling")
 

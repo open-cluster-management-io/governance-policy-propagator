@@ -549,7 +549,7 @@ func TestGetAllClusterDecisions(t *testing.T) {
 			}
 
 			actualAllClusterDecisions, actualPlacements, err := reconciler.getAllClusterDecisions(
-				&test.policy, &test.pbList)
+				&test.policy)
 			if err != nil {
 				t.Fatal("Got unexpected error", err.Error())
 			}
