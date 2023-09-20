@@ -2,8 +2,10 @@ package propagator
 
 import (
 	"context"
-	"sync"
+	"fmt"
+	"strings"
 
+	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	"k8s.io/apimachinery/pkg/api/equality"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -29,6 +31,26 @@ import (
 func (r *ReplicatedPolicyReconciler) SetupWithManager(mgr ctrl.Manager, additionalSources ...source.Source) error {
 	// only consider updates to *replicated* policies, which are not pure status updates.
 	policyPredicates := predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			replicated, err := common.IsReplicatedPolicy(r.Client, e.Object)
+			if !replicated && err == nil {
+				// If there was an error, better to consider it for a reconcile.
+				return false
+			}
+
+			// TOBEDONE: ignore the create event from when this controller creates the resource
+			return true
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			replicated, err := common.IsReplicatedPolicy(r.Client, e.Object)
+			if !replicated && err == nil {
+				// If there was an error, better to consider it for a reconcile.
+				return false
+			}
+
+			// TOBEDONE: ignore the delete event from when this controller deletes the resource
+			return true
+		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			replicated, err := common.IsReplicatedPolicy(r.Client, e.ObjectNew)
 			if !replicated && err == nil {
@@ -41,7 +63,7 @@ func (r *ReplicatedPolicyReconciler) SetupWithManager(mgr ctrl.Manager, addition
 			//nolint:forcetypeassert
 			updatedPolicy := e.ObjectNew.(*policiesv1.Policy)
 
-			// TODO: ignore updates where we've already reconciled the new ResourceVersion
+			// TOBEDONE: ignore updates where we've already reconciled the new ResourceVersion
 			// Ignore pure status updates since those are handled by a separate controller
 			return oldPolicy.Generation != updatedPolicy.Generation ||
 				!equality.Semantic.DeepEqual(oldPolicy.ObjectMeta.Labels, updatedPolicy.ObjectMeta.Labels) ||
@@ -178,43 +200,401 @@ type ReplicatedPolicyReconciler struct {
 
 func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	log := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	log.Info("Reconciling the replicated policy")
 
-	lock, _ := r.RootPolicyLocks.LoadOrStore(request.NamespacedName, &sync.Mutex{})
+	replicatedExists := true
+	replicatedPolicy := &policiesv1.Policy{}
 
-	if lock.(*sync.Mutex).TryLock() {
-		log.V(3).Info("Acquired the lock for the root policy")
+	if err := r.Get(ctx, request.NamespacedName, replicatedPolicy); err != nil {
+		if !k8serrors.IsNotFound(err) {
+			log.Error(err, "Failed to get the replicated policy")
 
-		defer lock.(*sync.Mutex).Unlock()
-	} else {
-		log.V(3).Info("Could not acquire lock for the root policy, requeueing")
+			return reconcile.Result{}, err
+		}
 
-		return reconcile.Result{Requeue: true}, nil
+		replicatedExists = false
 	}
 
-	log.Info("Reconciling the policy")
+	rootNS, rootName, dotFound := strings.Cut(request.Name, ".")
+	if !dotFound && replicatedExists {
+		if err := r.cleanUpReplicated(ctx, replicatedPolicy); err != nil {
+			if !k8serrors.IsNotFound(err) {
+				log.Error(err, "Failed to delete the invalid replicated policy, requeueing")
 
-	// Fetch the Policy instance
-	instance := &policiesv1.Policy{}
+				return reconcile.Result{}, err
+			}
+		}
 
-	if err := r.Get(ctx, request.NamespacedName, instance); err != nil {
+		log.Info("Invalid replicated policy deleted")
+
+		return reconcile.Result{}, nil
+	}
+
+	// Fetch the Root Policy instance
+	rootPolicy := &policiesv1.Policy{}
+	rootNN := types.NamespacedName{Namespace: rootNS, Name: rootName}
+
+	if err := r.Get(ctx, rootNN, rootPolicy); err != nil {
 		if k8serrors.IsNotFound(err) {
-			// This will be handled by the root-policy-controller
+			if replicatedExists {
+				if err := r.cleanUpReplicated(ctx, replicatedPolicy); err != nil {
+					if !k8serrors.IsNotFound(err) {
+						log.Error(err, "Failed to delete the orphaned replicated policy, requeueing")
+
+						return reconcile.Result{}, err
+					}
+				}
+
+				log.Info("Orphaned replicated policy deleted")
+
+				return reconcile.Result{}, nil
+			}
+
+			log.Info("Root policy and replicated policy already missing")
+
 			return reconcile.Result{}, nil
 		}
 
-		log.Error(err, "Failed to get the policy")
-
-		// Error reading the object - requeue the request.
-		return reconcile.Result{}, err
-	}
-
-	if err := r.handleRootPolicy(instance, false); err != nil {
-		log.Error(err, "Failure during root policy handling")
-
-		propagationFailureMetric.WithLabelValues(instance.GetName(), instance.GetNamespace()).Inc()
+		log.Error(err, "Failed to get the root policy, requeueing")
 
 		return reconcile.Result{}, err
 	}
 
-	return reconcile.Result{}, nil
+	if rootPolicy.Spec.Disabled {
+		if replicatedExists {
+			if err := r.cleanUpReplicated(ctx, replicatedPolicy); err != nil {
+				if !k8serrors.IsNotFound(err) {
+					log.Error(err, "Failed to delete the disabled replicated policy, requeueing")
+
+					return reconcile.Result{}, err
+				}
+			}
+
+			log.Info("Disabled replicated policy deleted")
+
+			return reconcile.Result{}, nil
+		}
+
+		log.Info("Root policy is disabled, and replicated policy correctly not found.")
+
+		return reconcile.Result{}, nil
+	}
+
+	// calculate the decision for this specific cluster
+	decision, err := r.singleClusterDecision(ctx, rootPolicy, request.Namespace)
+	if err != nil {
+		log.Error(err, "Failed to determine if policy should be replicated, requeueing")
+
+		return reconcile.Result{}, err
+	}
+
+	// an empty decision means the policy should not be replicated
+	if decision.Cluster.ClusterName == "" {
+		if replicatedExists {
+			if err := r.cleanUpReplicated(ctx, replicatedPolicy); err != nil {
+				if !k8serrors.IsNotFound(err) {
+					log.Error(err, "Failed to remove the replicated policy for this managed cluster, requeueing")
+
+					return reconcile.Result{}, err
+				}
+			}
+
+			log.Info("Removed replicated policy from managed cluster")
+
+			return reconcile.Result{}, nil
+		}
+
+		log.Info("Replicated policy should not exist on this managed cluster, and does not.")
+
+		return reconcile.Result{}, nil
+	}
+
+	objsToWatch := getPolicySetDependencies(rootPolicy)
+
+	desiredReplicatedPolicy, err := r.buildReplicatedPolicy(rootPolicy, decision)
+	if err != nil {
+		log.Error(err, "Unable to build desired replicated policy, requeueing")
+
+		return reconcile.Result{}, err
+	}
+
+	// save the watcherError for later, so that the policy can still be updated now.
+	var watcherErr error
+
+	if policyHasTemplates(rootPolicy) {
+		if replicatedExists {
+			// If the replicated policy has an initialization vector specified, set it for processing
+			if initializationVector, ok := replicatedPolicy.Annotations[IVAnnotation]; ok {
+				tempAnnotations := desiredReplicatedPolicy.GetAnnotations()
+				if tempAnnotations == nil {
+					tempAnnotations = make(map[string]string)
+				}
+
+				tempAnnotations[IVAnnotation] = initializationVector
+
+				desiredReplicatedPolicy.SetAnnotations(tempAnnotations)
+			}
+		}
+
+		// resolve hubTemplate before replicating
+		// #nosec G104 -- any errors are logged and recorded in the processTemplates method,
+		// but the ignored status will be handled appropriately by the policy controllers on
+		// the managed cluster(s).
+		templObjsToWatch, _ := r.processTemplates(desiredReplicatedPolicy, decision.Cluster, rootPolicy)
+
+		for objID, val := range templObjsToWatch {
+			if val {
+				objsToWatch[objID] = true
+			}
+		}
+	}
+
+	instanceGVK := desiredReplicatedPolicy.GroupVersionKind()
+	instanceObjID := k8sdepwatches.ObjectIdentifier{
+		Group:     instanceGVK.Group,
+		Version:   instanceGVK.Version,
+		Kind:      instanceGVK.Kind,
+		Namespace: request.Namespace,
+		Name:      request.Name,
+	}
+	refObjs := make([]k8sdepwatches.ObjectIdentifier, 0, len(objsToWatch))
+
+	for refObj := range objsToWatch {
+		refObjs = append(refObjs, refObj)
+	}
+
+	if len(refObjs) != 0 {
+		watcherErr = r.DynamicWatcher.AddOrUpdateWatcher(instanceObjID, refObjs...)
+		if watcherErr != nil {
+			log.Error(watcherErr, "Failed to update the dynamic watches for the hub policy templates")
+		}
+	} else {
+		watcherErr = r.DynamicWatcher.RemoveWatcher(instanceObjID)
+		if watcherErr != nil {
+			log.Error(watcherErr, "Failed to remove the dynamic watches for the hub policy templates")
+		}
+	}
+
+	if !replicatedExists {
+		err = r.Create(ctx, desiredReplicatedPolicy)
+		if err != nil {
+			log.Error(err, "Failed to create the replicated policy, requeueing")
+
+			return reconcile.Result{}, err
+		}
+
+		log.Info("Created replicated policy")
+
+		return reconcile.Result{}, nil
+	}
+
+	// replicated policy already created, need to compare and possibly update
+	if !equivalentReplicatedPolicies(desiredReplicatedPolicy, replicatedPolicy) {
+		replicatedPolicy.SetAnnotations(desiredReplicatedPolicy.GetAnnotations())
+		replicatedPolicy.SetLabels(desiredReplicatedPolicy.GetLabels())
+		replicatedPolicy.Spec = desiredReplicatedPolicy.Spec
+
+		err = r.Update(ctx, replicatedPolicy)
+		if err != nil {
+			log.Error(err, "Failed to update the replicated policy, requeueing")
+
+			return reconcile.Result{}, err
+		}
+
+		log.Info("Replicated policy updated")
+	} else {
+		log.Info("Replicated policy matches, no update needed")
+	}
+
+	if watcherErr != nil {
+		log.Info("Requeueing for the dynamic watcher error")
+	}
+
+	return reconcile.Result{}, watcherErr
+}
+
+func (r *ReplicatedPolicyReconciler) cleanUpReplicated(ctx context.Context, replicatedPolicy *policiesv1.Policy) error {
+	gvk := replicatedPolicy.GroupVersionKind()
+
+	watcherErr := r.DynamicWatcher.RemoveWatcher(k8sdepwatches.ObjectIdentifier{
+		Group:     gvk.Group,
+		Version:   gvk.Version,
+		Kind:      gvk.Kind,
+		Namespace: replicatedPolicy.Namespace,
+		Name:      replicatedPolicy.Name,
+	})
+
+	deleteErr := r.Delete(ctx, replicatedPolicy)
+
+	if watcherErr != nil {
+		return watcherErr
+	}
+
+	if deleteErr != nil {
+		return deleteErr
+	}
+
+	return nil
+}
+
+func (r *ReplicatedPolicyReconciler) singleClusterDecision(
+	ctx context.Context, rootPlc *policiesv1.Policy, clusterName string,
+) (decision clusterDecision, err error) {
+	positiveDecision := clusterDecision{
+		Cluster: appsv1.PlacementDecision{
+			ClusterName:      clusterName,
+			ClusterNamespace: clusterName,
+		},
+	}
+
+	pbList := &policiesv1.PlacementBindingList{}
+
+	err = r.List(ctx, pbList, &client.ListOptions{Namespace: rootPlc.GetNamespace()})
+	if err != nil {
+		return clusterDecision{}, err
+	}
+
+	foundWithoutSubFilter := false
+
+	// Process all placement bindings without subFilter
+	for _, pb := range pbList.Items {
+		if pb.SubFilter == policiesv1.Restricted {
+			continue
+		}
+
+		found, err := r.isSingleClusterInDecisions(ctx, &pb, rootPlc.GetName(), clusterName)
+		if err != nil {
+			return clusterDecision{}, err
+		}
+
+		if !found {
+			continue
+		}
+
+		if strings.EqualFold(pb.BindingOverrides.RemediationAction, string(policiesv1.Enforce)) {
+			positiveDecision.PolicyOverrides = pb.BindingOverrides
+			// If an override is found, then no other decisions can currently change this result.
+			// NOTE: if additional overrides are added in the future, this will additional logic.
+			return positiveDecision, nil
+		}
+
+		foundWithoutSubFilter = true
+	}
+
+	if !foundWithoutSubFilter {
+		// No need to look through the subFilter bindings.
+		return clusterDecision{}, nil
+	}
+
+	// Process all placement bindings with subFilter
+	for _, pb := range pbList.Items {
+		if pb.SubFilter != policiesv1.Restricted {
+			continue
+		}
+
+		found, err := r.isSingleClusterInDecisions(ctx, &pb, rootPlc.GetName(), clusterName)
+		if err != nil {
+			return clusterDecision{}, err
+		}
+
+		if !found {
+			continue
+		}
+
+		if strings.EqualFold(pb.BindingOverrides.RemediationAction, string(policiesv1.Enforce)) {
+			positiveDecision.PolicyOverrides = pb.BindingOverrides
+			// If an override is found, then no other decisions can currently change this result.
+			// NOTE: if additional overrides are added in the future, this will additional logic.
+			return positiveDecision, nil
+		}
+	}
+
+	// None of the bindings had any overrides.
+	return positiveDecision, nil
+}
+
+func (r *ReplicatedPolicyReconciler) isSingleClusterInDecisions(
+	ctx context.Context, pb *policiesv1.PlacementBinding, policyName, clusterName string,
+) (found bool, err error) {
+	if !common.HasValidPlacementRef(pb) {
+		return false, nil
+	}
+
+	subjectFound := false
+subjectLoop:
+	for _, subject := range pb.Subjects {
+		if subject.APIGroup != policiesv1.SchemeGroupVersion.Group {
+			continue
+		}
+
+		switch subject.Kind {
+		case policiesv1.Kind:
+			if subject.Name == policyName {
+				subjectFound = true
+
+				break subjectLoop
+			}
+		case policiesv1.PolicySetKind:
+			if r.isPolicyInPolicySet(policyName, subject.Name, pb.GetNamespace()) {
+				subjectFound = true
+
+				break subjectLoop
+			}
+		}
+	}
+
+	if !subjectFound {
+		return false, nil
+	}
+
+	refNN := types.NamespacedName{
+		Namespace: pb.GetNamespace(),
+		Name:      pb.PlacementRef.Name,
+	}
+
+	switch pb.PlacementRef.Kind {
+	case "Placement":
+		pl := &clusterv1beta1.Placement{}
+
+		err := r.Get(ctx, refNN, pl)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return false, fmt.Errorf("failed to get Placement '%v': %w", pb.PlacementRef.Name, err)
+		}
+
+		if k8serrors.IsNotFound(err) {
+			return false, nil
+		}
+
+		list := &clusterv1beta1.PlacementDecisionList{}
+		lopts := &client.ListOptions{Namespace: pb.GetNamespace()}
+
+		opts := client.MatchingLabels{"cluster.open-cluster-management.io/placement": pl.GetName()}
+		opts.ApplyToList(lopts)
+
+		err = r.List(ctx, list, lopts)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return false, fmt.Errorf("failed to list the PlacementDecisions for '%v', %w", pb.PlacementRef.Name, err)
+		}
+
+		for _, item := range list.Items {
+			for _, cluster := range item.Status.Decisions {
+				if cluster.ClusterName == clusterName {
+					return true, nil
+				}
+			}
+		}
+	case "PlacementRule":
+		plr := &appsv1.PlacementRule{}
+		if err := r.Get(ctx, refNN, plr); err != nil && !k8serrors.IsNotFound(err) {
+			return false, fmt.Errorf("failed to get PlacementRule '%v': %w", pb.PlacementRef.Name, err)
+		}
+
+		for _, decision := range plr.Status.Decisions {
+			if decision.ClusterName == clusterName {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
 }

@@ -4,16 +4,19 @@ package policystatus
 
 import (
 	"context"
+	"sort"
 	"sync"
 
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -31,6 +34,18 @@ var log = ctrl.Log.WithName(ControllerName)
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *RootPolicyStatusReconciler) SetupWithManager(mgr ctrl.Manager, _ ...source.Source) error {
+	policyStatusPredicate := predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			//nolint:forcetypeassert
+			oldPolicy := e.ObjectOld.(*policiesv1.Policy)
+			//nolint:forcetypeassert
+			updatedPolicy := e.ObjectNew.(*policiesv1.Policy)
+
+			// If there was an update and the generation is the same, the status must have changed.
+			return oldPolicy.Generation == updatedPolicy.Generation
+		},
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.Options{MaxConcurrentReconciles: int(r.MaxConcurrentReconciles)}).
 		Named(ControllerName).
@@ -44,7 +59,7 @@ func (r *RootPolicyStatusReconciler) SetupWithManager(mgr ctrl.Manager, _ ...sou
 		Watches(
 			&policiesv1.Policy{},
 			handler.EnqueueRequestsFromMapFunc(common.PolicyMapper(mgr.GetClient())),
-			builder.WithPredicates(policyStatusPredicate()),
+			builder.WithPredicates(policyStatusPredicate),
 		).
 		Complete(r)
 }
@@ -83,7 +98,7 @@ func (r *RootPolicyStatusReconciler) Reconcile(ctx context.Context, request ctrl
 
 	rootPolicy := &policiesv1.Policy{}
 
-	err := r.Get(ctx, types.NamespacedName{Namespace: request.Namespace, Name: request.Name}, rootPolicy)
+	err := r.Get(ctx, request.NamespacedName, rootPolicy)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.V(2).Info("The root policy has been deleted. Doing nothing.")
@@ -100,46 +115,40 @@ func (r *RootPolicyStatusReconciler) Reconcile(ctx context.Context, request ctrl
 
 	replicatedPolicyList := &policiesv1.PolicyList{}
 
-	err = r.List(context.TODO(), replicatedPolicyList, client.MatchingLabels(common.LabelsForRootPolicy(rootPolicy)))
+	err = r.List(ctx, replicatedPolicyList, client.MatchingLabels(common.LabelsForRootPolicy(rootPolicy)))
 	if err != nil {
 		log.Error(err, "Failed to list the replicated policies")
 
 		return reconcile.Result{}, err
 	}
 
-	clusterToReplicatedPolicy := make(map[string]*policiesv1.Policy, len(replicatedPolicyList.Items))
+	cpcs := make([]*policiesv1.CompliancePerClusterStatus, len(replicatedPolicyList.Items))
 
 	for i := range replicatedPolicyList.Items {
-		// Use the index to avoid making copies of each replicated policy
-		clusterToReplicatedPolicy[replicatedPolicyList.Items[i].Namespace] = &replicatedPolicyList.Items[i]
+		cpcs[i] = &policiesv1.CompliancePerClusterStatus{
+			ComplianceState:  replicatedPolicyList.Items[i].Status.ComplianceState,
+			ClusterName:      replicatedPolicyList.Items[i].Namespace,
+			ClusterNamespace: replicatedPolicyList.Items[i].Namespace,
+		}
 	}
 
-	updatedStatus := false
+	sort.Slice(cpcs, func(i, j int) bool {
+		return cpcs[i].ClusterName < cpcs[j].ClusterName
+	})
 
-	err = r.Get(ctx, types.NamespacedName{Namespace: request.Namespace, Name: request.Name}, rootPolicy)
+	err = r.Get(ctx, request.NamespacedName, rootPolicy)
 	if err != nil {
 		log.Error(err, "Failed to refresh the cached policy. Will use existing policy.")
 	}
 
-	for _, status := range rootPolicy.Status.Status {
-		replicatedPolicy := clusterToReplicatedPolicy[status.ClusterNamespace]
-		if replicatedPolicy == nil {
-			continue
-		}
-
-		if status.ComplianceState != replicatedPolicy.Status.ComplianceState {
-			updatedStatus = true
-			status.ComplianceState = replicatedPolicy.Status.ComplianceState
-		}
-	}
-
-	if !updatedStatus {
+	if equality.Semantic.DeepEqual(rootPolicy.Status.Status, cpcs) {
 		log.V(1).Info("No status changes required in the root policy. Doing nothing.")
 
 		return reconcile.Result{}, nil
 	}
 
-	rootPolicy.Status.ComplianceState = propagator.CalculateRootCompliance(rootPolicy.Status.Status)
+	rootPolicy.Status.Status = cpcs
+	rootPolicy.Status.ComplianceState = propagator.CalculateRootCompliance(cpcs)
 
 	err = r.Status().Update(context.TODO(), rootPolicy)
 	if err != nil {

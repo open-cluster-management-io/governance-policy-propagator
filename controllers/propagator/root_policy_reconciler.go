@@ -36,6 +36,24 @@ import (
 func (r *RootPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// only consider updates to *root* policies, which are not pure status updates.
 	policyPredicates := predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			replicated, err := common.IsReplicatedPolicy(r.Client, e.Object)
+			if replicated && err == nil {
+				// If there was an error, better to consider it for a reconcile.
+				return false
+			}
+
+			return true
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			replicated, err := common.IsReplicatedPolicy(r.Client, e.Object)
+			if replicated && err == nil {
+				// If there was an error, better to consider it for a reconcile.
+				return false
+			}
+
+			return true
+		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			replicated, err := common.IsReplicatedPolicy(r.Client, e.ObjectNew)
 			if replicated && err == nil {
@@ -180,25 +198,14 @@ func (r *RootPolicyReconciler) Reconcile(ctx context.Context, request ctrl.Reque
 	err := r.Get(ctx, request.NamespacedName, instance)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			// Request object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected.
-			log.Info("Policy not found, so it may have been deleted. Deleting the replicated policies.")
-
-			err := r.cleanUpPolicy(&policiesv1.Policy{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       policiesv1.Kind,
-					APIVersion: policiesv1.GroupVersion.Group + "/" + policiesv1.GroupVersion.Version,
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      request.Name,
-					Namespace: request.Namespace,
-				},
-			})
+			count, err := r.updateExistingReplicas(ctx, request.Namespace+"."+request.Name)
 			if err != nil {
-				log.Error(err, "Failure during replicated policy cleanup")
+				log.Error(err, "Failed to send update events to replicated policies, requeueing")
 
 				return reconcile.Result{}, err
 			}
+
+			log.Info("Replicated policies sent for deletion", "count", count)
 
 			return reconcile.Result{}, nil
 		}
@@ -239,4 +246,42 @@ func (r *RootPolicyReconciler) Reconcile(ctx context.Context, request ctrl.Reque
 	}
 
 	return reconcile.Result{}, nil
+}
+
+//+kubebuilder:object:root=true
+
+type GuttedObject struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+}
+
+func (r *RootPolicyReconciler) updateExistingReplicas(ctx context.Context, rootPolicyFullName string) (int, error) {
+	// Get all the replicated policies for this root policy
+	policyList := &policiesv1.PolicyList{}
+	opts := &client.ListOptions{}
+
+	matcher := client.MatchingLabels{common.RootPolicyLabel: rootPolicyFullName}
+	matcher.ApplyToList(opts)
+
+	err := r.List(ctx, policyList, opts)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return 0, err
+	}
+
+	for _, replicated := range policyList.Items {
+		simpleObj := &GuttedObject{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       replicated.Kind,
+				APIVersion: replicated.APIVersion,
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      replicated.Name,
+				Namespace: replicated.Namespace,
+			},
+		}
+
+		r.ReplicatedPolicyUpdates <- event.GenericEvent{Object: simpleObj}
+	}
+
+	return len(policyList.Items), nil
 }

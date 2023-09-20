@@ -142,98 +142,6 @@ func plcDeletionWrapper(
 	}
 }
 
-// cleanUpPolicy will delete all replicated policies associated with provided policy.
-func (r *Propagator) cleanUpPolicy(instance *policiesv1.Policy) error {
-	log := log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
-	replicatedPlcList := &policiesv1.PolicyList{}
-
-	instanceGVK := instance.GroupVersionKind()
-
-	err := r.DynamicWatcher.RemoveWatcher(k8sdepwatches.ObjectIdentifier{
-		Group:     instanceGVK.Group,
-		Version:   instanceGVK.Version,
-		Kind:      instanceGVK.Kind,
-		Namespace: instance.Namespace,
-		Name:      instance.Name,
-	})
-	if err != nil {
-		log.Error(
-			err,
-			fmt.Sprintf(
-				"Failed to remove watches for the policy %s/%s from the dynamic watcher",
-				instance.Namespace,
-				instance.Name,
-			),
-		)
-
-		return err
-	}
-
-	err = r.List(
-		context.TODO(), replicatedPlcList, client.MatchingLabels(common.LabelsForRootPolicy(instance)),
-	)
-	if err != nil {
-		log.Error(err, "Failed to list the replicated policies")
-
-		return err
-	}
-
-	if len(replicatedPlcList.Items) == 0 {
-		log.V(2).Info("No replicated policies to delete.")
-
-		return nil
-	}
-
-	log.V(2).Info(
-		"Deleting replicated policies because root policy was deleted", "count", len(replicatedPlcList.Items))
-
-	policiesChan := make(chan policiesv1.Policy, len(replicatedPlcList.Items))
-	deletionResultsChan := make(chan deletionResult, len(replicatedPlcList.Items))
-
-	numWorkers := common.GetNumWorkers(len(replicatedPlcList.Items), concurrencyPerPolicy)
-
-	for i := 0; i < numWorkers; i++ {
-		go plcDeletionWrapper(r, policiesChan, deletionResultsChan)
-	}
-
-	log.V(2).Info("Scheduling work to handle deleting replicated policies")
-
-	for _, plc := range replicatedPlcList.Items {
-		policiesChan <- plc
-	}
-
-	// Wait for all the deletions to be processed.
-	log.V(1).Info("Waiting for the result of deleting the replicated policies", "count", len(policiesChan))
-
-	processedResults := 0
-	failures := 0
-
-	for result := range deletionResultsChan {
-		if result.Err != nil {
-			log.V(2).Info("Failed to delete replicated policy " + result.Identifier)
-			failures++
-		}
-
-		processedResults++
-
-		// Once all the deletions have been processed, it's safe to close
-		// the channels and stop blocking in this goroutine.
-		if processedResults == len(replicatedPlcList.Items) {
-			close(policiesChan)
-			close(deletionResultsChan)
-			log.V(2).Info("All replicated policy deletions have been handled", "count", len(replicatedPlcList.Items))
-		}
-	}
-
-	if failures > 0 {
-		return errors.New("failed to delete one or more replicated policies")
-	}
-
-	propagationFailureMetric.DeleteLabelValues(instance.GetName(), instance.GetNamespace())
-
-	return nil
-}
-
 // clusterDecision contains a single decision where the replicated policy
 // should be processed and any overrides to the root policy
 type clusterDecision struct {
@@ -288,20 +196,6 @@ func handleDecisionWrapper(
 
 		results <- decisionResult{decision.Cluster, templateRefObjs, err}
 	}
-}
-
-type decisionSet map[appsv1.PlacementDecision]bool
-
-func (set decisionSet) namespaces() []string {
-	namespaces := make([]string, 0)
-
-	for decision, isTrue := range set {
-		if isTrue {
-			namespaces = append(namespaces, decision.ClusterNamespace)
-		}
-	}
-
-	return namespaces
 }
 
 // getPolicyPlacementDecisions retrieves the placement decisions for a input
@@ -449,6 +343,11 @@ func (r *Propagator) getAllClusterDecisions(
 		placements = append(placements, plcPlacements...)
 	}
 
+	if len(allClusterDecisionsMap) == 0 {
+		// No decisions, and subfilters can't add decisions, so we can stop early.
+		return nil, placements, nil
+	}
+
 	// Process all placement bindings with subFilter:restricted
 	for _, pb := range pbList.Items {
 		if pb.SubFilter != policiesv1.Restricted {
@@ -504,170 +403,41 @@ func (r *Propagator) getAllClusterDecisions(
 //   - failedClusters - a set of all the clusters that encountered an error during propagation
 //   - allFailed - a bool that determines if all clusters encountered an error during propagation
 func (r *Propagator) handleDecisions(
-	instance *policiesv1.Policy, pbList *policiesv1.PlacementBindingList, checkFullSpec bool,
+	instance *policiesv1.Policy, pbList *policiesv1.PlacementBindingList, _ bool,
 ) (
-	placements []*policiesv1.Placement, allDecisions decisionSet, failedClusters decisionSet, allFailed bool,
+	[]*policiesv1.Placement, error,
 ) {
 	log := log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
-	allDecisions = map[appsv1.PlacementDecision]bool{}
-	failedClusters = map[appsv1.PlacementDecision]bool{}
-
-	// If we are not doing a full spec check, then we will not have the full set of
-	// template refs. So don't track it at all in that case.
-	var allTemplateRefObjs map[k8sdepwatches.ObjectIdentifier]bool
-
-	if checkFullSpec {
-		allTemplateRefObjs = getPolicySetDependencies(instance)
-	}
 
 	allClusterDecisions, placements, err := r.getAllClusterDecisions(instance, pbList)
 	if err != nil {
-		return placements, allDecisions, failedClusters, true
+		return placements, err
 	}
 
-	if len(allClusterDecisions) != 0 {
-		// Setup the workers which will call r.handleDecision. The number of workers depends
-		// on the number of decisions and the limit defined in concurrencyPerPolicy.
-		// decisionsChan acts as the work queue of decisions to process. resultsChan contains
-		// the results from the decisions being processed.
-		decisionsChan := make(chan clusterDecision, len(allClusterDecisions))
-		resultsChan := make(chan decisionResult, len(allClusterDecisions))
-		numWorkers := common.GetNumWorkers(len(allClusterDecisions), concurrencyPerPolicy)
+	log.Info("Sending reconcile events to replicated policies", "decisionsCount", len(allClusterDecisions))
 
-		for i := 0; i < numWorkers; i++ {
-			go handleDecisionWrapper(r, instance, decisionsChan, resultsChan, checkFullSpec)
-		}
-
-		log.Info("Handling the placement decisions", "count", len(allClusterDecisions))
-
-		for _, decision := range allClusterDecisions {
-			log.V(2).Info(
-				"Scheduling work to handle the decision for the cluster",
-				"name", decision.Cluster.ClusterName,
-			)
-			decisionsChan <- decision
-		}
-
-		// Wait for all the decisions to be processed.
-		log.V(2).Info("Waiting for the result of handling the decision(s)", "count", len(allClusterDecisions))
-
-		processedResults := 0
-
-		for result := range resultsChan {
-			allDecisions[result.Identifier] = true
-
-			if result.Err != nil {
-				failedClusters[result.Identifier] = true
-			}
-
-			processedResults++
-
-			if checkFullSpec {
-				// NOTE: new replicated policies may still appear when we aren't checking the full specs,
-				// which *could* bring new template references... will that be resolved by an individual
-				// replicated policy reconciler with a watch source for those?
-				for refObject := range result.TemplateRefObjs {
-					allTemplateRefObjs[refObject] = true
-				}
-			}
-
-			// Once all the decisions have been processed, it's safe to close
-			// the channels and stop blocking in this goroutine.
-			if processedResults == len(allClusterDecisions) {
-				close(decisionsChan)
-				close(resultsChan)
-				log.Info("All the placement decisions have been handled", "count", len(allClusterDecisions))
-			}
-		}
-	}
-
-	if checkFullSpec {
-		instanceGVK := instance.GroupVersionKind()
-		instanceObjID := k8sdepwatches.ObjectIdentifier{
-			Group:     instanceGVK.Group,
-			Version:   instanceGVK.Version,
-			Kind:      instanceGVK.Kind,
-			Namespace: instance.Namespace,
-			Name:      instance.Name,
-		}
-		refObjs := make([]k8sdepwatches.ObjectIdentifier, 0, len(allTemplateRefObjs))
-
-		for refObj := range allTemplateRefObjs {
-			refObjs = append(refObjs, refObj)
-		}
-
-		if len(refObjs) != 0 {
-			err := r.DynamicWatcher.AddOrUpdateWatcher(instanceObjID, refObjs...)
-			if err != nil {
-				log.Error(err, fmt.Sprintf(
-					"Failed to update the dynamic watches for the policy %s/%s on objects referenced by hub policy "+
-						"templates", instance.Namespace, instance.Name))
-
-				return placements, allDecisions, failedClusters, true
-			}
-		} else {
-			err := r.DynamicWatcher.RemoveWatcher(instanceObjID)
-			if err != nil {
-				log.Error(err, fmt.Sprintf(
-					"Failed to remove the dynamic watches for the policy %s/%s on objects referenced by hub policy "+
-						"templates", instance.Namespace, instance.Name))
-
-				return placements, allDecisions, failedClusters, true
-			}
-		}
-	}
-
-	return placements, allDecisions, failedClusters, false
-}
-
-// cleanUpOrphanedRplPolicies compares the status of the input policy against the input placement
-// decisions. If the cluster exists in the status but doesn't exist in the input placement
-// decisions, then it's considered stale and will be removed.
-func (r *Propagator) cleanUpOrphanedRplPolicies(
-	instance *policiesv1.Policy, allDecisions decisionSet,
-) error {
-	log := log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
-	successful := true
-
-	for _, cluster := range instance.Status.Status {
-		key := appsv1.PlacementDecision{
-			ClusterName:      cluster.ClusterNamespace,
-			ClusterNamespace: cluster.ClusterNamespace,
-		}
-		if allDecisions[key] {
-			continue
-		}
-		// not found in allDecisions, orphan, delete it
-		name := common.FullNameForPolicy(instance)
-		log := log.WithValues("name", name, "namespace", cluster.ClusterNamespace)
-		log.Info("Deleting the orphaned replicated policy")
-
-		err := r.Delete(context.TODO(), &policiesv1.Policy{
+	for _, decision := range allClusterDecisions {
+		simpleObj := &GuttedObject{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       policiesv1.Kind,
-				APIVersion: policiesv1.SchemeGroupVersion.Group,
+				APIVersion: policiesv1.GroupVersion.String(),
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: cluster.ClusterNamespace,
+				Name:      common.FullNameForPolicy(instance),
+				Namespace: decision.Cluster.ClusterName,
 			},
-		})
-		if err != nil && !k8serrors.IsNotFound(err) {
-			successful = false
-
-			log.Error(err, "Failed to delete the orphaned replicated policy")
 		}
+
+		log.V(2).Info("Sending reconcile for replicated policy", "replicatedPolicyName", simpleObj.GetName())
+
+		r.ReplicatedPolicyUpdates <- event.GenericEvent{Object: simpleObj}
 	}
 
-	if !successful {
-		return errors.New("one or more orphaned replicated policies failed to be deleted")
-	}
-
-	return nil
+	return placements, nil
 }
 
 // handleRootPolicy will properly replicate or clean up when a root policy is updated.
-func (r *Propagator) handleRootPolicy(instance *policiesv1.Policy, checkFullSpec bool) error {
+func (r *RootPolicyReconciler) handleRootPolicy(instance *policiesv1.Policy, checkFullSpec bool) error {
 	// Generate a metric for elapsed handling time for each policy
 	entryTS := time.Now()
 	defer func() {
@@ -682,15 +452,10 @@ func (r *Propagator) handleRootPolicy(instance *policiesv1.Policy, checkFullSpec
 	if instance.Spec.Disabled {
 		log.Info("The policy is disabled, doing clean up")
 
-		err := r.cleanUpPolicy(instance)
+		_, err := r.updateExistingReplicas(context.TODO(), common.FullNameForPolicy(instance))
 		if err != nil {
-			log.Info("One or more replicated policies could not be deleted")
-
 			return err
 		}
-
-		r.Recorder.Event(instance, "Normal", "PolicyPropagation",
-			fmt.Sprintf("Policy %s/%s was disabled", instance.GetNamespace(), instance.GetName()))
 	}
 
 	// Get the placement binding in order to later get the placement decisions
@@ -705,24 +470,12 @@ func (r *Propagator) handleRootPolicy(instance *policiesv1.Policy, checkFullSpec
 		return err
 	}
 
-	placements, allDecisions, failedClusters, allFailed := r.handleDecisions(instance, pbList, checkFullSpec)
-	if allFailed {
+	placements, err := r.handleDecisions(instance, pbList, checkFullSpec)
+	if err != nil {
 		log.Info("Failed to get any placement decisions. Giving up on the request.")
 
 		return errors.New("could not get the placement decisions")
 	}
-
-	// Clean up before the status update in case the status update fails
-	err = r.cleanUpOrphanedRplPolicies(instance, allDecisions)
-	if err != nil {
-		log.Error(err, "Failed to delete orphaned replicated policies")
-
-		return err
-	}
-
-	log.V(1).Info("Updating the root policy status")
-
-	cpcs, _ := r.calculatePerClusterStatus(instance, allDecisions, failedClusters)
 
 	// loop through all pb, update status.placement
 	sort.Slice(placements, func(i, j int) bool {
@@ -734,17 +487,11 @@ func (r *Propagator) handleRootPolicy(instance *policiesv1.Policy, checkFullSpec
 		log.Error(err, "Failed to refresh the cached policy. Will use existing policy.")
 	}
 
-	instance.Status.Status = cpcs
-	instance.Status.ComplianceState = CalculateRootCompliance(cpcs)
 	instance.Status.Placement = placements
 
 	err = r.Status().Update(context.TODO(), instance)
 	if err != nil {
 		return err
-	}
-
-	if len(failedClusters) != 0 {
-		return errors.New("failed to handle cluster namespaces:" + strings.Join(failedClusters.namespaces(), ","))
 	}
 
 	log.Info("Reconciliation complete")
