@@ -5,6 +5,7 @@ package e2e
 
 import (
 	"context"
+	"strconv"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -12,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 
@@ -26,6 +28,91 @@ const (
 )
 
 var _ = Describe("Test policy propagation", func() {
+	Describe("Test event emission when policy is disabled", Ordered, func() {
+		BeforeAll(func() {
+			By("Creating the policy, placementrule, and placementbinding")
+			utils.Kubectl("apply", "-f", case1PolicyYaml, "-n", testNamespace)
+			plc := utils.GetWithTimeout(
+				clientHubDynamic, gvrPolicy, case1PolicyName, testNamespace, true, defaultTimeoutSeconds,
+			)
+			Expect(plc).NotTo(BeNil())
+
+			By("Patching test-policy-plr with decision of both managed1 and managed2")
+			plr := utils.GetWithTimeout(
+				clientHubDynamic, gvrPlacementRule, case1PolicyName+"-plr", testNamespace, true, defaultTimeoutSeconds,
+			)
+			plr.Object["status"] = utils.GeneratePlrStatus("managed1", "managed2")
+			_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
+				context.TODO(), plr, metav1.UpdateOptions{},
+			)
+			Expect(err).ToNot(HaveOccurred())
+			opt := metav1.ListOptions{
+				LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case1PolicyName,
+			}
+			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
+		})
+
+		AfterAll(func() {
+			By("Removing the policy")
+			err := clientHubDynamic.Resource(gvrPolicy).Namespace(testNamespace).Delete(
+				context.TODO(),
+				case1PolicyName,
+				metav1.DeleteOptions{},
+			)
+			if !errors.IsNotFound(err) {
+				Expect(err).ToNot(HaveOccurred())
+			}
+
+			By("Removing the placementrule")
+			err = clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).Delete(
+				context.TODO(),
+				case1PolicyName+"-plr",
+				metav1.DeleteOptions{},
+			)
+			if !errors.IsNotFound(err) {
+				Expect(err).ToNot(HaveOccurred())
+			}
+
+			By("Removing the PlacementBinding")
+			err = clientHubDynamic.Resource(gvrPlacementBinding).Namespace(testNamespace).Delete(
+				context.TODO(),
+				case1PolicyName+"-pb",
+				metav1.DeleteOptions{},
+			)
+			if !errors.IsNotFound(err) {
+				Expect(err).ToNot(HaveOccurred())
+			}
+		})
+
+		It("Should not create duplicate policy disable events", func() {
+			By("Disabling the root policy")
+			patch := []byte(`{"spec": {"disabled": ` + strconv.FormatBool(true) + `}}`)
+
+			_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(testNamespace).Patch(
+				context.TODO(),
+				case1PolicyName,
+				types.MergePatchType,
+				patch,
+				metav1.PatchOptions{},
+			)
+			Expect(err).ToNot(HaveOccurred())
+
+			By("Checking the events emitted by the propagator in the root policy ns")
+			Consistently(func() int {
+				numEvents := len(utils.GetMatchingEvents(
+					clientHub,
+					testNamespace,
+					case1PolicyName,
+					"PolicyPropagation",
+					"disabled",
+					defaultTimeoutSeconds,
+				))
+
+				return numEvents
+			}, defaultTimeoutSeconds, 1).Should(BeNumerically("<", 2))
+		})
+	})
+
 	Describe("Create policy/pb/plc in ns:"+testNamespace+" and then update pb/plc", func() {
 		It("should be created in user ns", func() {
 			By("Creating " + case1PolicyYaml)
