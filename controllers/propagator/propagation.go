@@ -29,6 +29,7 @@ import (
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	policiesv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
@@ -56,10 +57,11 @@ var (
 
 type Propagator struct {
 	client.Client
-	Scheme          *runtime.Scheme
-	Recorder        record.EventRecorder
-	DynamicWatcher  k8sdepwatches.DynamicWatcher
-	RootPolicyLocks *sync.Map
+	Scheme                  *runtime.Scheme
+	Recorder                record.EventRecorder
+	DynamicWatcher          k8sdepwatches.DynamicWatcher
+	RootPolicyLocks         *sync.Map
+	ReplicatedPolicyUpdates chan event.GenericEvent
 }
 
 func Initialize(kubeconfig *rest.Config, kubeclient *kubernetes.Interface) {
@@ -297,9 +299,10 @@ func (set decisionSet) namespaces() []string {
 	return namespaces
 }
 
-// getPolicyPlacementDecisions retrieves the placement decisions for a input
-// placement binding when the policy is bound within it.
-func (r *Propagator) getPolicyPlacementDecisions(
+// getPolicyPlacementDecisions retrieves the placement decisions for a input PlacementBinding when
+// the policy is bound within it. It can return an error if the PlacementBinding is invalid, or if
+// a required lookup fails.
+func (r *RootPolicyReconciler) getPolicyPlacementDecisions(
 	instance *policiesv1.Policy, pb *policiesv1.PlacementBinding,
 ) (decisions []appsv1.PlacementDecision, placements []*policiesv1.Placement, err error) {
 	if !common.HasValidPlacementRef(pb) {
@@ -384,28 +387,16 @@ func (r *Propagator) getPolicyPlacementDecisions(
 	return decisions, placements, err
 }
 
-// getAllClusterDecisions retrieves all cluster decisions for the input policy, taking into
-// account subFilter and bindingOverrides specified in the placement binding from the input
-// placement binding list.
-// It first processes all placement bindings with disabled subFilter to obtain a list of bound
-// clusters along with their policy overrides if any, then processes all placement bindings
-// with subFilter:restricted to override the policy for the subset of bound clusters as needed.
-// It returns:
-//   - allClusterDecisions: a slice of all the cluster decisions should be handled
-//   - placements: a slice of all the placement decisions discovered
-//   - err: error
-//
-// The rules for policy overrides are as follows:
-//
-//   - remediationAction: If any placement binding that the cluster is bound to has
-//     bindingOverrides.remediationAction set to "enforce", the remediationAction
-//     for the replicated policy will be set to "enforce".
-func (r *Propagator) getAllClusterDecisions(
+// getAllClusterDecisions calculates which managed clusters should have a replicated policy, and
+// whether there are any BindingOverrides for that cluster. The placements array it returns is
+// sorted by PlacementBinding name. It can return an error if the PlacementBinding is invalid, or if
+// a required lookup fails.
+func (r *RootPolicyReconciler) getAllClusterDecisions(
 	instance *policiesv1.Policy, pbList *policiesv1.PlacementBindingList,
 ) (
-	allClusterDecisions []clusterDecision, placements []*policiesv1.Placement, err error,
+	decisions map[appsv1.PlacementDecision]policiesv1.BindingOverrides, placements []*policiesv1.Placement, err error,
 ) {
-	allClusterDecisionsMap := map[appsv1.PlacementDecision]policiesv1.BindingOverrides{}
+	decisions = make(map[appsv1.PlacementDecision]policiesv1.BindingOverrides)
 
 	// Process all placement bindings without subFilter
 	for _, pb := range pbList.Items {
@@ -424,15 +415,15 @@ func (r *Propagator) getAllClusterDecisions(
 		}
 
 		for _, decision := range plcDecisions {
-			if overrides, ok := allClusterDecisionsMap[decision]; ok {
+			if overrides, ok := decisions[decision]; ok {
 				// Found cluster in the decision map
 				if strings.EqualFold(pb.BindingOverrides.RemediationAction, string(policiesv1.Enforce)) {
 					overrides.RemediationAction = strings.ToLower(string(policiesv1.Enforce))
-					allClusterDecisionsMap[decision] = overrides
+					decisions[decision] = overrides
 				}
 			} else {
 				// No found cluster in the decision map, add it to the map
-				allClusterDecisionsMap[decision] = policiesv1.BindingOverrides{
+				decisions[decision] = policiesv1.BindingOverrides{
 					// empty string if pb.BindingOverrides.RemediationAction is not defined
 					RemediationAction: strings.ToLower(pb.BindingOverrides.RemediationAction),
 				}
@@ -440,6 +431,15 @@ func (r *Propagator) getAllClusterDecisions(
 		}
 
 		placements = append(placements, plcPlacements...)
+	}
+
+	if len(decisions) == 0 {
+		sort.Slice(placements, func(i, j int) bool {
+			return placements[i].PlacementBinding < placements[j].PlacementBinding
+		})
+
+		// No decisions, and subfilters can't add decisions, so we can stop early.
+		return nil, placements, nil
 	}
 
 	// Process all placement bindings with subFilter:restricted
@@ -461,13 +461,13 @@ func (r *Propagator) getAllClusterDecisions(
 		}
 
 		for _, decision := range plcDecisions {
-			if overrides, ok := allClusterDecisionsMap[decision]; ok {
+			if overrides, ok := decisions[decision]; ok {
 				// Found cluster in the decision map
 				foundInDecisions = true
 
 				if strings.EqualFold(pb.BindingOverrides.RemediationAction, string(policiesv1.Enforce)) {
 					overrides.RemediationAction = strings.ToLower(string(policiesv1.Enforce))
-					allClusterDecisionsMap[decision] = overrides
+					decisions[decision] = overrides
 				}
 			}
 		}
@@ -477,151 +477,75 @@ func (r *Propagator) getAllClusterDecisions(
 		}
 	}
 
-	// Covert the decision map to a slice of clusterDecision
-	for cluster, overrides := range allClusterDecisionsMap {
-		decision := clusterDecision{
-			Cluster:         cluster,
-			PolicyOverrides: overrides,
-		}
-		allClusterDecisions = append(allClusterDecisions, decision)
-	}
+	sort.Slice(placements, func(i, j int) bool {
+		return placements[i].PlacementBinding < placements[j].PlacementBinding
+	})
 
-	return allClusterDecisions, placements, nil
+	return decisions, placements, nil
 }
 
-// handleDecisions will get all the placement decisions based on the input policy and placement
-// binding list and propagate the policy. Note that this method performs concurrent operations.
-// It returns the following:
-//   - placements - a slice of all the placement decisions discovered
-//   - allDecisions - a set of all the placement decisions encountered
-//   - failedClusters - a set of all the clusters that encountered an error during propagation
-//   - allFailed - a bool that determines if all clusters encountered an error during propagation
-func (r *Propagator) handleDecisions(
-	instance *policiesv1.Policy, pbList *policiesv1.PlacementBindingList,
+// handleDecisions identifies all managed clusters which should have a replicated policy, and sends
+// events to the replicated policy reconciler for them to be created or updated.
+func (r *RootPolicyReconciler) handleDecisions(
+	instance *policiesv1.Policy,
 ) (
-	placements []*policiesv1.Placement, allDecisions decisionSet, failedClusters decisionSet, allFailed bool,
+	[]*policiesv1.Placement, decisionSet, error,
 ) {
 	log := log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
-	allDecisions = map[appsv1.PlacementDecision]bool{}
-	failedClusters = map[appsv1.PlacementDecision]bool{}
+	decisions := make(map[appsv1.PlacementDecision]bool)
 
-	allTemplateRefObjs := getPolicySetDependencies(instance)
+	pbList := &policiesv1.PlacementBindingList{}
+
+	err := r.List(context.TODO(), pbList, &client.ListOptions{Namespace: instance.GetNamespace()})
+	if err != nil {
+		log.Error(err, "Could not list the placement bindings")
+
+		return nil, decisions, err
+	}
 
 	allClusterDecisions, placements, err := r.getAllClusterDecisions(instance, pbList)
 	if err != nil {
-		allFailed = true
-
-		return
+		return placements, decisions, err
 	}
 
-	if len(allClusterDecisions) != 0 {
-		// Setup the workers which will call r.handleDecision. The number of workers depends
-		// on the number of decisions and the limit defined in concurrencyPerPolicy.
-		// decisionsChan acts as the work queue of decisions to process. resultsChan contains
-		// the results from the decisions being processed.
-		decisionsChan := make(chan clusterDecision, len(allClusterDecisions))
-		resultsChan := make(chan decisionResult, len(allClusterDecisions))
-		numWorkers := common.GetNumWorkers(len(allClusterDecisions), concurrencyPerPolicy)
-
-		for i := 0; i < numWorkers; i++ {
-			go handleDecisionWrapper(r, instance, decisionsChan, resultsChan)
-		}
-
-		log.Info("Handling the placement decisions", "count", len(allClusterDecisions))
-
-		for _, decision := range allClusterDecisions {
-			log.V(2).Info(
-				"Scheduling work to handle the decision for the cluster",
-				"name", decision.Cluster.ClusterName,
-			)
-			decisionsChan <- decision
-		}
-
-		// Wait for all the decisions to be processed.
-		log.V(2).Info("Waiting for the result of handling the decision(s)", "count", len(allClusterDecisions))
-
-		processedResults := 0
-
-		for result := range resultsChan {
-			allDecisions[result.Identifier] = true
-
-			if result.Err != nil {
-				failedClusters[result.Identifier] = true
-			}
-
-			processedResults++
-
-			for refObject := range result.TemplateRefObjs {
-				allTemplateRefObjs[refObject] = true
-			}
-
-			// Once all the decisions have been processed, it's safe to close
-			// the channels and stop blocking in this goroutine.
-			if processedResults == len(allClusterDecisions) {
-				close(decisionsChan)
-				close(resultsChan)
-				log.Info("All the placement decisions have been handled", "count", len(allClusterDecisions))
-			}
-		}
+	if allClusterDecisions == nil {
+		allClusterDecisions = make(map[appsv1.PlacementDecision]policiesv1.BindingOverrides)
 	}
 
-	instanceGVK := instance.GroupVersionKind()
-	instanceObjID := k8sdepwatches.ObjectIdentifier{
-		Group:     instanceGVK.Group,
-		Version:   instanceGVK.Version,
-		Kind:      instanceGVK.Kind,
-		Namespace: instance.Namespace,
-		Name:      instance.Name,
-	}
-	refObjs := make([]k8sdepwatches.ObjectIdentifier, 0, len(allTemplateRefObjs))
-
-	for refObj := range allTemplateRefObjs {
-		refObjs = append(refObjs, refObj)
+	for dec := range allClusterDecisions {
+		decisions[dec] = true
 	}
 
-	if len(refObjs) != 0 {
-		err := r.DynamicWatcher.AddOrUpdateWatcher(instanceObjID, refObjs...)
-		if err != nil {
-			log.Error(
-				err,
-				fmt.Sprintf(
-					"Failed to update the dynamic watches for the policy %s/%s on objects referenced by hub policy "+
-						"templates",
-					instance.Namespace,
-					instance.Name,
-				),
-			)
+	log.Info("Sending reconcile events to replicated policies", "decisionsCount", len(allClusterDecisions))
 
-			allFailed = true
+	for decision := range allClusterDecisions {
+		simpleObj := &GuttedObject{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       policiesv1.Kind,
+				APIVersion: policiesv1.GroupVersion.String(),
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      common.FullNameForPolicy(instance),
+				Namespace: decision.ClusterNamespace,
+			},
 		}
-	} else {
-		err := r.DynamicWatcher.RemoveWatcher(instanceObjID)
-		if err != nil {
-			log.Error(
-				err,
-				fmt.Sprintf(
-					"Failed to remove the dynamic watches for the policy %s/%s on objects referenced by hub policy "+
-						"templates",
-					instance.Namespace,
-					instance.Name,
-				),
-			)
 
-			allFailed = true
-		}
+		log.V(2).Info("Sending reconcile for replicated policy", "replicatedPolicyName", simpleObj.GetName())
+
+		r.ReplicatedPolicyUpdates <- event.GenericEvent{Object: simpleObj}
 	}
 
-	return
+	return placements, decisions, nil
 }
 
 // cleanUpOrphanedRplPolicies compares the status of the input policy against the input placement
 // decisions. If the cluster exists in the status but doesn't exist in the input placement
-// decisions, then it's considered stale and will be removed.
-func (r *Propagator) cleanUpOrphanedRplPolicies(
+// decisions, then it's considered stale and an event is sent to the replicated policy reconciler
+// so the policy will be removed.
+func (r *RootPolicyReconciler) cleanUpOrphanedRplPolicies(
 	instance *policiesv1.Policy, allDecisions decisionSet,
 ) error {
 	log := log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
-	successful := true
 
 	for _, cluster := range instance.Status.Status {
 		key := appsv1.PlacementDecision{
@@ -631,37 +555,29 @@ func (r *Propagator) cleanUpOrphanedRplPolicies(
 		if allDecisions[key] {
 			continue
 		}
-		// not found in allDecisions, orphan, delete it
-		name := common.FullNameForPolicy(instance)
-		log := log.WithValues("name", name, "namespace", cluster.ClusterNamespace)
-		log.Info("Deleting the orphaned replicated policy")
 
-		err := r.Delete(context.TODO(), &policiesv1.Policy{
+		// not found in allDecisions, orphan, send an event for it to delete itself
+		simpleObj := &GuttedObject{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       policiesv1.Kind,
-				APIVersion: policiesv1.SchemeGroupVersion.Group,
+				APIVersion: policiesv1.GroupVersion.String(),
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
+				Name:      common.FullNameForPolicy(instance),
 				Namespace: cluster.ClusterNamespace,
 			},
-		})
-		if err != nil && !k8serrors.IsNotFound(err) {
-			successful = false
-
-			log.Error(err, "Failed to delete the orphaned replicated policy")
 		}
-	}
 
-	if !successful {
-		return errors.New("one or more orphaned replicated policies failed to be deleted")
+		log.V(2).Info("Sending reconcile for replicated policy", "replicatedPolicyName", simpleObj.GetName())
+
+		r.ReplicatedPolicyUpdates <- event.GenericEvent{Object: simpleObj}
 	}
 
 	return nil
 }
 
 // handleRootPolicy will properly replicate or clean up when a root policy is updated.
-func (r *Propagator) handleRootPolicy(instance *policiesv1.Policy) error {
+func (r *RootPolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) error {
 	// Generate a metric for elapsed handling time for each policy
 	entryTS := time.Now()
 	defer func() {
@@ -676,42 +592,27 @@ func (r *Propagator) handleRootPolicy(instance *policiesv1.Policy) error {
 	if instance.Spec.Disabled {
 		log.Info("The policy is disabled, doing clean up")
 
-		allReplicasDeleted, err := r.cleanUpPolicy(instance)
+		updateCount, err := r.updateExistingReplicas(context.TODO(), instance.Namespace+"."+instance.Name)
 		if err != nil {
-			log.Info("One or more replicated policies could not be deleted")
-
 			return err
 		}
 
 		// Checks if replicated policies exist in the event that
 		// a double reconcile to prevent emitting the same event twice
-		if allReplicasDeleted {
+		if updateCount > 0 {
 			r.Recorder.Event(instance, "Normal", "PolicyPropagation",
 				fmt.Sprintf("Policy %s/%s was disabled", instance.GetNamespace(), instance.GetName()))
 		}
 	}
 
-	// Get the placement binding in order to later get the placement decisions
-	pbList := &policiesv1.PlacementBindingList{}
-
-	log.V(1).Info("Getting the placement bindings", "namespace", instance.GetNamespace())
-
-	err := r.List(context.TODO(), pbList, &client.ListOptions{Namespace: instance.GetNamespace()})
+	placements, decisions, err := r.handleDecisions(instance)
 	if err != nil {
-		log.Error(err, "Could not list the placement bindings")
-
-		return err
-	}
-
-	placements, allDecisions, failedClusters, allFailed := r.handleDecisions(instance, pbList)
-	if allFailed {
 		log.Info("Failed to get any placement decisions. Giving up on the request.")
 
 		return errors.New("could not get the placement decisions")
 	}
 
-	// Clean up before the status update in case the status update fails
-	err = r.cleanUpOrphanedRplPolicies(instance, allDecisions)
+	err = r.cleanUpOrphanedRplPolicies(instance, decisions)
 	if err != nil {
 		log.Error(err, "Failed to delete orphaned replicated policies")
 
@@ -720,12 +621,10 @@ func (r *Propagator) handleRootPolicy(instance *policiesv1.Policy) error {
 
 	log.V(1).Info("Updating the root policy status")
 
-	cpcs, _ := r.calculatePerClusterStatus(instance, allDecisions, failedClusters)
-
-	// loop through all pb, update status.placement
-	sort.Slice(placements, func(i, j int) bool {
-		return placements[i].PlacementBinding < placements[j].PlacementBinding
-	})
+	cpcs, cpcsErr := r.calculatePerClusterStatus(instance, decisions)
+	if cpcsErr != nil {
+		log.Error(cpcsErr, "Failed to get at least one replicated policy")
+	}
 
 	err = r.Get(context.TODO(), types.NamespacedName{Namespace: instance.Namespace, Name: instance.Name}, instance)
 	if err != nil {
@@ -741,19 +640,13 @@ func (r *Propagator) handleRootPolicy(instance *policiesv1.Policy) error {
 		return err
 	}
 
-	if len(failedClusters) != 0 {
-		return errors.New("failed to handle cluster namespaces:" + strings.Join(failedClusters.namespaces(), ","))
-	}
-
-	log.Info("Reconciliation complete")
-
-	return nil
+	return cpcsErr
 }
 
 // handleDecision puts the policy on the cluster, creating it or updating it as required,
 // including resolving hub templates. It will return an error if an API call fails; no
 // internal states will result in errors (eg invalid templates don't cause errors here)
-func (r *Propagator) handleDecision(
+func (r *ReplicatedPolicyReconciler) handleDecision(
 	rootPlc *policiesv1.Policy, clusterDec clusterDecision,
 ) (
 	map[k8sdepwatches.ObjectIdentifier]bool, error,
@@ -875,7 +768,7 @@ func policyHasTemplates(instance *policiesv1.Policy) bool {
 // policy.open-cluster-management.io/trigger-update is used to trigger reprocessing of the templates
 // and ensure that replicated-policies in the cluster are updated only if there is a change. This
 // annotation is deleted from the replicated policies and not propagated to the cluster namespaces.
-func (r *Propagator) processTemplates(
+func (r *ReplicatedPolicyReconciler) processTemplates(
 	replicatedPlc *policiesv1.Policy, decision appsv1.PlacementDecision, rootPlc *policiesv1.Policy,
 ) (
 	map[k8sdepwatches.ObjectIdentifier]bool, error,

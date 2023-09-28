@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
@@ -30,65 +31,86 @@ var _ = Describe("Test policy encryption key rotation", func() {
 	keyB64 := base64.StdEncoding.EncodeToString(key)
 	previousKey := bytes.Repeat([]byte{byte('B')}, 256/8)
 
-	It("should create a some sample policies", func() {
-		policyConfigs := []struct {
-			Name        string
-			IVAnnoation string
-			RootPolicy  bool
-		}{
-			// This policy should get the triggered update annotation
-			{"policy-one", "", true},
-			{testNamespace + ".policy-one", "7cznVUq5SXEE4RMZNkGOrQ==", false},
-			{"policy-two", "", true},
-			{testNamespace + ".policy-two", "", false},
+	rsrcPath := "../resources/case12_encryptionkeys_controller/"
+	policyOneYaml := rsrcPath + "policy-one.yaml"
+	policyTwoYaml := rsrcPath + "policy-two.yaml"
+	policyOneName := "policy-one"
+	policyTwoName := "policy-two"
+	replicatedPolicyOneYaml := rsrcPath + "replicated-policy-one.yaml"
+	replicatedPolicyOneName := "policy-propagator-test.policy-one"
+
+	It("should create some sample policies", func() {
+		By("Creating the root policies with placement rules and bindings")
+		utils.Kubectl("apply", "-f", policyOneYaml, "-n", testNamespace)
+		rootOne := utils.GetWithTimeout(
+			clientHubDynamic, gvrPolicy, policyOneName, testNamespace, true, defaultTimeoutSeconds,
+		)
+		Expect(rootOne).NotTo(BeNil())
+
+		utils.Kubectl("apply", "-f", policyTwoYaml, "-n", testNamespace)
+		rootTwo := utils.GetWithTimeout(
+			clientHubDynamic, gvrPolicy, policyTwoName, testNamespace, true, defaultTimeoutSeconds,
+		)
+		Expect(rootTwo).NotTo(BeNil())
+
+		By("Patching in the decision for policy-one")
+		plrOne := utils.GetWithTimeout(
+			clientHubDynamic, gvrPlacementRule, policyOneName+"-plr", testNamespace, true, defaultTimeoutSeconds,
+		)
+		plrOne.Object["status"] = utils.GeneratePlrStatus("managed1")
+		_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
+			context.TODO(), plrOne, metav1.UpdateOptions{},
+		)
+		Expect(err).ToNot(HaveOccurred())
+		replicatedOne := utils.GetWithTimeout(
+			clientHubDynamic, gvrPolicy, testNamespace+"."+policyOneName, "managed1", true, defaultTimeoutSeconds,
+		)
+		Expect(replicatedOne).ToNot(BeNil())
+		opt := metav1.ListOptions{
+			LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + policyOneName,
 		}
+		utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 1, true, defaultTimeoutSeconds)
 
-		for _, policyConf := range policyConfigs {
-			annotations := map[string]interface{}{}
-			if policyConf.IVAnnoation != "" {
-				annotations[IVAnnotation] = policyConf.IVAnnoation
-			}
-
-			labels := map[string]interface{}{}
-			if !policyConf.RootPolicy {
-				labels[RootPolicyLabel] = policyConf.Name
-			}
-
-			policy := &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"apiVersion": "policy.open-cluster-management.io/v1",
-					"kind":       "Policy",
-					"metadata": map[string]interface{}{
-						"annotations": annotations,
-						"labels":      labels,
-						"name":        policyConf.Name,
-						"namespace":   testNamespace,
-					},
-					"spec": map[string]interface{}{
-						"disabled": false,
-						"policy-templates": []map[string]interface{}{
-							{"objectDefinition": map[string]interface{}{}},
-						},
-					},
-				},
-			}
-			_, err := clientHubDynamic.Resource(gvrPolicy).
-				Namespace(testNamespace).
-				Create(context.TODO(), policy, metav1.CreateOptions{})
-			Expect(err).ShouldNot(HaveOccurred())
+		By("Patching in the decision for policy-two")
+		plrTwo := utils.GetWithTimeout(
+			clientHubDynamic, gvrPlacementRule, policyTwoName+"-plr", testNamespace, true, defaultTimeoutSeconds,
+		)
+		plrTwo.Object["status"] = utils.GeneratePlrStatus("managed1")
+		_, err = clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
+			context.TODO(), plrTwo, metav1.UpdateOptions{},
+		)
+		Expect(err).ToNot(HaveOccurred())
+		replicatedTwo := utils.GetWithTimeout(
+			clientHubDynamic, gvrPolicy, testNamespace+"."+policyTwoName, "managed1", true, defaultTimeoutSeconds,
+		)
+		Expect(replicatedTwo).ToNot(BeNil())
+		opt = metav1.ListOptions{
+			LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + policyTwoName,
 		}
+		utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 1, true, defaultTimeoutSeconds)
+
+		By("Adding the IV Annotation to the replicated policy-one")
+		utils.Kubectl("apply", "-n", "managed1", "-f", replicatedPolicyOneYaml)
+
+		Eventually(func() interface{} {
+			replicatedPolicy := utils.GetWithTimeout(
+				clientHubDynamic, gvrPolicy, replicatedPolicyOneName, "managed1", true, defaultTimeoutSeconds,
+			)
+
+			return replicatedPolicy.GetAnnotations()
+		}, defaultTimeoutSeconds, 1).Should(HaveKey(IVAnnotation))
 	})
 
 	It("should create a "+EncryptionKeySecret+" secret that needs a rotation", func() {
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:        EncryptionKeySecret,
-				Namespace:   testNamespace,
+				Namespace:   "managed1",
 				Annotations: map[string]string{LastRotatedAnnotation: "2020-04-15T01:02:03Z"},
 			},
 			Data: map[string][]byte{"key": key, "previousKey": previousKey},
 		}
-		_, err := clientHub.CoreV1().Secrets(testNamespace).Create(context.TODO(), secret, metav1.CreateOptions{})
+		_, err := clientHub.CoreV1().Secrets("managed1").Create(context.TODO(), secret, metav1.CreateOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 	})
 
@@ -99,7 +121,7 @@ var _ = Describe("Test policy encryption key rotation", func() {
 				clientHubDynamic,
 				gvrSecret,
 				EncryptionKeySecret,
-				testNamespace,
+				"managed1",
 				true,
 				defaultTimeoutSeconds,
 			)
@@ -144,7 +166,7 @@ var _ = Describe("Test policy encryption key rotation", func() {
 	})
 
 	It("clean up", func() {
-		err := clientHub.CoreV1().Secrets(testNamespace).Delete(
+		err := clientHub.CoreV1().Secrets("managed1").Delete(
 			context.TODO(), EncryptionKeySecret, metav1.DeleteOptions{},
 		)
 		Expect(err).ShouldNot(HaveOccurred())

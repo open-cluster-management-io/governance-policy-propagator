@@ -17,7 +17,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	policiesv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
@@ -35,19 +34,12 @@ import (
 //+kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *RootPolicyReconciler) SetupWithManager(mgr ctrl.Manager, additionalSources ...source.Source) error {
-	builder := ctrl.NewControllerManagedBy(mgr).
-		Named(ControllerName).
+func (r *RootPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		Named("root-policy-spec").
 		For(
 			&policiesv1.Policy{},
-			builder.WithPredicates(common.NeverEnqueue)).
-		// This is a workaround - the controller-runtime requires a "For", but does not allow it to
-		// modify the eventhandler. Currently we need to enqueue requests for Policies in a very
-		// particular way, so we will define that in a separate "Watches"
-		Watches(
-			&policiesv1.Policy{},
-			handler.EnqueueRequestsFromMapFunc(common.MapToRootPolicy(mgr.GetClient())),
-			builder.WithPredicates(policyNonStatusUpdates())).
+			builder.WithPredicates(rootPolicyNonStatusUpdates())).
 		Watches(
 			&policiesv1beta1.PolicySet{},
 			handler.EnqueueRequestsFromMapFunc(mapPolicySetToPolicies),
@@ -61,21 +53,33 @@ func (r *RootPolicyReconciler) SetupWithManager(mgr ctrl.Manager, additionalSour
 			handler.EnqueueRequestsFromMapFunc(mapPlacementRuleToPolicies(mgr.GetClient()))).
 		Watches(
 			&clusterv1beta1.PlacementDecision{},
-			handler.EnqueueRequestsFromMapFunc(mapPlacementDecisionToPolicies(mgr.GetClient())),
-		)
-
-	for _, source := range additionalSources {
-		builder.WatchesRawSource(source, &handler.EnqueueRequestForObject{})
-	}
-
-	return builder.Complete(r)
+			handler.EnqueueRequestsFromMapFunc(mapPlacementDecisionToPolicies(mgr.GetClient()))).
+		Complete(r)
 }
 
 // policyNonStatusUpdates triggers reconciliation if the Policy has had a change that is not just
 // a status update.
-func policyNonStatusUpdates() predicate.Funcs {
+func rootPolicyNonStatusUpdates() predicate.Funcs {
 	return predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			_, isReplicated := e.Object.GetLabels()[common.RootPolicyLabel]
+
+			return !isReplicated
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			_, isReplicated := e.Object.GetLabels()[common.RootPolicyLabel]
+
+			return !isReplicated
+		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
+			_, newIsReplicated := e.ObjectNew.GetLabels()[common.RootPolicyLabel]
+			_, oldIsReplicated := e.ObjectOld.GetLabels()[common.RootPolicyLabel]
+
+			// if either has the label, it is a replicated policy
+			if oldIsReplicated || newIsReplicated {
+				return false
+			}
+
 			// Ignore pure status updates since those are handled by a separate controller
 			return e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration() ||
 				!equality.Semantic.DeepEqual(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels()) ||

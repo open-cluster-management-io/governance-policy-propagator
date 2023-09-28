@@ -37,7 +37,7 @@ func equivalentReplicatedPolicies(plc1 *policiesv1.Policy, plc2 *policiesv1.Poli
 // In particular, it adds labels that the policy framework uses, and ensures that policy dependencies
 // are in a consistent format suited for use on managed clusters.
 // It can return an error if it needed to canonicalize a dependency, but a PolicySet lookup failed.
-func (r *Propagator) buildReplicatedPolicy(
+func (r *ReplicatedPolicyReconciler) buildReplicatedPolicy(
 	root *policiesv1.Policy, clusterDec clusterDecision,
 ) (*policiesv1.Policy, error) {
 	decision := clusterDec.Cluster
