@@ -246,12 +246,16 @@ func main() {
 
 	policiesLock := &sync.Map{}
 
-	if err = (&propagatorctrl.PolicyReconciler{
+	propagator := propagatorctrl.Propagator{
 		Client:          mgr.GetClient(),
 		Scheme:          mgr.GetScheme(),
 		Recorder:        mgr.GetEventRecorderFor(propagatorctrl.ControllerName),
 		DynamicWatcher:  dynamicWatcher,
 		RootPolicyLocks: policiesLock,
+	}
+
+	if err = (&propagatorctrl.RootPolicyReconciler{
+		Propagator: propagator,
 	}).SetupWithManager(mgr, dynamicWatcherSource); err != nil {
 		log.Error(err, "Unable to create the controller", "controller", propagatorctrl.ControllerName)
 		os.Exit(1)

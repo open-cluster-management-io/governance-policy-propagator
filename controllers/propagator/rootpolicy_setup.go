@@ -35,7 +35,7 @@ import (
 //+kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *PolicyReconciler) SetupWithManager(mgr ctrl.Manager, additionalSources ...source.Source) error {
+func (r *RootPolicyReconciler) SetupWithManager(mgr ctrl.Manager, additionalSources ...source.Source) error {
 	builder := ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerName).
 		For(
