@@ -205,10 +205,9 @@ func getReconciler(encryptionSecret *corev1.Secret) *EncryptionKeysReconciler {
 	client := builder.Build()
 
 	return &EncryptionKeysReconciler{
-		Client:                  client,
-		KeyRotationDays:         30,
-		MaxConcurrentReconciles: 1,
-		Scheme:                  scheme,
+		Client:          client,
+		KeyRotationDays: 30,
+		Scheme:          scheme,
 	}
 }
 
@@ -463,11 +462,6 @@ func TestReconcileSecretNotFiltered(t *testing.T) {
 func TestReconcileAPIFails(t *testing.T) {
 	t.Parallel()
 	RegisterFailHandler(Fail)
-
-	originalRetries := retries
-	retries = 0
-
-	t.Cleanup(func() { retries = originalRetries })
 
 	tests := []struct {
 		ExpectedRotation bool

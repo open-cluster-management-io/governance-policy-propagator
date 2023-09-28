@@ -13,6 +13,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -34,8 +35,9 @@ import (
 //+kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *RootPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *RootPolicyReconciler) SetupWithManager(mgr ctrl.Manager, maxConcurrentReconciles uint) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.Options{MaxConcurrentReconciles: int(maxConcurrentReconciles)}).
 		Named("root-policy-spec").
 		For(
 			&policiesv1.Policy{},

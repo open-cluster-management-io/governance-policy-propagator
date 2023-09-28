@@ -15,7 +15,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	"open-cluster-management.io/governance-policy-propagator/controllers/common"
@@ -30,9 +29,9 @@ var log = ctrl.Log.WithName(ControllerName)
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies/status,verbs=get;update;patch
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *RootPolicyStatusReconciler) SetupWithManager(mgr ctrl.Manager, _ ...source.Source) error {
+func (r *RootPolicyStatusReconciler) SetupWithManager(mgr ctrl.Manager, maxConcurrentReconciles uint) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		WithOptions(controller.Options{MaxConcurrentReconciles: int(r.MaxConcurrentReconciles)}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: int(maxConcurrentReconciles)}).
 		Named(ControllerName).
 		For(
 			&policiesv1.Policy{},
@@ -55,7 +54,6 @@ var _ reconcile.Reconciler = &RootPolicyStatusReconciler{}
 // RootPolicyStatusReconciler handles replicated policy status updates and updates the root policy status.
 type RootPolicyStatusReconciler struct {
 	client.Client
-	MaxConcurrentReconciles uint
 	// Use a shared lock with the main policy controller to avoid conflicting updates.
 	RootPolicyLocks *sync.Map
 	Scheme          *runtime.Scheme

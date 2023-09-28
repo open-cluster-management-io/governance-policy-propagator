@@ -35,17 +35,14 @@ const (
 var (
 	log                       = ctrl.Log.WithName(ControllerName)
 	errLastRotationParseError = fmt.Errorf(`failed to parse the "%s" annotation`, propagator.LastRotatedAnnotation)
-	// The number of retries when performing an operation that can fail temporarily and can't be
-	// requeued for a retry later. This is not a const so it can be overwritten during the tests.
-	retries uint = 4
 )
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *EncryptionKeysReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *EncryptionKeysReconciler) SetupWithManager(mgr ctrl.Manager, maxConcurrentReconciles uint) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		// The work queue prevents the same item being reconciled concurrently:
 		// https://github.com/kubernetes-sigs/controller-runtime/issues/1416#issuecomment-899833144
-		WithOptions(controller.Options{MaxConcurrentReconciles: int(r.MaxConcurrentReconciles)}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: int(maxConcurrentReconciles)}).
 		Named(ControllerName).
 		For(&corev1.Secret{}).
 		Complete(r)
@@ -58,9 +55,8 @@ var _ reconcile.Reconciler = &EncryptionKeysReconciler{}
 // for all managed clusters.
 type EncryptionKeysReconciler struct { //nolint:golint,revive
 	client.Client
-	KeyRotationDays         uint
-	MaxConcurrentReconciles uint
-	Scheme                  *runtime.Scheme
+	KeyRotationDays uint
+	Scheme          *runtime.Scheme
 }
 
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies,verbs=get;list;patch
