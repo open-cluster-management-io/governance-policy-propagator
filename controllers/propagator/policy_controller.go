@@ -12,70 +12,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
-	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
-	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
-	policiesv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
 	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
 const ControllerName string = "policy-propagator"
 
 var log = ctrl.Log.WithName(ControllerName)
-
-//+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies/finalizers,verbs=update
-//+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=placementbindings,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policysets,verbs=get;list;watch
-//+kubebuilder:rbac:groups=cluster.open-cluster-management.io,resources=managedclusters;placementdecisions;placements,verbs=get;list;watch
-//+kubebuilder:rbac:groups=apps.open-cluster-management.io,resources=placementrules,verbs=get;list;watch
-//+kubebuilder:rbac:groups=core,resources=events,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
-
-// SetupWithManager sets up the controller with the Manager.
-func (r *PolicyReconciler) SetupWithManager(mgr ctrl.Manager, additionalSources ...source.Source) error {
-	builder := ctrl.NewControllerManagedBy(mgr).
-		Named(ControllerName).
-		For(
-			&policiesv1.Policy{},
-			builder.WithPredicates(common.NeverEnqueue)).
-		// This is a workaround - the controller-runtime requires a "For", but does not allow it to
-		// modify the eventhandler. Currently we need to enqueue requests for Policies in a very
-		// particular way, so we will define that in a separate "Watches"
-		Watches(
-			&policiesv1.Policy{},
-			handler.EnqueueRequestsFromMapFunc(common.PolicyMapper(mgr.GetClient())),
-			builder.WithPredicates(policyPredicates())).
-		Watches(
-			&policiesv1beta1.PolicySet{},
-			handler.EnqueueRequestsFromMapFunc(policySetMapper(mgr.GetClient())),
-			builder.WithPredicates(policySetPredicateFuncs)).
-		Watches(
-			&policiesv1.PlacementBinding{},
-			handler.EnqueueRequestsFromMapFunc(placementBindingMapper(mgr.GetClient())),
-			builder.WithPredicates(pbPredicateFuncs)).
-		Watches(
-			&appsv1.PlacementRule{},
-			handler.EnqueueRequestsFromMapFunc(placementRuleMapper(mgr.GetClient()))).
-		Watches(
-			&clusterv1beta1.PlacementDecision{},
-			handler.EnqueueRequestsFromMapFunc(placementDecisionMapper(mgr.GetClient())),
-		)
-
-	for _, source := range additionalSources {
-		builder.WatchesRawSource(source, &handler.EnqueueRequestForObject{})
-	}
-
-	return builder.Complete(r)
-}
 
 // blank assignment to verify that ReconcilePolicy implements reconcile.Reconciler
 var _ reconcile.Reconciler = &PolicyReconciler{}
