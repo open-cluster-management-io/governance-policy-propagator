@@ -124,8 +124,9 @@ func plcDeletionWrapper(
 	}
 }
 
-// cleanUpPolicy will delete all replicated policies associated with provided policy.
-func (r *PolicyReconciler) cleanUpPolicy(instance *policiesv1.Policy) error {
+// cleanUpPolicy will delete all replicated policies associated with provided policy and return a boolean
+// indicating all of the replicated policies were deleted, if any
+func (r *PolicyReconciler) cleanUpPolicy(instance *policiesv1.Policy) (bool, error) {
 	log := log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
 	replicatedPlcList := &policiesv1.PolicyList{}
 
@@ -148,7 +149,7 @@ func (r *PolicyReconciler) cleanUpPolicy(instance *policiesv1.Policy) error {
 			),
 		)
 
-		return err
+		return false, err
 	}
 
 	err = r.List(
@@ -157,13 +158,13 @@ func (r *PolicyReconciler) cleanUpPolicy(instance *policiesv1.Policy) error {
 	if err != nil {
 		log.Error(err, "Failed to list the replicated policies")
 
-		return err
+		return false, err
 	}
 
 	if len(replicatedPlcList.Items) == 0 {
 		log.V(2).Info("No replicated policies to delete.")
 
-		return nil
+		return false, nil
 	}
 
 	log.V(2).Info(
@@ -208,12 +209,12 @@ func (r *PolicyReconciler) cleanUpPolicy(instance *policiesv1.Policy) error {
 	}
 
 	if failures > 0 {
-		return errors.New("failed to delete one or more replicated policies")
+		return false, errors.New("failed to delete one or more replicated policies")
 	}
 
 	propagationFailureMetric.DeleteLabelValues(instance.GetName(), instance.GetNamespace())
 
-	return nil
+	return true, nil
 }
 
 // clusterDecision contains a single decision where the replicated policy
@@ -664,15 +665,19 @@ func (r *PolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) error {
 	if instance.Spec.Disabled {
 		log.Info("The policy is disabled, doing clean up")
 
-		err := r.cleanUpPolicy(instance)
+		allReplicasDeleted, err := r.cleanUpPolicy(instance)
 		if err != nil {
 			log.Info("One or more replicated policies could not be deleted")
 
 			return err
 		}
 
-		r.Recorder.Event(instance, "Normal", "PolicyPropagation",
-			fmt.Sprintf("Policy %s/%s was disabled", instance.GetNamespace(), instance.GetName()))
+		// Checks if replicated policies exist in the event that
+		// a double reconcile to prevent emitting the same event twice
+		if allReplicasDeleted {
+			r.Recorder.Event(instance, "Normal", "PolicyPropagation",
+				fmt.Sprintf("Policy %s/%s was disabled", instance.GetNamespace(), instance.GetName()))
+		}
 	}
 
 	// Get the placement binding in order to later get the placement decisions

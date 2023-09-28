@@ -8,17 +8,20 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/ghodss/yaml"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 )
@@ -297,4 +300,30 @@ func GetMetrics(metricPatterns ...string) []string {
 	}
 
 	return values
+}
+
+func GetMatchingEvents(
+	client kubernetes.Interface, namespace, objName, reasonRegex, msgRegex string, timeout int,
+) []corev1.Event {
+	var eventList *corev1.EventList
+
+	EventuallyWithOffset(1, func() error {
+		var err error
+		eventList, err = client.CoreV1().Events(namespace).List(context.TODO(), metav1.ListOptions{})
+
+		return err
+	}, timeout, 1).ShouldNot(HaveOccurred())
+
+	matchingEvents := make([]corev1.Event, 0)
+	msgMatcher := regexp.MustCompile(msgRegex)
+	reasonMatcher := regexp.MustCompile(reasonRegex)
+
+	for _, event := range eventList.Items {
+		if event.InvolvedObject.Name == objName && reasonMatcher.MatchString(event.Reason) &&
+			msgMatcher.MatchString(event.Message) {
+			matchingEvents = append(matchingEvents, event)
+		}
+	}
+
+	return matchingEvents
 }

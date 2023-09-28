@@ -124,7 +124,7 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 			// Owned objects are automatically garbage collected.
 			log.Info("Policy not found, so it may have been deleted. Deleting the replicated policies.")
 
-			err := r.cleanUpPolicy(&policiesv1.Policy{
+			_, err := r.cleanUpPolicy(&policiesv1.Policy{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       policiesv1.Kind,
 					APIVersion: policiesv1.GroupVersion.Group + "/" + policiesv1.GroupVersion.Version,
