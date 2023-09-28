@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -22,6 +23,7 @@ var _ reconcile.Reconciler = &ReplicatedPolicyReconciler{}
 
 type ReplicatedPolicyReconciler struct {
 	Propagator
+	ResourceVersions *sync.Map
 }
 
 func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
@@ -64,6 +66,8 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 		return reconcile.Result{}, nil
 	}
 
+	rsrcVersKey := request.Namespace + "/" + request.Name
+
 	// Fetch the Root Policy instance
 	rootPolicy := &policiesv1.Policy{}
 	rootNN := types.NamespacedName{Namespace: rootNS, Name: rootName}
@@ -97,6 +101,12 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 				return reconcile.Result{}, nil
 			}
 
+			version := safeWriteLoad(r.ResourceVersions, rsrcVersKey)
+			defer version.Unlock()
+
+			// Store this to ensure the cache matches a known possible state for this situation
+			version.resourceVersion = "deleted"
+
 			log.Info("Root policy and replicated policy already missing")
 
 			return reconcile.Result{}, nil
@@ -121,6 +131,12 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 
 			return reconcile.Result{}, nil
 		}
+
+		version := safeWriteLoad(r.ResourceVersions, rsrcVersKey)
+		defer version.Unlock()
+
+		// Store this to ensure the cache matches a known possible state for this situation
+		version.resourceVersion = "deleted"
 
 		log.Info("Root policy is disabled, and replicated policy correctly not found.")
 
@@ -151,6 +167,12 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 			return reconcile.Result{}, nil
 		}
 
+		version := safeWriteLoad(r.ResourceVersions, rsrcVersKey)
+		defer version.Unlock()
+
+		// Store this to ensure the cache matches a known possible state for this situation
+		version.resourceVersion = "deleted"
+
 		log.Info("Replicated policy should not exist on this managed cluster, and does not.")
 
 		return reconcile.Result{}, nil
@@ -164,9 +186,6 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 
 		return reconcile.Result{}, err
 	}
-
-	// save the watcherError for later, so that the policy can still be updated now.
-	var watcherErr error
 
 	if policyHasTemplates(rootPolicy) {
 		if replicatedExists {
@@ -210,6 +229,9 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 		refObjs = append(refObjs, refObj)
 	}
 
+	// save the watcherError for later, so that the policy can still be updated now.
+	var watcherErr error
+
 	if len(refObjs) != 0 {
 		watcherErr = r.DynamicWatcher.AddOrUpdateWatcher(instanceObjID, refObjs...)
 		if watcherErr != nil {
@@ -223,6 +245,9 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 	}
 
 	if !replicatedExists {
+		version := safeWriteLoad(r.ResourceVersions, rsrcVersKey)
+		defer version.Unlock()
+
 		err = r.Create(ctx, desiredReplicatedPolicy)
 		if err != nil {
 			log.Error(err, "Failed to create the replicated policy, requeueing")
@@ -230,10 +255,15 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 			return reconcile.Result{}, err
 		}
 
+		version.resourceVersion = desiredReplicatedPolicy.GetResourceVersion()
+
 		log.Info("Created replicated policy")
 
-		return reconcile.Result{}, nil
+		return reconcile.Result{}, watcherErr
 	}
+
+	version := safeWriteLoad(r.ResourceVersions, rsrcVersKey)
+	defer version.Unlock()
 
 	// replicated policy already created, need to compare and possibly update
 	if !equivalentReplicatedPolicies(desiredReplicatedPolicy, replicatedPolicy) {
@@ -253,6 +283,9 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 		log.Info("Replicated policy matches, no update needed")
 	}
 
+	// whether it was updated or not, this resourceVersion can be cached
+	version.resourceVersion = replicatedPolicy.GetResourceVersion()
+
 	if watcherErr != nil {
 		log.Info("Requeueing for the dynamic watcher error")
 	}
@@ -271,17 +304,20 @@ func (r *ReplicatedPolicyReconciler) cleanUpReplicated(ctx context.Context, repl
 		Name:      replicatedPolicy.Name,
 	})
 
+	rsrcVersKey := replicatedPolicy.GetNamespace() + "/" + replicatedPolicy.GetName()
+
+	version := safeWriteLoad(r.ResourceVersions, rsrcVersKey)
+	defer version.Unlock()
+
 	deleteErr := r.Delete(ctx, replicatedPolicy)
+
+	version.resourceVersion = "deleted"
 
 	if watcherErr != nil {
 		return watcherErr
 	}
 
-	if deleteErr != nil {
-		return deleteErr
-	}
-
-	return nil
+	return deleteErr
 }
 
 func (r *ReplicatedPolicyReconciler) singleClusterDecision(

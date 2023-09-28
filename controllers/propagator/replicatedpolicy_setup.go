@@ -1,48 +1,76 @@
 package propagator
 
 import (
+	"context"
+	"sync"
+	"time"
+
 	"k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
-func (r *ReplicatedPolicyReconciler) SetupWithManager(mgr ctrl.Manager, additionalSources ...source.Source) error {
-	builder := ctrl.NewControllerManagedBy(mgr).
+func (r *ReplicatedPolicyReconciler) SetupWithManager(
+	mgr ctrl.Manager, dynWatcherSrc source.Source, updateSrc source.Source,
+) error {
+	return ctrl.NewControllerManagedBy(mgr).
 		Named("replicated-policy").
 		For(
 			&policiesv1.Policy{},
-			builder.WithPredicates(replicatedPolicyPredicates()),
-		)
-
-	for _, source := range additionalSources {
-		builder.WatchesRawSource(source, &handler.EnqueueRequestForObject{})
-	}
-
-	return builder.Complete(r)
+			builder.WithPredicates(replicatedPolicyPredicates(r.ResourceVersions))).
+		WatchesRawSource(
+			dynWatcherSrc,
+			// The dependency-watcher could create an event before the same sort of watch in the
+			// controller-runtime triggers an update in the cache. This tries to ensure the cache is
+			// updated before the reconcile is triggered.
+			&delayGeneric{
+				EventHandler: &handler.EnqueueRequestForObject{},
+				delay:        time.Second * 3,
+			}).
+		WatchesRawSource(
+			updateSrc,
+			&handler.EnqueueRequestForObject{}).
+		Complete(r)
 }
 
 // replicatedPolicyPredicates triggers reconciliation if the policy is a replicated policy, and is
-// not a pure status update.
-func replicatedPolicyPredicates() predicate.Funcs {
+// not a pure status update. It will use the ResourceVersions cache to try and skip events caused
+// by the replicated policy reconciler itself.
+func replicatedPolicyPredicates(resourceVersions *sync.Map) predicate.Funcs {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			_, isReplicated := e.Object.GetLabels()[common.RootPolicyLabel]
+			if !isReplicated {
+				return false
+			}
 
-			// NOTE: can we ignore the create event from when this controller creates the resource?
-			return isReplicated
+			key := e.Object.GetNamespace() + "/" + e.Object.GetName()
+			version, loaded := safeReadLoad(resourceVersions, key)
+			defer version.RUnlock()
+
+			return !loaded || version.resourceVersion != e.Object.GetResourceVersion()
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			_, isReplicated := e.Object.GetLabels()[common.RootPolicyLabel]
+			if !isReplicated {
+				return false
+			}
 
-			// NOTE: can we ignore the delete event from when this controller deletes the resource?
-			return isReplicated
+			key := e.Object.GetNamespace() + "/" + e.Object.GetName()
+			version, loaded := safeReadLoad(resourceVersions, key)
+			defer version.RUnlock()
+
+			return !loaded || version.resourceVersion != "deleted"
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			_, newIsReplicated := e.ObjectNew.GetLabels()[common.RootPolicyLabel]
@@ -53,11 +81,84 @@ func replicatedPolicyPredicates() predicate.Funcs {
 				return false
 			}
 
-			// NOTE: can we ignore updates where we've already reconciled the new ResourceVersion?
+			key := e.ObjectNew.GetNamespace() + "/" + e.ObjectNew.GetName()
+			version, loaded := safeReadLoad(resourceVersions, key)
+			defer version.RUnlock()
+
+			if loaded && version.resourceVersion == e.ObjectNew.GetResourceVersion() {
+				return false
+			}
+
 			// Ignore pure status updates since those are handled by a separate controller
 			return e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration() ||
 				!equality.Semantic.DeepEqual(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels()) ||
 				!equality.Semantic.DeepEqual(e.ObjectOld.GetAnnotations(), e.ObjectNew.GetAnnotations())
 		},
 	}
+}
+
+type lockingRsrcVersion struct {
+	*sync.RWMutex
+	resourceVersion string
+}
+
+// safeReadLoad gets the lockingRsrcVersion from the sync.Map if it already exists, or it puts a
+// new empty lockingRsrcVersion in the sync.Map if it was missing. In either case, this function
+// obtains the RLock before returning - the caller *must* call RUnlock() themselves. The bool
+// returned indicates if the key already existed in the sync.Map.
+func safeReadLoad(resourceVersions *sync.Map, key string) (*lockingRsrcVersion, bool) {
+	newRsrc := &lockingRsrcVersion{
+		RWMutex:         &sync.RWMutex{},
+		resourceVersion: "",
+	}
+
+	newRsrc.RLock()
+
+	rsrc, loaded := resourceVersions.LoadOrStore(key, newRsrc)
+	if loaded {
+		newRsrc.RUnlock()
+
+		version := rsrc.(*lockingRsrcVersion)
+		version.RLock()
+
+		return version, true
+	}
+
+	return newRsrc, false
+}
+
+// safeWriteLoad gets the lockingRsrcVersion from the sync.Map if it already exists, or it puts a
+// new empty lockingRsrcVersion in the sync.Map if it was missing. In either case, this function
+// obtains the Lock (a write lock) before returning - the caller *must* call Unlock() themselves.
+func safeWriteLoad(resourceVersions *sync.Map, key string) *lockingRsrcVersion {
+	newRsrc := &lockingRsrcVersion{
+		RWMutex:         &sync.RWMutex{},
+		resourceVersion: "",
+	}
+
+	newRsrc.Lock()
+
+	rsrc, loaded := resourceVersions.LoadOrStore(key, newRsrc)
+	if loaded {
+		newRsrc.Unlock()
+
+		version := rsrc.(*lockingRsrcVersion)
+		version.Lock()
+
+		return version
+	}
+
+	return newRsrc
+}
+
+type delayGeneric struct {
+	handler.EventHandler
+	delay time.Duration
+}
+
+func (d *delayGeneric) Generic(_ context.Context, evt event.GenericEvent, q workqueue.RateLimitingInterface) {
+	q.AddAfter(reconcile.Request{NamespacedName: types.NamespacedName{
+		Name:      evt.Object.GetName(),
+		Namespace: evt.Object.GetNamespace(),
+	}}, d.delay)
 }
