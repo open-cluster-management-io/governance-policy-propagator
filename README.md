@@ -85,17 +85,6 @@ in particular, the details in `./deploy/manager/manager.yaml`. When any of those
 deployment yaml `./deploy/operator.yaml` must be regenerated through the `make generate-operator-yaml` target. The
 `./deploy/operator.yaml` SHOULD NOT be manually updated.
 
-## Configuration
-
-The following environment variables can be set to configure the controller:
-
-- `CONTROLLER_CONFIG_CONCURRENCY_PER_POLICY` - The maximum number of placement decisions that can be processed
-  concurrently per policy. This defaults to `5`.
-- `CONTROLLER_CONFIG_REQUEUE_ERROR_DELAY` - The number of minutes to delay before retrying to process a reconcile event
-  after one or more placement decisions failed to be processed. This is not a blocking delay. This defaults to `5`.
-- `CONTROLLER_CONFIG_RETRY_ATTEMPTS` - The number of times to retry a failed Kubernetes API call when processing a
-  placement decision. This defaults to `3`.
-
 ## Running the Compliance Events API
 
 Create the KinD cluster and install Postgres with the following commands:

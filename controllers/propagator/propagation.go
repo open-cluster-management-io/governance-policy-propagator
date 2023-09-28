@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -36,13 +35,6 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
-// The configuration of the maximum number of Go routines to spawn when handling placement decisions
-// per policy.
-const (
-	concurrencyPerPolicyEnvName = "CONTROLLER_CONFIG_CONCURRENCY_PER_POLICY"
-	concurrencyPerPolicyDefault = 5
-)
-
 const (
 	startDelim              = "{{hub"
 	stopDelim               = "hub}}"
@@ -50,9 +42,8 @@ const (
 )
 
 var (
-	concurrencyPerPolicy int
-	kubeConfig           *rest.Config
-	kubeClient           *kubernetes.Interface
+	kubeConfig *rest.Config
+	kubeClient *kubernetes.Interface
 )
 
 type Propagator struct {
@@ -67,7 +58,6 @@ type Propagator struct {
 func Initialize(kubeconfig *rest.Config, kubeclient *kubernetes.Interface) {
 	kubeConfig = kubeconfig
 	kubeClient = kubeclient
-	concurrencyPerPolicy = getEnvVarPosInt(concurrencyPerPolicyEnvName, concurrencyPerPolicyDefault)
 }
 
 // getTemplateCfg returns the default policy template configuration.
@@ -83,153 +73,6 @@ func getTemplateCfg() templates.Config {
 	}
 }
 
-func getEnvVarPosInt(name string, defaultValue int) int {
-	envValue := os.Getenv(name)
-	if envValue == "" {
-		return defaultValue
-	}
-
-	envInt, err := strconv.Atoi(envValue)
-	if err == nil && envInt > 0 {
-		return envInt
-	}
-
-	log.Info("The environment variable is invalid. Using default.", "name", name)
-
-	return defaultValue
-}
-
-func (r *Propagator) deletePolicy(plc *policiesv1.Policy) error {
-	// #nosec G601 -- no memory addresses are stored in collections
-	err := r.Delete(context.TODO(), plc)
-	if err != nil && !k8serrors.IsNotFound(err) {
-		log.Error(
-			err,
-			"Failed to delete the replicated policy",
-			"name", plc.GetName(),
-			"namespace", plc.GetNamespace(),
-		)
-
-		return err
-	}
-
-	return nil
-}
-
-type policyDeleter interface {
-	deletePolicy(instance *policiesv1.Policy) error
-}
-
-type deletionResult struct {
-	Identifier string
-	Err        error
-}
-
-func plcDeletionWrapper(
-	deletionHandler policyDeleter,
-	policies <-chan policiesv1.Policy,
-	results chan<- deletionResult,
-) {
-	for policy := range policies {
-		identifier := fmt.Sprintf("%s/%s", policy.GetNamespace(), policy.GetName())
-		err := deletionHandler.deletePolicy(&policy)
-		results <- deletionResult{identifier, err}
-	}
-}
-
-// cleanUpPolicy will delete all replicated policies associated with provided policy and return a boolean
-// indicating all of the replicated policies were deleted, if any
-func (r *Propagator) cleanUpPolicy(instance *policiesv1.Policy) (bool, error) {
-	log := log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
-	replicatedPlcList := &policiesv1.PolicyList{}
-
-	instanceGVK := instance.GroupVersionKind()
-
-	err := r.DynamicWatcher.RemoveWatcher(k8sdepwatches.ObjectIdentifier{
-		Group:     instanceGVK.Group,
-		Version:   instanceGVK.Version,
-		Kind:      instanceGVK.Kind,
-		Namespace: instance.Namespace,
-		Name:      instance.Name,
-	})
-	if err != nil {
-		log.Error(
-			err,
-			fmt.Sprintf(
-				"Failed to remove watches for the policy %s/%s from the dynamic watcher",
-				instance.Namespace,
-				instance.Name,
-			),
-		)
-
-		return false, err
-	}
-
-	err = r.List(
-		context.TODO(), replicatedPlcList, client.MatchingLabels(common.LabelsForRootPolicy(instance)),
-	)
-	if err != nil {
-		log.Error(err, "Failed to list the replicated policies")
-
-		return false, err
-	}
-
-	if len(replicatedPlcList.Items) == 0 {
-		log.V(2).Info("No replicated policies to delete.")
-
-		return false, nil
-	}
-
-	log.V(2).Info(
-		"Deleting replicated policies because root policy was deleted", "count", len(replicatedPlcList.Items))
-
-	policiesChan := make(chan policiesv1.Policy, len(replicatedPlcList.Items))
-	deletionResultsChan := make(chan deletionResult, len(replicatedPlcList.Items))
-
-	numWorkers := common.GetNumWorkers(len(replicatedPlcList.Items), concurrencyPerPolicy)
-
-	for i := 0; i < numWorkers; i++ {
-		go plcDeletionWrapper(r, policiesChan, deletionResultsChan)
-	}
-
-	log.V(2).Info("Scheduling work to handle deleting replicated policies")
-
-	for _, plc := range replicatedPlcList.Items {
-		policiesChan <- plc
-	}
-
-	// Wait for all the deletions to be processed.
-	log.V(1).Info("Waiting for the result of deleting the replicated policies", "count", len(policiesChan))
-
-	processedResults := 0
-	failures := 0
-
-	for result := range deletionResultsChan {
-		if result.Err != nil {
-			log.V(2).Info("Failed to delete replicated policy " + result.Identifier)
-			failures++
-		}
-
-		processedResults++
-
-		// Once all the deletions have been processed, it's safe to close
-		// the channels and stop blocking in this goroutine.
-		if processedResults == len(replicatedPlcList.Items) {
-			close(policiesChan)
-			close(deletionResultsChan)
-			log.V(2).Info("All replicated policy deletions have been handled", "count", len(replicatedPlcList.Items))
-		}
-	}
-
-	if failures > 0 {
-		return false, errors.New("failed to delete one or more replicated policies")
-	}
-
-	propagationFailureMetric.DeleteLabelValues(instance.GetName(), instance.GetNamespace())
-
-	return true, nil
-}
-
 // clusterDecision contains a single decision where the replicated policy
 // should be processed and any overrides to the root policy
 type clusterDecision struct {
@@ -237,67 +80,7 @@ type clusterDecision struct {
 	PolicyOverrides policiesv1.BindingOverrides
 }
 
-type decisionHandler interface {
-	handleDecision(instance *policiesv1.Policy, decision clusterDecision) (
-		templateRefObjs map[k8sdepwatches.ObjectIdentifier]bool, err error,
-	)
-}
-
-// decisionResult contains the result of handling a placement decision of a policy. It is intended
-// to be sent in a channel by handleDecisionWrapper for the calling Go routine to determine if the
-// processing was successful. Identifier is the PlacementDecision, with the ClusterNamespace and
-// the ClusterName. TemplateRefObjs is a set of identifiers of objects accessed by hub policy
-// templates. Err is the error associated with handling the decision. This can be nil to denote success.
-type decisionResult struct {
-	Identifier      appsv1.PlacementDecision
-	TemplateRefObjs map[k8sdepwatches.ObjectIdentifier]bool
-	Err             error
-}
-
-// handleDecisionWrapper wraps the handleDecision method for concurrency. decisionHandler is an
-// object with the handleDecision method. This is used instead of making this a method on the
-// PolicyReconciler struct in order for easier unit testing. instance is the policy the placement
-// decision is about. decisions is the channel with the placement decisions for the input policy to
-// process. When this channel closes, it means that all decisions have been processed. results is a
-// channel this method will send the outcome of handling each placement decision. The calling Go
-// routine can use this to determine success.
-func handleDecisionWrapper(
-	decisionHandler decisionHandler,
-	instance *policiesv1.Policy,
-	decisions <-chan clusterDecision,
-	results chan<- decisionResult,
-) {
-	for decision := range decisions {
-		log := log.WithValues(
-			"policyName", instance.GetName(),
-			"policyNamespace", instance.GetNamespace(),
-			"decision", decision.Cluster,
-			"policyOverrides", decision.PolicyOverrides,
-		)
-		log.V(1).Info("Handling the decision")
-
-		templateRefObjs, err := decisionHandler.handleDecision(instance, decision)
-		if err == nil {
-			log.V(1).Info("Replicated the policy")
-		}
-
-		results <- decisionResult{decision.Cluster, templateRefObjs, err}
-	}
-}
-
 type decisionSet map[appsv1.PlacementDecision]bool
-
-func (set decisionSet) namespaces() []string {
-	namespaces := make([]string, 0)
-
-	for decision, isTrue := range set {
-		if isTrue {
-			namespaces = append(namespaces, decision.ClusterNamespace)
-		}
-	}
-
-	return namespaces
-}
 
 // getPolicyPlacementDecisions retrieves the placement decisions for a input PlacementBinding when
 // the policy is bound within it. It can return an error if the PlacementBinding is invalid, or if
@@ -641,116 +424,6 @@ func (r *RootPolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) err
 	}
 
 	return cpcsErr
-}
-
-// handleDecision puts the policy on the cluster, creating it or updating it as required,
-// including resolving hub templates. It will return an error if an API call fails; no
-// internal states will result in errors (eg invalid templates don't cause errors here)
-func (r *ReplicatedPolicyReconciler) handleDecision(
-	rootPlc *policiesv1.Policy, clusterDec clusterDecision,
-) (
-	map[k8sdepwatches.ObjectIdentifier]bool, error,
-) {
-	decision := clusterDec.Cluster
-
-	log := log.WithValues(
-		"policyName", rootPlc.GetName(),
-		"policyNamespace", rootPlc.GetNamespace(),
-		"replicatedPolicyNamespace", decision.ClusterNamespace,
-	)
-	// retrieve replicated policy in cluster namespace
-	replicatedPlc := &policiesv1.Policy{}
-	templateRefObjs := map[k8sdepwatches.ObjectIdentifier]bool{}
-
-	err := r.Get(context.TODO(), types.NamespacedName{
-		Namespace: decision.ClusterNamespace,
-		Name:      common.FullNameForPolicy(rootPlc),
-	}, replicatedPlc)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			replicatedPlc, err = r.buildReplicatedPolicy(rootPlc, clusterDec)
-			if err != nil {
-				return templateRefObjs, err
-			}
-
-			// do a quick check for any template delims in the policy before putting it through
-			// template processor
-			if policyHasTemplates(rootPlc) {
-				// resolve hubTemplate before replicating
-				// #nosec G104 -- any errors are logged and recorded in the processTemplates method,
-				// but the ignored status will be handled appropriately by the policy controllers on
-				// the managed cluster(s).
-				templateRefObjs, _ = r.processTemplates(replicatedPlc, decision, rootPlc)
-			}
-
-			log.Info("Creating the replicated policy")
-
-			err = r.Create(context.TODO(), replicatedPlc)
-			if err != nil {
-				log.Error(err, "Failed to create the replicated policy")
-
-				return templateRefObjs, err
-			}
-
-			r.Recorder.Event(rootPlc, "Normal", "PolicyPropagation",
-				fmt.Sprintf("Policy %s/%s was propagated to cluster %s/%s", rootPlc.GetNamespace(),
-					rootPlc.GetName(), decision.ClusterNamespace, decision.ClusterName))
-
-			// exit after handling the create path, shouldnt be going to through the update path
-			return templateRefObjs, nil
-		}
-
-		// failed to get replicated object, requeue
-		log.Error(err, "Failed to get the replicated policy")
-
-		return templateRefObjs, err
-	}
-
-	// replicated policy already created, need to compare and patch
-	desiredReplicatedPolicy, err := r.buildReplicatedPolicy(rootPlc, clusterDec)
-	if err != nil {
-		return templateRefObjs, err
-	}
-
-	if policyHasTemplates(desiredReplicatedPolicy) {
-		// If the replicated policy has an initialization vector specified, set it for processing
-		if initializationVector, ok := replicatedPlc.Annotations[IVAnnotation]; ok {
-			tempAnnotations := desiredReplicatedPolicy.GetAnnotations()
-			if tempAnnotations == nil {
-				tempAnnotations = make(map[string]string)
-			}
-
-			tempAnnotations[IVAnnotation] = initializationVector
-
-			desiredReplicatedPolicy.SetAnnotations(tempAnnotations)
-		}
-		// resolve hubTemplate before replicating
-		// #nosec G104 -- any errors are logged and recorded in the processTemplates method,
-		// but the ignored status will be handled appropriately by the policy controllers on
-		// the managed cluster(s).
-		templateRefObjs, _ = r.processTemplates(desiredReplicatedPolicy, decision, rootPlc)
-	}
-
-	if !equivalentReplicatedPolicies(desiredReplicatedPolicy, replicatedPlc) {
-		// update needed
-		log.Info("Root policy and replicated policy mismatch, updating replicated policy")
-		replicatedPlc.SetAnnotations(desiredReplicatedPolicy.GetAnnotations())
-		replicatedPlc.SetLabels(desiredReplicatedPolicy.GetLabels())
-		replicatedPlc.Spec = desiredReplicatedPolicy.Spec
-
-		err = r.Update(context.TODO(), replicatedPlc)
-		if err != nil {
-			log.Error(err, "Failed to update the replicated policy")
-
-			return templateRefObjs, err
-		}
-
-		r.Recorder.Event(rootPlc, "Normal", "PolicyPropagation",
-			fmt.Sprintf("Policy %s/%s was updated for cluster %s/%s", rootPlc.GetNamespace(),
-				rootPlc.GetName(), decision.ClusterNamespace, decision.ClusterName))
-	}
-
-	return templateRefObjs, nil
 }
 
 // a helper to quickly check if there are any templates in any of the policy templates

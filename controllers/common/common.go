@@ -221,18 +221,6 @@ func GetDecisions(c client.Client, pb *policiesv1.PlacementBinding) ([]appsv1.Pl
 	return nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Name, pb.Namespace)
 }
 
-// GetNumWorkers is a helper function to return the number of workers to handle concurrent tasks
-func GetNumWorkers(listLength int, concurrencyPerPolicy int) int {
-	var numWorkers int
-	if listLength > concurrencyPerPolicy {
-		numWorkers = concurrencyPerPolicy
-	} else {
-		numWorkers = listLength
-	}
-
-	return numWorkers
-}
-
 func ParseRootPolicyLabel(rootPlc string) (name, namespace string, err error) {
 	// namespaces can't have a `.` (but names can) so this always correctly pulls the namespace out
 	namespace, name, found := strings.Cut(rootPlc, ".")
