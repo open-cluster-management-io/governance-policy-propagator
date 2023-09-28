@@ -327,3 +327,38 @@ func GetMatchingEvents(
 
 	return matchingEvents
 }
+
+// MetricsLines execs into the propagator pod and curls the metrics endpoint, and returns lines
+// that match the pattern.
+func MetricsLines(pattern string) (string, error) {
+	propPodInfo, err := KubectlWithOutput("get", "pod", "-n=open-cluster-management",
+		"-l=name=governance-policy-propagator", "--no-headers")
+	if err != nil {
+		return "", err
+	}
+
+	var cmd *exec.Cmd
+
+	metricsCmd := fmt.Sprintf(`curl localhost:8383/metrics | grep %q`, pattern)
+
+	// The pod name is "No" when the response is "No resources found"
+	propPodName := strings.Split(propPodInfo, " ")[0]
+	if propPodName == "No" {
+		// A missing pod could mean the controller is running locally
+		cmd = exec.Command("bash", "-c", metricsCmd)
+	} else {
+		cmd = exec.Command("kubectl", "exec", "-n=open-cluster-management", propPodName, "-c",
+			"governance-policy-propagator", "--", "bash", "-c", metricsCmd)
+	}
+
+	matchingMetricsRaw, err := cmd.Output()
+	if err != nil {
+		if err.Error() == "exit status 1" {
+			return "", nil // exit 1 indicates that grep couldn't find a match.
+		}
+
+		return "", err
+	}
+
+	return string(matchingMetricsRaw), nil
+}
