@@ -24,11 +24,11 @@ const ControllerName string = "policy-metrics"
 var log = ctrl.Log.WithName(ControllerName)
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *MetricReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *MetricReconciler) SetupWithManager(mgr ctrl.Manager, maxConcurrentReconciles uint) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		// The work queue prevents the same item being reconciled concurrently:
 		// https://github.com/kubernetes-sigs/controller-runtime/issues/1416#issuecomment-899833144
-		WithOptions(controller.Options{MaxConcurrentReconciles: int(r.MaxConcurrentReconciles)}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: int(maxConcurrentReconciles)}).
 		Named(ControllerName).
 		For(&policiesv1.Policy{}).
 		Complete(r)
@@ -40,8 +40,7 @@ var _ reconcile.Reconciler = &MetricReconciler{}
 // MetricReconciler reconciles the metrics for the Policy
 type MetricReconciler struct {
 	client.Client
-	MaxConcurrentReconciles uint
-	Scheme                  *runtime.Scheme
+	Scheme *runtime.Scheme
 }
 
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies,verbs=get;list;watch;create;update;patch;delete
