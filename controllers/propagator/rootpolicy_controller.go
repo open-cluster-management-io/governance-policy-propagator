@@ -7,13 +7,9 @@ import (
 	"context"
 	"sync"
 
-	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
@@ -24,16 +20,8 @@ const ControllerName string = "policy-propagator"
 
 var log = ctrl.Log.WithName(ControllerName)
 
-// blank assignment to verify that ReconcilePolicy implements reconcile.Reconciler
-var _ reconcile.Reconciler = &PolicyReconciler{}
-
-// PolicyReconciler reconciles a Policy object
-type PolicyReconciler struct {
-	client.Client
-	Scheme          *runtime.Scheme
-	Recorder        record.EventRecorder
-	DynamicWatcher  k8sdepwatches.DynamicWatcher
-	RootPolicyLocks *sync.Map
+type RootPolicyReconciler struct {
+	Propagator
 }
 
 // Reconcile reads that state of the cluster for a Policy object and makes changes based on the state read
@@ -41,7 +29,7 @@ type PolicyReconciler struct {
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
+func (r *RootPolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	log := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 
 	log.V(3).Info("Acquiring the lock for the root policy")

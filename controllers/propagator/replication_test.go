@@ -148,7 +148,7 @@ func TestCanonicalizeDependencies(t *testing.T) {
 		WithObjects(fooSet, barSet).
 		Build()
 
-	fakeReconciler := PolicyReconciler{Client: fakeClient}
+	fakeReconciler := Propagator{Client: fakeClient}
 
 	tests := map[string]struct {
 		input []policiesv1.PolicyDependency

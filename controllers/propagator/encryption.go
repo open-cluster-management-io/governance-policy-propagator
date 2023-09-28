@@ -26,7 +26,7 @@ const (
 
 // getEncryptionKey will get the encryption key for a managed cluster used for policy template encryption. If it doesn't
 // already exist as a secret on the Hub cluster, it will be generated.
-func (r *PolicyReconciler) getEncryptionKey(clusterName string) ([]byte, error) {
+func (r *Propagator) getEncryptionKey(clusterName string) ([]byte, error) {
 	ctx := context.TODO()
 	objectKey := types.NamespacedName{
 		Name:      EncryptionKeySecret,
@@ -90,7 +90,7 @@ func GenerateEncryptionKey() ([]byte, error) {
 // getInitializationVector retrieves the initialization vector from the annotation
 // "policy.open-cluster-management.io/encryption-iv" if the annotation exists or generates a new
 // initialization vector and adds it to the annotations object if it's missing.
-func (r *PolicyReconciler) getInitializationVector(
+func (r *Propagator) getInitializationVector(
 	policyName string, clusterName string, annotations map[string]string,
 ) ([]byte, error) {
 	log := log.WithValues("policy", policyName, "cluster", clusterName)
