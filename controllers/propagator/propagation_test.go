@@ -355,12 +355,12 @@ func TestGetAllClusterDecisions(t *testing.T) {
 		t.Fatalf("Unexpected error building scheme: %v", err)
 	}
 
-	reconciler := &Propagator{
+	reconciler := &RootPolicyReconciler{Propagator{
 		Client: fake.NewClientBuilder().
 			WithScheme(testscheme).
 			WithObjects(&prInitial, &prSub, &prSub2, &prExtended).
 			Build(),
-	}
+	}}
 
 	tests := map[string]struct {
 		policy                   policiesv1.Policy
@@ -554,7 +554,16 @@ func TestGetAllClusterDecisions(t *testing.T) {
 				t.Fatal("Got unexpected error", err.Error())
 			}
 
-			assert.ElementsMatch(t, actualAllClusterDecisions, test.expectedClusterDecisions)
+			actualDecisions := make([]clusterDecision, 0, len(actualAllClusterDecisions))
+
+			for decision, overrides := range actualAllClusterDecisions {
+				actualDecisions = append(actualDecisions, clusterDecision{
+					Cluster:         decision,
+					PolicyOverrides: overrides,
+				})
+			}
+
+			assert.ElementsMatch(t, actualDecisions, test.expectedClusterDecisions)
 			assert.ElementsMatch(t, actualPlacements, test.expectedPlacements)
 		})
 	}

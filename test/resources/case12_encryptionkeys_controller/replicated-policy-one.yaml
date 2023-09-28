@@ -1,0 +1,11 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: policy-propagator-test.policy-one
+  annotations:
+    policy.open-cluster-management.io/encryption-iv: '7cznVUq5SXEE4RMZNkGOrQ=='
+spec:
+  disabled: false
+  policy-templates:
+    - objectDefinition:
+        data: '{{hub fakedata hub}}'
