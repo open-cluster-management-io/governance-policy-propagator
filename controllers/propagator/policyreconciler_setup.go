@@ -46,22 +46,22 @@ func (r *PolicyReconciler) SetupWithManager(mgr ctrl.Manager, additionalSources 
 		// particular way, so we will define that in a separate "Watches"
 		Watches(
 			&policiesv1.Policy{},
-			handler.EnqueueRequestsFromMapFunc(common.PolicyMapper(mgr.GetClient())),
-			builder.WithPredicates(policyPredicates())).
+			handler.EnqueueRequestsFromMapFunc(common.MapToRootPolicy(mgr.GetClient())),
+			builder.WithPredicates(policyNonStatusUpdates())).
 		Watches(
 			&policiesv1beta1.PolicySet{},
-			handler.EnqueueRequestsFromMapFunc(policySetMapper(mgr.GetClient())),
-			builder.WithPredicates(policySetPredicateFuncs)).
+			handler.EnqueueRequestsFromMapFunc(mapPolicySetToPolicies),
+			builder.WithPredicates(policySetPolicyListChanged())).
 		Watches(
 			&policiesv1.PlacementBinding{},
-			handler.EnqueueRequestsFromMapFunc(placementBindingMapper(mgr.GetClient())),
-			builder.WithPredicates(pbPredicateFuncs)).
+			handler.EnqueueRequestsFromMapFunc(mapBindingToPolicies(mgr.GetClient())),
+			builder.WithPredicates(bindingForPolicy())).
 		Watches(
 			&appsv1.PlacementRule{},
-			handler.EnqueueRequestsFromMapFunc(placementRuleMapper(mgr.GetClient()))).
+			handler.EnqueueRequestsFromMapFunc(mapPlacementRuleToPolicies(mgr.GetClient()))).
 		Watches(
 			&clusterv1beta1.PlacementDecision{},
-			handler.EnqueueRequestsFromMapFunc(placementDecisionMapper(mgr.GetClient())),
+			handler.EnqueueRequestsFromMapFunc(mapPlacementDecisionToPolicies(mgr.GetClient())),
 		)
 
 	for _, source := range additionalSources {
@@ -71,63 +71,66 @@ func (r *PolicyReconciler) SetupWithManager(mgr ctrl.Manager, additionalSources 
 	return builder.Complete(r)
 }
 
-// policyPredicates filters out updates to policies that are pure status updates.
-func policyPredicates() predicate.Funcs {
+// policyNonStatusUpdates triggers reconciliation if the Policy has had a change that is not just
+// a status update.
+func policyNonStatusUpdates() predicate.Funcs {
 	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			//nolint:forcetypeassert
-			oldPolicy := e.ObjectOld.(*policiesv1.Policy)
-			//nolint:forcetypeassert
-			updatedPolicy := e.ObjectNew.(*policiesv1.Policy)
-
 			// Ignore pure status updates since those are handled by a separate controller
-			return oldPolicy.Generation != updatedPolicy.Generation ||
-				!equality.Semantic.DeepEqual(oldPolicy.ObjectMeta.Labels, updatedPolicy.ObjectMeta.Labels) ||
-				!equality.Semantic.DeepEqual(oldPolicy.ObjectMeta.Annotations, updatedPolicy.ObjectMeta.Annotations)
+			return e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration() ||
+				!equality.Semantic.DeepEqual(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels()) ||
+				!equality.Semantic.DeepEqual(e.ObjectOld.GetAnnotations(), e.ObjectNew.GetAnnotations())
 		},
 	}
 }
 
-func policySetMapper(_ client.Client) handler.MapFunc {
-	return func(ctx context.Context, object client.Object) []reconcile.Request {
-		log := log.WithValues("policySetName", object.GetName(), "namespace", object.GetNamespace())
-		log.V(2).Info("Reconcile Request for PolicySet")
+// mapPolicySetToPolicies maps a PolicySet to all the Policies in its policies list.
+func mapPolicySetToPolicies(_ context.Context, object client.Object) []reconcile.Request {
+	log := log.WithValues("policySetName", object.GetName(), "namespace", object.GetNamespace())
+	log.V(2).Info("Reconcile Request for PolicySet")
 
-		var result []reconcile.Request
+	var result []reconcile.Request
 
-		for _, plc := range object.(*policiesv1beta1.PolicySet).Spec.Policies {
-			log.V(2).Info("Found reconciliation request from a policyset", "policyName", string(plc))
+	//nolint:forcetypeassert
+	policySet := object.(*policiesv1beta1.PolicySet)
 
-			request := reconcile.Request{NamespacedName: types.NamespacedName{
-				Name:      string(plc),
-				Namespace: object.GetNamespace(),
-			}}
-			result = append(result, request)
-		}
+	for _, plc := range policySet.Spec.Policies {
+		log.V(2).Info("Found reconciliation request from a policyset", "policyName", string(plc))
 
-		return result
+		request := reconcile.Request{NamespacedName: types.NamespacedName{
+			Name:      string(plc),
+			Namespace: object.GetNamespace(),
+		}}
+		result = append(result, request)
+	}
+
+	return result
+}
+
+// policySetPolicyListChanged triggers reconciliation if the list of policies in the PolicySet has
+// changed, or if the PolicySet was just created or deleted.
+func policySetPolicyListChanged() predicate.Funcs {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			//nolint:forcetypeassert
+			policySetObjNew := e.ObjectNew.(*policiesv1beta1.PolicySet)
+			//nolint:forcetypeassert
+			policySetObjOld := e.ObjectOld.(*policiesv1beta1.PolicySet)
+
+			return !equality.Semantic.DeepEqual(policySetObjNew.Spec.Policies, policySetObjOld.Spec.Policies)
+		},
+		CreateFunc: func(e event.CreateEvent) bool {
+			return true
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return true
+		},
 	}
 }
 
-// we only want to watch for policyset objects with Spec.Policies field change
-var policySetPredicateFuncs = predicate.Funcs{
-	UpdateFunc: func(e event.UpdateEvent) bool {
-		//nolint:forcetypeassert
-		policySetObjNew := e.ObjectNew.(*policiesv1beta1.PolicySet)
-		//nolint:forcetypeassert
-		policySetObjOld := e.ObjectOld.(*policiesv1beta1.PolicySet)
-
-		return !equality.Semantic.DeepEqual(policySetObjNew.Spec.Policies, policySetObjOld.Spec.Policies)
-	},
-	CreateFunc: func(e event.CreateEvent) bool {
-		return true
-	},
-	DeleteFunc: func(e event.DeleteEvent) bool {
-		return true
-	},
-}
-
-func placementBindingMapper(c client.Client) handler.MapFunc {
+// mapBindingToPolicies maps a PlacementBinding to the Policies that are either directly in its
+// subjects list, or are in a PolicySet which is a subject of this PlacementBinding.
+func mapBindingToPolicies(c client.Client) handler.MapFunc {
 	return func(ctx context.Context, obj client.Object) []reconcile.Request {
 		//nolint:forcetypeassert
 		pb := obj.(*policiesv1.PlacementBinding)
@@ -139,31 +142,36 @@ func placementBindingMapper(c client.Client) handler.MapFunc {
 	}
 }
 
-// we only want to watch for pb contains policy and policyset as subjects
-var pbPredicateFuncs = predicate.Funcs{
-	UpdateFunc: func(e event.UpdateEvent) bool {
-		//nolint:forcetypeassert
-		pbObjNew := e.ObjectNew.(*policiesv1.PlacementBinding)
-		//nolint:forcetypeassert
-		pbObjOld := e.ObjectOld.(*policiesv1.PlacementBinding)
+// bindingForPolicy triggers reconciliation if the binding has any Policies or PolicySets in its
+// subjects list.
+func bindingForPolicy() predicate.Funcs {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			//nolint:forcetypeassert
+			pbObjNew := e.ObjectNew.(*policiesv1.PlacementBinding)
+			//nolint:forcetypeassert
+			pbObjOld := e.ObjectOld.(*policiesv1.PlacementBinding)
 
-		return common.IsForPolicyOrPolicySet(pbObjNew) || common.IsForPolicyOrPolicySet(pbObjOld)
-	},
-	CreateFunc: func(e event.CreateEvent) bool {
-		//nolint:forcetypeassert
-		pbObj := e.Object.(*policiesv1.PlacementBinding)
+			return common.IsForPolicyOrPolicySet(pbObjNew) || common.IsForPolicyOrPolicySet(pbObjOld)
+		},
+		CreateFunc: func(e event.CreateEvent) bool {
+			//nolint:forcetypeassert
+			pbObj := e.Object.(*policiesv1.PlacementBinding)
 
-		return common.IsForPolicyOrPolicySet(pbObj)
-	},
-	DeleteFunc: func(e event.DeleteEvent) bool {
-		//nolint:forcetypeassert
-		pbObj := e.Object.(*policiesv1.PlacementBinding)
+			return common.IsForPolicyOrPolicySet(pbObj)
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			//nolint:forcetypeassert
+			pbObj := e.Object.(*policiesv1.PlacementBinding)
 
-		return common.IsForPolicyOrPolicySet(pbObj)
-	},
+			return common.IsForPolicyOrPolicySet(pbObj)
+		},
+	}
 }
 
-func placementRuleMapper(c client.Client) handler.MapFunc {
+// mapPlacementRuleToPolicies maps a PlacementRule to all Policies which are either direct subjects
+// of PlacementBindings for the PlacementRule, or are in PolicySets bound to the PlacementRule.
+func mapPlacementRuleToPolicies(c client.Client) handler.MapFunc {
 	return func(ctx context.Context, object client.Object) []reconcile.Request {
 		log := log.WithValues("placementRuleName", object.GetName(), "namespace", object.GetNamespace())
 
@@ -171,6 +179,9 @@ func placementRuleMapper(c client.Client) handler.MapFunc {
 
 		// list pb
 		pbList := &policiesv1.PlacementBindingList{}
+		lopts := &client.ListOptions{Namespace: object.GetNamespace()}
+		opts := client.MatchingFields{"placementRef.name": object.GetName()}
+		opts.ApplyToList(lopts)
 
 		// find pb in the same namespace of placementrule
 		err := c.List(ctx, pbList, &client.ListOptions{Namespace: object.GetNamespace()})
@@ -193,7 +204,10 @@ func placementRuleMapper(c client.Client) handler.MapFunc {
 	}
 }
 
-func placementDecisionMapper(c client.Client) handler.MapFunc {
+// mapPlacementDecisionToPolicies maps a PlacementDecision to all Policies which are either direct
+// subjects of PlacementBindings on the decision's Placement, or are in PolicySets which are bound
+// to that Placement.
+func mapPlacementDecisionToPolicies(c client.Client) handler.MapFunc {
 	return func(ctx context.Context, object client.Object) []reconcile.Request {
 		log := log.WithValues("placementDecisionName", object.GetName(), "namespace", object.GetNamespace())
 

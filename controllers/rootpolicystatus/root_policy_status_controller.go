@@ -43,7 +43,7 @@ func (r *RootPolicyStatusReconciler) SetupWithManager(mgr ctrl.Manager, _ ...sou
 		// particular way, so we will define that in a separate "Watches"
 		Watches(
 			&policiesv1.Policy{},
-			handler.EnqueueRequestsFromMapFunc(common.PolicyMapper(mgr.GetClient())),
+			handler.EnqueueRequestsFromMapFunc(common.MapToRootPolicy(mgr.GetClient())),
 			builder.WithPredicates(policyStatusPredicate()),
 		).
 		Complete(r)

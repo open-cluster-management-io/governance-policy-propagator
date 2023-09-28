@@ -15,7 +15,7 @@ import (
 
 // PolicyMapper looks at object and returns a slice of reconcile.Request to reconcile
 // owners of object from label: policy.open-cluster-management.io/root-policy
-func PolicyMapper(c client.Client) handler.MapFunc {
+func MapToRootPolicy(c client.Client) handler.MapFunc {
 	return func(ctx context.Context, object client.Object) []reconcile.Request {
 		log := ctrl.Log.WithValues("name", object.GetName(), "namespace", object.GetNamespace())
 
