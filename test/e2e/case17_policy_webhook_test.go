@@ -47,7 +47,7 @@ var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
 		)
 		Expect(err).ShouldNot(HaveOccurred())
 	})
-	Describe("Test name + namespace over 63", func() {
+	Describe("Test name + namespace is 62", func() {
 		It("Should the error message is presented", func() {
 			output, err := utils.KubectlWithOutput("apply",
 				"-f", case17PolicyLongYaml,

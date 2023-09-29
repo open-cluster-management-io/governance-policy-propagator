@@ -58,7 +58,7 @@ func (r *Policy) validateName() (admission.Warnings, error) {
 	}
 
 	// 1 character for "."
-	if (utf8.RuneCountInString(r.Name) + utf8.RuneCountInString(r.Namespace)) > 62 {
+	if (utf8.RuneCountInString(r.Name) + utf8.RuneCountInString(r.Namespace)) >= 62 {
 		return nil, errName
 	}
 
