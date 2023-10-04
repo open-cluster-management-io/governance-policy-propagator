@@ -234,7 +234,7 @@ func parseDBSecret(dbSecret *corev1.Secret, tempDirPath string) (string, error) 
 	if dbSecret.Data["ca"] != nil {
 		caPath := path.Join(tempDirPath, "db-ca.crt")
 
-		err := os.WriteFile(caPath, dbSecret.Data["ca"], 0o440)
+		err := os.WriteFile(caPath, dbSecret.Data["ca"], 0o600)
 		if err != nil {
 			return "", fmt.Errorf("failed to write the custom root CA specified in the secret: %w", err)
 		}
