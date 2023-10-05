@@ -197,13 +197,13 @@ func mapPlacementRuleToPolicies(c client.Client) handler.MapFunc {
 
 		var result []reconcile.Request
 		// loop through pbs and collect policies from each matching one.
-		for _, pb := range pbList.Items {
+		for i, pb := range pbList.Items {
 			if pb.PlacementRef.APIGroup != appsv1.SchemeGroupVersion.Group ||
 				pb.PlacementRef.Kind != "PlacementRule" || pb.PlacementRef.Name != object.GetName() {
 				continue
 			}
 
-			result = append(result, common.GetPoliciesInPlacementBinding(ctx, c, &pb)...)
+			result = append(result, common.GetPoliciesInPlacementBinding(ctx, c, &pbList.Items[i])...)
 		}
 
 		return result
@@ -238,13 +238,13 @@ func mapPlacementDecisionToPolicies(c client.Client) handler.MapFunc {
 
 		var result []reconcile.Request
 		// loop through pbs and collect policies from each matching one.
-		for _, pb := range pbList.Items {
+		for i, pb := range pbList.Items {
 			if pb.PlacementRef.APIGroup != clusterv1beta1.SchemeGroupVersion.Group ||
 				pb.PlacementRef.Kind != "Placement" || pb.PlacementRef.Name != placementName {
 				continue
 			}
 
-			result = append(result, common.GetPoliciesInPlacementBinding(ctx, c, &pb)...)
+			result = append(result, common.GetPoliciesInPlacementBinding(ctx, c, &pbList.Items[i])...)
 		}
 
 		return result
