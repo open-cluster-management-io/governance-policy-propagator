@@ -50,7 +50,6 @@ type Propagator struct {
 	client.Client
 	Scheme                  *runtime.Scheme
 	Recorder                record.EventRecorder
-	DynamicWatcher          k8sdepwatches.DynamicWatcher
 	RootPolicyLocks         *sync.Map
 	ReplicatedPolicyUpdates chan event.GenericEvent
 }
@@ -182,12 +181,12 @@ func (r *RootPolicyReconciler) getAllClusterDecisions(
 	decisions = make(map[appsv1.PlacementDecision]policiesv1.BindingOverrides)
 
 	// Process all placement bindings without subFilter
-	for _, pb := range pbList.Items {
+	for i, pb := range pbList.Items {
 		if pb.SubFilter == policiesv1.Restricted {
 			continue
 		}
 
-		plcDecisions, plcPlacements, err := r.getPolicyPlacementDecisions(instance, &pb)
+		plcDecisions, plcPlacements, err := r.getPolicyPlacementDecisions(instance, &pbList.Items[i])
 		if err != nil {
 			return nil, nil, err
 		}
@@ -226,14 +225,14 @@ func (r *RootPolicyReconciler) getAllClusterDecisions(
 	}
 
 	// Process all placement bindings with subFilter:restricted
-	for _, pb := range pbList.Items {
+	for i, pb := range pbList.Items {
 		if pb.SubFilter != policiesv1.Restricted {
 			continue
 		}
 
 		foundInDecisions := false
 
-		plcDecisions, plcPlacements, err := r.getPolicyPlacementDecisions(instance, &pb)
+		plcDecisions, plcPlacements, err := r.getPolicyPlacementDecisions(instance, &pbList.Items[i])
 		if err != nil {
 			return nil, nil, err
 		}
@@ -267,9 +266,8 @@ func (r *RootPolicyReconciler) getAllClusterDecisions(
 	return decisions, placements, nil
 }
 
-// handleDecisions identifies all managed clusters which should have a replicated policy, and sends
-// events to the replicated policy reconciler for them to be created or updated.
-func (r *RootPolicyReconciler) handleDecisions(
+// getDecisions identifies all managed clusters which should have a replicated policy
+func (r *RootPolicyReconciler) getDecisions(
 	instance *policiesv1.Policy,
 ) (
 	[]*policiesv1.Placement, decisionSet, error,
@@ -299,25 +297,6 @@ func (r *RootPolicyReconciler) handleDecisions(
 		decisions[dec] = true
 	}
 
-	log.Info("Sending reconcile events to replicated policies", "decisionsCount", len(allClusterDecisions))
-
-	for decision := range allClusterDecisions {
-		simpleObj := &GuttedObject{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       policiesv1.Kind,
-				APIVersion: policiesv1.GroupVersion.String(),
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      common.FullNameForPolicy(instance),
-				Namespace: decision.ClusterNamespace,
-			},
-		}
-
-		log.V(2).Info("Sending reconcile for replicated policy", "replicatedPolicyName", simpleObj.GetName())
-
-		r.ReplicatedPolicyUpdates <- event.GenericEvent{Object: simpleObj}
-	}
-
 	return placements, decisions, nil
 }
 
@@ -326,11 +305,11 @@ func (r *RootPolicyReconciler) handleDecisions(
 // decisions, then it's considered stale and an event is sent to the replicated policy reconciler
 // so the policy will be removed.
 func (r *RootPolicyReconciler) cleanUpOrphanedRplPolicies(
-	instance *policiesv1.Policy, allDecisions decisionSet,
+	instance *policiesv1.Policy, originalCPCS []*policiesv1.CompliancePerClusterStatus, allDecisions decisionSet,
 ) error {
 	log := log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
 
-	for _, cluster := range instance.Status.Status {
+	for _, cluster := range originalCPCS {
 		key := appsv1.PlacementDecision{
 			ClusterName:      cluster.ClusterNamespace,
 			ClusterNamespace: cluster.ClusterNamespace,
@@ -388,31 +367,29 @@ func (r *RootPolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) err
 		}
 	}
 
-	placements, decisions, err := r.handleDecisions(instance)
+	placements, decisions, err := r.getDecisions(instance)
 	if err != nil {
 		log.Info("Failed to get any placement decisions. Giving up on the request.")
 
 		return errors.New("could not get the placement decisions")
 	}
 
-	err = r.cleanUpOrphanedRplPolicies(instance, decisions)
-	if err != nil {
-		log.Error(err, "Failed to delete orphaned replicated policies")
-
-		return err
-	}
-
 	log.V(1).Info("Updating the root policy status")
 
 	cpcs, cpcsErr := r.calculatePerClusterStatus(instance, decisions)
 	if cpcsErr != nil {
-		log.Error(cpcsErr, "Failed to get at least one replicated policy")
+		// If there is a new replicated policy, then its lookup is expected to fail - it hasn't been created yet.
+		log.Error(cpcsErr, "Failed to get at least one replicated policy, but that may be expected. Ignoring.")
 	}
 
 	err = r.Get(context.TODO(), types.NamespacedName{Namespace: instance.Namespace, Name: instance.Name}, instance)
 	if err != nil {
 		log.Error(err, "Failed to refresh the cached policy. Will use existing policy.")
 	}
+
+	// make a copy of the original status
+	originalCPCS := make([]*policiesv1.CompliancePerClusterStatus, len(instance.Status.Status))
+	copy(originalCPCS, instance.Status.Status)
 
 	instance.Status.Status = cpcs
 	instance.Status.ComplianceState = CalculateRootCompliance(cpcs)
@@ -423,7 +400,33 @@ func (r *RootPolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) err
 		return err
 	}
 
-	return cpcsErr
+	log.Info("Sending reconcile events to replicated policies", "decisionsCount", len(decisions))
+
+	for decision := range decisions {
+		simpleObj := &GuttedObject{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       policiesv1.Kind,
+				APIVersion: policiesv1.GroupVersion.String(),
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      common.FullNameForPolicy(instance),
+				Namespace: decision.ClusterNamespace,
+			},
+		}
+
+		log.V(2).Info("Sending reconcile for replicated policy", "replicatedPolicyName", simpleObj.GetName())
+
+		r.ReplicatedPolicyUpdates <- event.GenericEvent{Object: simpleObj}
+	}
+
+	err = r.cleanUpOrphanedRplPolicies(instance, originalCPCS, decisions)
+	if err != nil {
+		log.Error(err, "Failed to delete orphaned replicated policies")
+
+		return err
+	}
+
+	return nil
 }
 
 // a helper to quickly check if there are any templates in any of the policy templates

@@ -747,13 +747,24 @@ var _ = Describe("Test policy propagation", func() {
 			policyMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(policy)
 			Expect(err).ToNot(HaveOccurred())
 
-			policyRV, err := policyClient().Create(
+			_, err = policyClient().Create(
 				context.TODO(), &unstructured.Unstructured{Object: policyMap}, metav1.CreateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 
-			_, found, _ := unstructured.NestedBool(policyRV.Object, "spec", "copyPolicyMetadata")
-			Expect(found).To(BeFalse())
+			Eventually(func(g Gomega) {
+				replicatedPlc := utils.GetWithTimeout(
+					clientHubDynamic,
+					gvrPolicy,
+					testNamespace+"."+policyName,
+					"managed1",
+					true,
+					defaultTimeoutSeconds,
+				)
+
+				_, found, _ := unstructured.NestedBool(replicatedPlc.Object, "spec", "copyPolicyMetadata")
+				g.Expect(found).To(BeFalse())
+			}, defaultTimeoutSeconds, 1).Should(Succeed())
 		})
 
 		It("verifies that the labels and annotations are copied with spec.copyPolicyMetadata=true", func() {

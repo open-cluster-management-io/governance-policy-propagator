@@ -24,6 +24,7 @@ var _ reconcile.Reconciler = &ReplicatedPolicyReconciler{}
 type ReplicatedPolicyReconciler struct {
 	Propagator
 	ResourceVersions *sync.Map
+	DynamicWatcher   k8sdepwatches.DynamicWatcher
 }
 
 func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
@@ -52,13 +53,18 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 	}
 
 	rootName, rootNS, err := common.ParseRootPolicyLabel(request.Name)
-	if err != nil && replicatedExists {
-		if err := r.cleanUpReplicated(ctx, replicatedPolicy); err != nil {
-			if !k8serrors.IsNotFound(err) {
-				log.Error(err, "Failed to delete the invalid replicated policy, requeueing")
+	if err != nil {
+		if !replicatedExists {
+			log.Error(err, "Invalid replicated policy sent for reconcile, rejecting")
 
-				return reconcile.Result{}, err
-			}
+			return reconcile.Result{}, nil
+		}
+
+		cleanUpErr := r.cleanUpReplicated(ctx, replicatedPolicy)
+		if cleanUpErr != nil && !k8serrors.IsNotFound(cleanUpErr) {
+			log.Error(err, "Failed to delete the invalid replicated policy, requeueing")
+
+			return reconcile.Result{}, err
 		}
 
 		log.Info("Invalid replicated policy deleted")
@@ -73,48 +79,48 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 	rootNN := types.NamespacedName{Namespace: rootNS, Name: rootName}
 
 	if err := r.Get(ctx, rootNN, rootPolicy); err != nil {
-		if k8serrors.IsNotFound(err) {
-			if replicatedExists {
-				// do not handle a replicated policy which does not belong to the current cluster
-				inClusterNS, err := common.IsInClusterNamespace(r.Client, request.Namespace)
-				if err != nil {
-					return reconcile.Result{}, err
-				}
+		if !k8serrors.IsNotFound(err) {
+			log.Error(err, "Failed to get the root policy, requeueing")
 
-				if !inClusterNS {
-					log.Info("Found a replicated policy in non-cluster namespace, skipping it")
+			return reconcile.Result{}, err
+		}
 
-					return reconcile.Result{}, nil
-				}
-
-				// otherwise, we need to clean it up
-				if err := r.cleanUpReplicated(ctx, replicatedPolicy); err != nil {
-					if !k8serrors.IsNotFound(err) {
-						log.Error(err, "Failed to delete the orphaned replicated policy, requeueing")
-
-						return reconcile.Result{}, err
-					}
-				}
-
-				log.Info("Orphaned replicated policy deleted")
-
-				return reconcile.Result{}, nil
-			}
-
+		if !replicatedExists {
 			version := safeWriteLoad(r.ResourceVersions, rsrcVersKey)
 			defer version.Unlock()
 
 			// Store this to ensure the cache matches a known possible state for this situation
 			version.resourceVersion = "deleted"
 
-			log.Info("Root policy and replicated policy already missing")
+			log.V(1).Info("Root policy and replicated policy already missing")
 
 			return reconcile.Result{}, nil
 		}
 
-		log.Error(err, "Failed to get the root policy, requeueing")
+		// do not handle a replicated policy which does not belong to the current cluster
+		inClusterNS, err := common.IsInClusterNamespace(r.Client, request.Namespace)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
 
-		return reconcile.Result{}, err
+		if !inClusterNS {
+			log.V(1).Info("Found a replicated policy in non-cluster namespace, skipping it")
+
+			return reconcile.Result{}, nil
+		}
+
+		// otherwise, we need to clean it up
+		if err := r.cleanUpReplicated(ctx, replicatedPolicy); err != nil {
+			if !k8serrors.IsNotFound(err) {
+				log.Error(err, "Failed to delete the orphaned replicated policy, requeueing")
+
+				return reconcile.Result{}, err
+			}
+		}
+
+		log.Info("Orphaned replicated policy deleted")
+
+		return reconcile.Result{}, nil
 	}
 
 	if rootPolicy.Spec.Disabled {
@@ -138,7 +144,7 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 		// Store this to ensure the cache matches a known possible state for this situation
 		version.resourceVersion = "deleted"
 
-		log.Info("Root policy is disabled, and replicated policy correctly not found.")
+		log.V(1).Info("Root policy is disabled, and replicated policy correctly not found.")
 
 		return reconcile.Result{}, nil
 	}
@@ -173,7 +179,7 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 		// Store this to ensure the cache matches a known possible state for this situation
 		version.resourceVersion = "deleted"
 
-		log.Info("Replicated policy should not exist on this managed cluster, and does not.")
+		log.V(1).Info("Replicated policy should not exist on this managed cluster, and does not.")
 
 		return reconcile.Result{}, nil
 	}
