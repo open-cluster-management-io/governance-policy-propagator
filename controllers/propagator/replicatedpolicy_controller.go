@@ -97,13 +97,14 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 			return reconcile.Result{}, nil
 		}
 
-		// do not handle a replicated policy which does not belong to the current cluster
 		inClusterNS, err := common.IsInClusterNamespace(r.Client, request.Namespace)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
 
 		if !inClusterNS {
+			// "Hub of hubs" scenario: this cluster is managed by another cluster,
+			// which has the root policy for the policy being reconciled.
 			log.V(1).Info("Found a replicated policy in non-cluster namespace, skipping it")
 
 			return reconcile.Result{}, nil
@@ -160,6 +161,19 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 	// an empty decision means the policy should not be replicated
 	if decision.Cluster.ClusterName == "" {
 		if replicatedExists {
+			inClusterNS, err := common.IsInClusterNamespace(r.Client, request.Namespace)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+
+			if !inClusterNS {
+				// "Hosted mode" scenario: this cluster is hosting another cluster, which is syncing
+				// this policy to a cluster namespace that this propagator doesn't know about.
+				log.V(1).Info("Found a possible replicated policy for a hosted cluster, skipping it")
+
+				return reconcile.Result{}, nil
+			}
+
 			if err := r.cleanUpReplicated(ctx, replicatedPolicy); err != nil {
 				if !k8serrors.IsNotFound(err) {
 					log.Error(err, "Failed to remove the replicated policy for this managed cluster, requeueing")
