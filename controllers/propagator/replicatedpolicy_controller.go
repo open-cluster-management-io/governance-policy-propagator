@@ -346,12 +346,12 @@ func (r *ReplicatedPolicyReconciler) singleClusterDecision(
 	foundWithoutSubFilter := false
 
 	// Process all placement bindings without subFilter
-	for _, pb := range pbList.Items {
+	for i, pb := range pbList.Items {
 		if pb.SubFilter == policiesv1.Restricted {
 			continue
 		}
 
-		found, err := r.isSingleClusterInDecisions(ctx, &pb, rootPlc.GetName(), clusterName)
+		found, err := r.isSingleClusterInDecisions(ctx, &pbList.Items[i], rootPlc.GetName(), clusterName)
 		if err != nil {
 			return clusterDecision{}, err
 		}
@@ -376,12 +376,12 @@ func (r *ReplicatedPolicyReconciler) singleClusterDecision(
 	}
 
 	// Process all placement bindings with subFilter
-	for _, pb := range pbList.Items {
+	for i, pb := range pbList.Items {
 		if pb.SubFilter != policiesv1.Restricted {
 			continue
 		}
 
-		found, err := r.isSingleClusterInDecisions(ctx, &pb, rootPlc.GetName(), clusterName)
+		found, err := r.isSingleClusterInDecisions(ctx, &pbList.Items[i], rootPlc.GetName(), clusterName)
 		if err != nil {
 			return clusterDecision{}, err
 		}
