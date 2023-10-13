@@ -29,7 +29,7 @@ func TestGetEncryptionKeyNoSecret(_ *testing.T) {
 
 	client := fake.NewClientBuilder().Build()
 	r := Propagator{Client: client}
-	key, err := r.getEncryptionKey(clusterName)
+	key, err := r.getEncryptionKey(context.TODO(), clusterName)
 
 	Expect(err).ToNot(HaveOccurred())
 	// Verify that the generated key is 256 bits.
@@ -69,7 +69,7 @@ func TestGetEncryptionKeySecretExists(_ *testing.T) {
 	client := fake.NewClientBuilder().WithObjects(encryptionSecret).Build()
 
 	r := Propagator{Client: client}
-	key, err = r.getEncryptionKey(clusterName)
+	key, err = r.getEncryptionKey(context.TODO(), clusterName)
 
 	Expect(err).ToNot(HaveOccurred())
 	// Verify that the returned key is 256 bits.

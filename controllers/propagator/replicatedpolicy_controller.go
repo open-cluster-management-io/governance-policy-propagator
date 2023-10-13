@@ -99,7 +99,7 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 			return reconcile.Result{}, nil
 		}
 
-		inClusterNS, err := common.IsInClusterNamespace(r.Client, request.Namespace)
+		inClusterNS, err := common.IsInClusterNamespace(ctx, r.Client, request.Namespace)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -163,7 +163,7 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 	// an empty decision means the policy should not be replicated
 	if decision.Cluster.ClusterName == "" {
 		if replicatedExists {
-			inClusterNS, err := common.IsInClusterNamespace(r.Client, request.Namespace)
+			inClusterNS, err := common.IsInClusterNamespace(ctx, r.Client, request.Namespace)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
@@ -202,7 +202,7 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 
 	objsToWatch := getPolicySetDependencies(rootPolicy)
 
-	desiredReplicatedPolicy, err := r.buildReplicatedPolicy(rootPolicy, decision)
+	desiredReplicatedPolicy, err := r.buildReplicatedPolicy(ctx, rootPolicy, decision)
 	if err != nil {
 		log.Error(err, "Unable to build desired replicated policy, requeueing")
 
@@ -240,7 +240,7 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 		// #nosec G104 -- any errors are logged and recorded in the processTemplates method,
 		// but the ignored status will be handled appropriately by the policy controllers on
 		// the managed cluster(s).
-		_ = r.processTemplates(desiredReplicatedPolicy, decision.Cluster, rootPolicy)
+		_ = r.processTemplates(ctx, desiredReplicatedPolicy, decision.Cluster, rootPolicy)
 	} else {
 		watcherErr := r.TemplateResolver.UncacheWatcher(instanceObjID)
 		if watcherErr != nil {

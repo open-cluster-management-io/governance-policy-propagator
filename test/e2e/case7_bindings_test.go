@@ -25,8 +25,8 @@ const (
 )
 
 var _ = Describe("Test policy propagation", func() {
-	Describe("Create policy/pb/plc in ns:"+testNamespace, func() {
-		It("should be created in user ns", func() {
+	Describe("Create policy/pb/plc in ns:"+testNamespace, Ordered, func() {
+		BeforeAll(func() {
 			By("Creating " + case7PolicyYaml)
 			utils.Kubectl("apply",
 				"-f", case7PolicyYaml,
@@ -214,14 +214,13 @@ var _ = Describe("Test policy propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 		})
-		It("should clean up policy", func() {
+		AfterAll(func() {
+			By("Clean up")
 			utils.Kubectl("delete",
 				"-f", case7PolicyYaml,
 				"-n", testNamespace)
 			opt := metav1.ListOptions{}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 10)
-		})
-		It("should clean up bindings", func() {
 			utils.Kubectl("delete",
 				"-f", case7BindingYaml1,
 				"-n", testNamespace)

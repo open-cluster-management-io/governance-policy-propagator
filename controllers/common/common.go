@@ -32,10 +32,10 @@ const (
 var ErrInvalidLabelValue = errors.New("unexpected format of label value")
 
 // IsInClusterNamespace check if policy is in cluster namespace
-func IsInClusterNamespace(c client.Client, ns string) (bool, error) {
+func IsInClusterNamespace(ctx context.Context, c client.Client, ns string) (bool, error) {
 	cluster := &clusterv1.ManagedCluster{}
 
-	err := c.Get(context.TODO(), types.NamespacedName{Name: ns}, cluster)
+	err := c.Get(ctx, types.NamespacedName{Name: ns}, cluster)
 	if k8serrors.IsNotFound(err) {
 		return false, nil
 	}
@@ -58,7 +58,7 @@ func IsReplicatedPolicy(c client.Client, policy client.Object) (bool, error) {
 		return false, fmt.Errorf("invalid value set in %s: %w", RootPolicyLabel, err)
 	}
 
-	return IsInClusterNamespace(c, policy.GetNamespace())
+	return IsInClusterNamespace(context.TODO(), c, policy.GetNamespace())
 }
 
 // IsForPolicyOrPolicySet returns true if any of the subjects of the PlacementBinding are Policies
@@ -96,11 +96,11 @@ func IsPbForPolicySet(pb *policiesv1.PlacementBinding) bool {
 
 // GetPoliciesInPlacementBinding returns a list of the Policies that are either direct subjects of
 // the given PlacementBinding, or are in PolicySets that are subjects of the PlacementBinding.
-// The list items are not guaranteed to be unique (for example if a policy is in multiple sets).
+// The list items are guaranteed to be unique (for example if a policy is in multiple sets).
 func GetPoliciesInPlacementBinding(
 	ctx context.Context, c client.Client, pb *policiesv1.PlacementBinding,
 ) []reconcile.Request {
-	result := make([]reconcile.Request, 0)
+	table := map[reconcile.Request]bool{}
 
 	for _, subject := range pb.Subjects {
 		if subject.APIGroup != policiesv1.SchemeGroupVersion.Group {
@@ -109,10 +109,12 @@ func GetPoliciesInPlacementBinding(
 
 		switch subject.Kind {
 		case policiesv1.Kind:
-			result = append(result, reconcile.Request{NamespacedName: types.NamespacedName{
+			req := reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      subject.Name,
 				Namespace: pb.GetNamespace(),
-			}})
+			}}
+
+			table[req] = true
 		case policiesv1.PolicySetKind:
 			setNN := types.NamespacedName{
 				Name:      subject.Name,
@@ -125,12 +127,20 @@ func GetPoliciesInPlacementBinding(
 			}
 
 			for _, plc := range policySet.Spec.Policies {
-				result = append(result, reconcile.Request{NamespacedName: types.NamespacedName{
+				req := reconcile.Request{NamespacedName: types.NamespacedName{
 					Name:      string(plc),
 					Namespace: pb.GetNamespace(),
-				}})
+				}}
+
+				table[req] = true
 			}
 		}
+	}
+
+	result := make([]reconcile.Request, 0, len(table))
+
+	for k := range table {
+		result = append(result, k)
 	}
 
 	return result
@@ -162,7 +172,9 @@ func HasValidPlacementRef(pb *policiesv1.PlacementBinding) bool {
 
 // GetDecisions returns the placement decisions from the Placement or PlacementRule referred to by
 // the PlacementBinding
-func GetDecisions(c client.Client, pb *policiesv1.PlacementBinding) ([]appsv1.PlacementDecision, error) {
+func GetDecisions(
+	ctx context.Context, c client.Client, pb *policiesv1.PlacementBinding,
+) ([]appsv1.PlacementDecision, error) {
 	if !HasValidPlacementRef(pb) {
 		return nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Name, pb.Namespace)
 	}
@@ -176,7 +188,7 @@ func GetDecisions(c client.Client, pb *policiesv1.PlacementBinding) ([]appsv1.Pl
 	case "Placement":
 		pl := &clusterv1beta1.Placement{}
 
-		err := c.Get(context.TODO(), refNN, pl)
+		err := c.Get(ctx, refNN, pl)
 		if err != nil && !k8serrors.IsNotFound(err) {
 			return nil, fmt.Errorf("failed to get Placement '%v': %w", pb.PlacementRef.Name, err)
 		}
@@ -191,7 +203,7 @@ func GetDecisions(c client.Client, pb *policiesv1.PlacementBinding) ([]appsv1.Pl
 		opts := client.MatchingLabels{"cluster.open-cluster-management.io/placement": pl.GetName()}
 		opts.ApplyToList(lopts)
 
-		err = c.List(context.TODO(), list, lopts)
+		err = c.List(ctx, list, lopts)
 		if err != nil && !k8serrors.IsNotFound(err) {
 			return nil, fmt.Errorf("failed to list the PlacementDecisions for '%v', %w", pb.PlacementRef.Name, err)
 		}
@@ -210,7 +222,7 @@ func GetDecisions(c client.Client, pb *policiesv1.PlacementBinding) ([]appsv1.Pl
 		return decisions, nil
 	case "PlacementRule":
 		plr := &appsv1.PlacementRule{}
-		if err := c.Get(context.TODO(), refNN, plr); err != nil && !k8serrors.IsNotFound(err) {
+		if err := c.Get(ctx, refNN, plr); err != nil && !k8serrors.IsNotFound(err) {
 			return nil, fmt.Errorf("failed to get PlacementRule '%v': %w", pb.PlacementRef.Name, err)
 		}
 
@@ -245,6 +257,33 @@ func FullNameForPolicy(plc *policiesv1.Policy) string {
 	return plc.GetNamespace() + "." + plc.GetName()
 }
 
+// GetRepPoliciesInPlacementBinding returns a list of the replicated policies that are either direct subjects of
+// the given PlacementBinding, or are in PolicySets that are subjects of the PlacementBinding.
+// The list items are guaranteed to be unique (for example if a policy is in multiple sets).
+func GetRepPoliciesInPlacementBinding(
+	ctx context.Context, c client.Client, pb *policiesv1.PlacementBinding,
+) []reconcile.Request {
+	decisions, err := GetDecisions(ctx, c, pb)
+	if err != nil {
+		return []reconcile.Request{}
+	}
+	// Use this for removing duplicated policies
+	rootPolicyRequest := GetPoliciesInPlacementBinding(ctx, c, pb)
+
+	result := []reconcile.Request{}
+
+	for _, rp := range rootPolicyRequest {
+		for _, pd := range decisions {
+			result = append(result, reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      rp.Namespace + "." + rp.Name,
+				Namespace: pd.ClusterName,
+			}})
+		}
+	}
+
+	return result
+}
+
 // TypeConverter is a helper function to converter type struct a to b
 func TypeConverter(a, b interface{}) error {
 	js, err := json.Marshal(a)
@@ -253,4 +292,69 @@ func TypeConverter(a, b interface{}) error {
 	}
 
 	return json.Unmarshal(js, b)
+}
+
+// Select objects that are deleted or created
+func GetAffectedObjs[T comparable](oldObjs []T, newObjs []T) []T {
+	table := make(map[T]int)
+
+	for _, oldObj := range oldObjs {
+		table[oldObj] = 1
+	}
+
+	for _, newObj := range newObjs {
+		table[newObj]++
+	}
+
+	result := []T{}
+
+	for key, val := range table {
+		if val == 1 {
+			result = append(result, key)
+		}
+	}
+
+	return result
+}
+
+type PlacementRefKinds string
+
+const (
+	Placement     PlacementRefKinds = "Placement"
+	PlacementRule PlacementRefKinds = "PlacementRule"
+)
+
+// GetRootPolicyResult find and filter placementbindings which have namespace and placementRef.name.
+// Gather all root policies under placementbindings
+func GetRootPolicyResult(ctx context.Context, c client.Client,
+	namespace, placementRefName string, refKind PlacementRefKinds,
+) ([]reconcile.Request, error) {
+	kindGroupMap := map[PlacementRefKinds]string{
+		Placement:     clusterv1beta1.SchemeGroupVersion.Group,
+		PlacementRule: appsv1.SchemeGroupVersion.Group,
+	}
+
+	pbList := &policiesv1.PlacementBindingList{}
+	// Find pb in the same namespace of placementrule
+	lopts := &client.ListOptions{Namespace: namespace}
+	opts := client.MatchingFields{"placementRef.name": placementRefName}
+	opts.ApplyToList(lopts)
+
+	err := c.List(ctx, pbList, lopts)
+	if err != nil {
+		return nil, err
+	}
+	var rootPolicyResults []reconcile.Request
+
+	for i, pb := range pbList.Items {
+		if pb.PlacementRef.APIGroup != kindGroupMap[refKind] ||
+			pb.PlacementRef.Kind != string(refKind) || pb.PlacementRef.Name != placementRefName {
+			continue
+		}
+		// GetPoliciesInPlacementBinding only pick root-policy name
+		rootPolicyResults = append(rootPolicyResults,
+			GetPoliciesInPlacementBinding(ctx, c, &pbList.Items[i])...)
+	}
+
+	return rootPolicyResults, nil
 }

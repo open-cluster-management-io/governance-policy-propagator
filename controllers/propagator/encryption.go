@@ -1,4 +1,3 @@
-// Copyright (c) 2021 Red Hat, Inc.
 // Copyright Contributors to the Open Cluster Management project
 
 package propagator
@@ -26,8 +25,7 @@ const (
 
 // getEncryptionKey will get the encryption key for a managed cluster used for policy template encryption. If it doesn't
 // already exist as a secret on the Hub cluster, it will be generated.
-func (r *Propagator) getEncryptionKey(clusterName string) ([]byte, error) {
-	ctx := context.TODO()
+func (r *Propagator) getEncryptionKey(ctx context.Context, clusterName string) ([]byte, error) {
 	objectKey := types.NamespacedName{
 		Name:      EncryptionKeySecret,
 		Namespace: clusterName,

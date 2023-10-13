@@ -190,7 +190,7 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 				}
 
 				var decisions []appsv1.PlacementDecision
-				decisions, err = common.GetDecisions(r.Client, pb)
+				decisions, err = common.GetDecisions(ctx, r.Client, pb)
 				if err != nil {
 					log.Error(err, "Error getting placement decisions for binding "+pbName)
 				}

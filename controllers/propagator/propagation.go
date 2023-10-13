@@ -29,7 +29,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
-	policiesv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
 	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
@@ -449,6 +448,7 @@ func addManagedClusterLabels(clusterName string) func(templates.CachingQueryAPI,
 // and ensure that replicated-policies in the cluster are updated only if there is a change. This
 // annotation is deleted from the replicated policies and not propagated to the cluster namespaces.
 func (r *ReplicatedPolicyReconciler) processTemplates(
+	ctx context.Context,
 	replicatedPlc *policiesv1.Policy, decision appsv1.PlacementDecision, rootPlc *policiesv1.Policy,
 ) error {
 	log := log.WithValues(
@@ -542,7 +542,7 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 		if usesEncryption && !templateResolverOptions.EncryptionEnabled {
 			log.V(1).Info("Found an object definition requiring encryption. Handling encryption keys.")
 			// Get/generate the encryption key
-			encryptionKey, err := r.getEncryptionKey(decision.ClusterName)
+			encryptionKey, err := r.getEncryptionKey(ctx, decision.ClusterName)
 			if err != nil {
 				log.Error(err, "Failed to get/generate the policy encryption key")
 
@@ -669,28 +669,4 @@ func isConfigurationPolicy(policyT *policiesv1.PolicyTemplate) bool {
 	_ = json.Unmarshal(policyT.ObjectDefinition.Raw, &jsonDef)
 
 	return jsonDef != nil && jsonDef["kind"] == "ConfigurationPolicy"
-}
-
-func (r *Propagator) isPolicyInPolicySet(policyName, policySetName, namespace string) bool {
-	log := log.WithValues("policyName", policyName, "policySetName", policySetName, "policyNamespace", namespace)
-
-	policySet := policiesv1beta1.PolicySet{}
-	setNN := types.NamespacedName{
-		Name:      policySetName,
-		Namespace: namespace,
-	}
-
-	if err := r.Get(context.TODO(), setNN, &policySet); err != nil {
-		log.Error(err, "Failed to get the policyset")
-
-		return false
-	}
-
-	for _, plc := range policySet.Spec.Policies {
-		if string(plc) == policyName {
-			return true
-		}
-	}
-
-	return false
 }
