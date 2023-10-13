@@ -1,6 +1,7 @@
 package propagator
 
 import (
+	"context"
 	"reflect"
 	"strings"
 	"testing"
@@ -218,7 +219,7 @@ func TestCanonicalizeDependencies(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := fakeReconciler.canonicalizeDependencies(test.input, "sentinel")
+			got, err := fakeReconciler.canonicalizeDependencies(context.TODO(), test.input, "sentinel")
 			if err != nil {
 				t.Fatal("Got unexpected error")
 			}

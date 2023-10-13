@@ -53,9 +53,9 @@ var _ = Describe("Test selective policy enforcement", Ordered, func() {
 
 	AfterAll(func() {
 		By("Cleaning up resources")
-		_, err := utils.KubectlWithOutput("delete", "-f", case16PolicyYaml, "-n", testNamespace)
+		_, err := utils.KubectlWithOutput("delete", "-f", case16PolicyYaml, "-n", testNamespace, "--ignore-not-found")
 		Expect(err).ToNot(HaveOccurred())
-		_, err = utils.KubectlWithOutput("delete", "-f", case16BindingYaml, "-n", testNamespace)
+		_, err = utils.KubectlWithOutput("delete", "-f", case16BindingYaml, "-n", testNamespace, "--ignore-not-found")
 		Expect(err).ToNot(HaveOccurred())
 	})
 

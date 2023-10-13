@@ -4,6 +4,8 @@ import (
 	"sync"
 
 	"k8s.io/apimachinery/pkg/api/equality"
+	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
+	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -32,6 +34,18 @@ func (r *ReplicatedPolicyReconciler) SetupWithManager(
 		WatchesRawSource(dependenciesSource, &handler.EnqueueRequestForObject{}).
 		WatchesRawSource(updateSrc, &handler.EnqueueRequestForObject{}).
 		WatchesRawSource(templateSrc, &handler.EnqueueRequestForObject{}).
+		Watches(
+			&clusterv1beta1.PlacementDecision{},
+			HandlerForDecision(mgr.GetClient()),
+		).
+		Watches(
+			&policiesv1.PlacementBinding{},
+			HandlerForBinding(mgr.GetClient()),
+		).
+		Watches(
+			&appsv1.PlacementRule{},
+			HandlerForRule(mgr.GetClient()),
+		).
 		Complete(r)
 }
 

@@ -65,7 +65,7 @@ func (r *RootPolicyReconciler) Reconcile(ctx context.Context, request ctrl.Reque
 		return reconcile.Result{}, err
 	}
 
-	inClusterNs, err := common.IsInClusterNamespace(r.Client, instance.Namespace)
+	inClusterNs, err := common.IsInClusterNamespace(ctx, r.Client, instance.Namespace)
 	if err != nil {
 		log.Error(err, "Failed to determine if the policy is in a managed cluster namespace. Requeueing the request.")
 
@@ -73,7 +73,7 @@ func (r *RootPolicyReconciler) Reconcile(ctx context.Context, request ctrl.Reque
 	}
 
 	if !inClusterNs {
-		err := r.handleRootPolicy(instance)
+		err := r.handleRootPolicy(ctx, instance)
 		if err != nil {
 			log.Error(err, "Failure during root policy handling")
 

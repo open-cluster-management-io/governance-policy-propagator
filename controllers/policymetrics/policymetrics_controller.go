@@ -55,7 +55,7 @@ func (r *MetricReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 
 	// Need to know if the policy is a root policy to create the correct prometheus labels
 	// Can't try to use a label on the policy, because the policy might have been deleted.
-	inClusterNs, err := common.IsInClusterNamespace(r.Client, request.Namespace)
+	inClusterNs, err := common.IsInClusterNamespace(ctx, r.Client, request.Namespace)
 	if err != nil {
 		log.Error(err, "Failed to determine if the policy is a replicated policy")
 
