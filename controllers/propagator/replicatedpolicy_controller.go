@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
+	policyv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
 	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
@@ -124,6 +125,18 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 		log.Info("Orphaned replicated policy deleted")
 
 		return reconcile.Result{}, nil
+	}
+
+	// Handle replicated policy, which is related to policyset
+	isHandled, err := r.handlePolicySet(ctx, rootPolicy, replicatedPolicy)
+	if err == nil && isHandled {
+		return reconcile.Result{}, nil
+	}
+
+	if err != nil && !isHandled {
+		log.Error(err, "Failed to remove the replicated policy for PolicySet, requeueing")
+
+		return reconcile.Result{}, err
 	}
 
 	if rootPolicy.Spec.Disabled {
@@ -448,7 +461,7 @@ func (r *ReplicatedPolicyReconciler) isSingleClusterInDecisions(
 				subjectFound = true
 			}
 		case policiesv1.PolicySetKind:
-			if r.isPolicyInPolicySet(policyName, subject.Name, pb.GetNamespace()) {
+			if common.IsPolicyInPolicySet(r.Client, policyName, subject.Name, pb.GetNamespace()) {
 				subjectFound = true
 			}
 		}
@@ -504,6 +517,64 @@ func (r *ReplicatedPolicyReconciler) isSingleClusterInDecisions(
 			for _, cluster := range item.Status.Decisions {
 				if cluster.ClusterName == clusterName {
 					return true, nil
+				}
+			}
+		}
+	}
+
+	return false, nil
+}
+
+// Check this replicated policy related to policyset and
+// Check policyset existing and delete policies deteched from policyset
+func (r *ReplicatedPolicyReconciler) handlePolicySet(
+	ctx context.Context, rootPlc *policiesv1.Policy, replicatedPolicy *policiesv1.Policy,
+) (isHandled bool, err error) {
+	// Find PlacementBinding
+	pbList := &policiesv1.PlacementBindingList{}
+
+	err = r.List(ctx, pbList, &client.ListOptions{Namespace: rootPlc.GetNamespace()})
+	if err != nil {
+		return false, err
+	}
+
+	for _, pb := range pbList.Items {
+		for _, sub := range pb.Subjects {
+			policySet := &policyv1beta1.PolicySet{}
+			if sub.Kind == "PolicySet" && policyv1beta1.GroupVersion.Group == sub.APIGroup {
+				if err := r.Get(ctx, types.NamespacedName{
+					Namespace: pb.Namespace,
+					Name:      sub.Name,
+				}, policySet); err != nil {
+					isCorrectPolicyset := false
+
+					for _, plc := range rootPlc.Status.Placement {
+						if plc.PolicySet == sub.Name {
+							isCorrectPolicyset = true
+						}
+					}
+
+					if !isCorrectPolicyset {
+						log.V(2).Info("Incorrect PolicySet", "policySetName", sub.Name)
+
+						return false, nil
+					}
+
+					if k8serrors.IsNotFound(err) {
+						log.Info("PolicySet deleted so delete related replicated policy")
+
+						if err := r.cleanUpReplicated(ctx, replicatedPolicy); err != nil {
+							if !k8serrors.IsNotFound(err) {
+								return false, err
+							}
+						}
+
+						return true, nil
+					}
+
+					log.Error(err, "Error to get policySet")
+
+					return false, err
 				}
 			}
 		}

@@ -245,6 +245,74 @@ func FullNameForPolicy(plc *policiesv1.Policy) string {
 	return plc.GetNamespace() + "." + plc.GetName()
 }
 
+// GetRepPoliciesInPlacementBinding returns a list of the RepPolicies that are either direct subjects of
+// the given PlacementBinding, or are in PolicySets that are subjects of the PlacementBinding.
+// The list items are guaranteed to be unique (for example if a policy is in multiple sets).
+func GetRepPoliciesInPlacementBinding(
+	ctx context.Context, c client.Client, pb *policiesv1.PlacementBinding,
+) []reconcile.Request {
+	result := make([]reconcile.Request, 0)
+
+	decisions, err := GetDecisions(c, pb) //nolint:contextcheck
+	if err != nil {
+		return result
+	}
+
+	for _, subject := range pb.Subjects {
+		if subject.APIGroup != policiesv1.SchemeGroupVersion.Group {
+			continue
+		}
+
+		switch subject.Kind {
+		case policiesv1.Kind:
+			for _, pd := range decisions {
+				result = append(result, reconcile.Request{NamespacedName: types.NamespacedName{
+					Name:      pb.GetNamespace() + "." + subject.Name,
+					Namespace: pd.ClusterName,
+				}})
+			}
+
+		case policiesv1.PolicySetKind:
+			setNN := types.NamespacedName{
+				Name:      subject.Name,
+				Namespace: pb.GetNamespace(),
+			}
+
+			policySet := policiesv1beta1.PolicySet{}
+			if err := c.Get(ctx, setNN, &policySet); err != nil {
+				continue
+			}
+
+			for _, plc := range policySet.Spec.Policies {
+				for _, pd := range decisions {
+					result = append(result, reconcile.Request{NamespacedName: types.NamespacedName{
+						Name:      pb.GetNamespace() + "." + string(plc),
+						Namespace: pd.ClusterName,
+					}})
+				}
+			}
+		}
+	}
+
+	var unique []reconcile.Request
+
+	table := map[reconcile.Request]bool{}
+	// Remove duplicated policies
+	if len(result) != 0 {
+		for _, r := range result {
+			if !table[r] {
+				table[r] = true
+
+				unique = append(unique, r)
+			}
+		}
+
+		result = unique
+	}
+
+	return result
+}
+
 // TypeConverter is a helper function to converter type struct a to b
 func TypeConverter(a, b interface{}) error {
 	js, err := json.Marshal(a)
@@ -253,4 +321,27 @@ func TypeConverter(a, b interface{}) error {
 	}
 
 	return json.Unmarshal(js, b)
+}
+
+// Select objects that are deleted or created
+func GetAffectedOjbs[T comparable](oldObjs []T, newObjs []T) []T {
+	table := make(map[T]int)
+
+	for _, oldObj := range oldObjs {
+		table[oldObj] = 1
+	}
+
+	for _, newObj := range newObjs {
+		table[newObj]++
+	}
+
+	result := []T{}
+
+	for key, val := range table {
+		if val == 1 {
+			result = append(result, key)
+		}
+	}
+
+	return result
 }

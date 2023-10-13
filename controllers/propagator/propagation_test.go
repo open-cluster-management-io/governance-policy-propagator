@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
+	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
 func fakeRootPolicy(name, namespace string) policiesv1.Policy {
@@ -316,8 +317,8 @@ func TestGetAllClusterDecisions(t *testing.T) {
 				test.updatePlacementBindings(&test.pbList)
 			}
 
-			actualAllClusterDecisions, actualPlacements, err := reconciler.getAllClusterDecisions(
-				&test.policy, &test.pbList)
+			actualAllClusterDecisions, actualPlacements, err := common.GetAllClusterDecisions(
+				reconciler.Client, &test.policy, &test.pbList)
 			if err != nil {
 				t.Fatal("Got unexpected error", err.Error())
 			}
