@@ -13,18 +13,16 @@ import (
 	"sync"
 	"time"
 
-	templates "github.com/stolostron/go-template-utils/v3/pkg/templates"
+	templates "github.com/stolostron/go-template-utils/v4/pkg/templates"
 	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,14 +34,9 @@ import (
 )
 
 const (
-	startDelim              = "{{hub"
-	stopDelim               = "hub}}"
+	TemplateStartDelim      = "{{hub"
+	TemplateStopDelim       = "hub}}"
 	TriggerUpdateAnnotation = "policy.open-cluster-management.io/trigger-update"
-)
-
-var (
-	kubeConfig *rest.Config
-	kubeClient *kubernetes.Interface
 )
 
 type Propagator struct {
@@ -52,24 +45,6 @@ type Propagator struct {
 	Recorder                record.EventRecorder
 	RootPolicyLocks         *sync.Map
 	ReplicatedPolicyUpdates chan event.GenericEvent
-}
-
-func Initialize(kubeconfig *rest.Config, kubeclient *kubernetes.Interface) {
-	kubeConfig = kubeconfig
-	kubeClient = kubeclient
-}
-
-// getTemplateCfg returns the default policy template configuration.
-func getTemplateCfg() templates.Config {
-	// (Encryption settings are set during the processTemplates method)
-	// Adding eight spaces to the indentation makes the usage of `indent N` be from the logical
-	// starting point of the resource object wrapped in the ConfigurationPolicy.
-	return templates.Config{
-		AdditionalIndentation: 8,
-		DisabledFunctions:     []string{},
-		StartDelim:            startDelim,
-		StopDelim:             stopDelim,
-	}
 }
 
 // clusterDecision contains a single decision where the replicated policy
@@ -432,12 +407,41 @@ func (r *RootPolicyReconciler) handleRootPolicy(instance *policiesv1.Policy) err
 // a helper to quickly check if there are any templates in any of the policy templates
 func policyHasTemplates(instance *policiesv1.Policy) bool {
 	for _, policyT := range instance.Spec.PolicyTemplates {
-		if templates.HasTemplate(policyT.ObjectDefinition.Raw, startDelim, false) {
+		if templates.HasTemplate(policyT.ObjectDefinition.Raw, TemplateStartDelim, false) {
 			return true
 		}
 	}
 
 	return false
+}
+
+type templateCtx struct {
+	ManagedClusterName   string
+	ManagedClusterLabels map[string]string
+}
+
+func addManagedClusterLabels(clusterName string) func(templates.CachingQueryAPI, interface{}) (interface{}, error) {
+	return func(api templates.CachingQueryAPI, ctx interface{}) (interface{}, error) {
+		typedCtx, ok := ctx.(templateCtx)
+		if !ok {
+			return ctx, nil
+		}
+
+		managedClusterGVK := schema.GroupVersionKind{
+			Group:   "cluster.open-cluster-management.io",
+			Version: "v1",
+			Kind:    "ManagedCluster",
+		}
+
+		managedCluster, err := api.Get(managedClusterGVK, "", clusterName)
+		if err != nil {
+			return ctx, err
+		}
+
+		typedCtx.ManagedClusterLabels = managedCluster.GetLabels()
+
+		return typedCtx, nil
+	}
 }
 
 // Iterates through policy definitions and processes hub templates. A special annotation
@@ -446,9 +450,7 @@ func policyHasTemplates(instance *policiesv1.Policy) bool {
 // annotation is deleted from the replicated policies and not propagated to the cluster namespaces.
 func (r *ReplicatedPolicyReconciler) processTemplates(
 	replicatedPlc *policiesv1.Policy, decision appsv1.PlacementDecision, rootPlc *policiesv1.Policy,
-) (
-	map[k8sdepwatches.ObjectIdentifier]bool, error,
-) {
+) error {
 	log := log.WithValues(
 		"policyName", rootPlc.GetName(),
 		"policyNamespace", rootPlc.GetNamespace(),
@@ -457,7 +459,6 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 	log.V(1).Info("Processing templates")
 
 	annotations := replicatedPlc.GetAnnotations()
-	templateRefObjs := map[k8sdepwatches.ObjectIdentifier]bool{}
 
 	// handle possible nil map
 	if len(annotations) == 0 {
@@ -469,7 +470,7 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 		if boolDisable, err := strconv.ParseBool(disable); err == nil && boolDisable {
 			log.Info("Detected the disable-templates annotation. Will not process templates.")
 
-			return templateRefObjs, nil
+			return nil
 		}
 	}
 
@@ -480,29 +481,38 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 		replicatedPlc.SetAnnotations(annotations)
 	}
 
-	templateCfg := getTemplateCfg()
-	templateCfg.LookupNamespace = rootPlc.GetNamespace()
-	templateCfg.ClusterScopedAllowList = []templates.ClusterScopedObjectIdentifier{{
-		Group: "cluster.open-cluster-management.io",
-		Kind:  "ManagedCluster",
-		Name:  decision.ClusterName,
-	}}
+	plcGVK := replicatedPlc.GroupVersionKind()
 
-	tmplResolver, err := templates.NewResolver(kubeClient, kubeConfig, templateCfg)
-	if err != nil {
-		log.Error(err, "Error instantiating template resolver")
-		panic(err)
+	templateResolverOptions := templates.ResolveOptions{
+		ClusterScopedAllowList: []templates.ClusterScopedObjectIdentifier{
+			{
+				Group: "cluster.open-cluster-management.io",
+				Kind:  "ManagedCluster",
+				Name:  decision.ClusterName,
+			},
+		},
+		DisableAutoCacheCleanUp: true,
+		LookupNamespace:         rootPlc.GetNamespace(),
+		Watcher: &k8sdepwatches.ObjectIdentifier{
+			Group:     plcGVK.Group,
+			Version:   plcGVK.Version,
+			Kind:      plcGVK.Kind,
+			Namespace: replicatedPlc.GetNamespace(),
+			Name:      replicatedPlc.GetName(),
+		},
 	}
+
+	var templateResult templates.TemplateResult
 
 	// A policy can have multiple policy templates within it, iterate and process each
 	for _, policyT := range replicatedPlc.Spec.PolicyTemplates {
-		if !templates.HasTemplate(policyT.ObjectDefinition.Raw, templateCfg.StartDelim, false) {
+		if !templates.HasTemplate(policyT.ObjectDefinition.Raw, TemplateStartDelim, false) {
 			continue
 		}
 
 		if !isConfigurationPolicy(policyT) {
 			// has Templates but not a configuration policy
-			err = k8serrors.NewBadRequest("Templates are restricted to only Configuration Policies")
+			err := k8serrors.NewBadRequest("Templates are restricted to only Configuration Policies")
 			log.Error(err, "Not a Configuration Policy")
 
 			r.Recorder.Event(rootPlc, "Warning", "PolicyPropagation",
@@ -513,51 +523,30 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 				),
 			)
 
-			return templateRefObjs, err
+			return err
 		}
 
 		log.V(1).Info("Found an object definition with templates")
 
-		templateContext := struct {
-			ManagedClusterName   string
-			ManagedClusterLabels map[string]string
-		}{
-			ManagedClusterName: decision.ClusterName,
-		}
+		templateContext := templateCtx{ManagedClusterName: decision.ClusterName}
 
 		if strings.Contains(string(policyT.ObjectDefinition.Raw), "ManagedClusterLabels") {
-			templateRefObjs[k8sdepwatches.ObjectIdentifier{
-				Group:     "cluster.open-cluster-management.io",
-				Version:   "v1",
-				Kind:      "ManagedCluster",
-				Namespace: "",
-				Name:      decision.ClusterName,
-			}] = true
-
-			managedCluster := &clusterv1.ManagedCluster{}
-
-			err := r.Get(context.TODO(), types.NamespacedName{Name: decision.ClusterName}, managedCluster)
-			if err != nil {
-				log.Error(err, "Failed to get the ManagedCluster in order to use its labels in a hub template")
-			}
-
-			// if an error occurred, the ManagedClusterLabels will just be left empty
-			templateContext.ManagedClusterLabels = managedCluster.Labels
+			templateResolverOptions.ContextTransformers = append(
+				templateResolverOptions.ContextTransformers, addManagedClusterLabels(decision.ClusterName),
+			)
 		}
 
 		// Handle value encryption initialization
-		usesEncryption := templates.UsesEncryption(
-			policyT.ObjectDefinition.Raw, templateCfg.StartDelim, templateCfg.StopDelim,
-		)
+		usesEncryption := templates.UsesEncryption(policyT.ObjectDefinition.Raw, TemplateStartDelim, TemplateStopDelim)
 		// Initialize AES Key and initialization vector
-		if usesEncryption && !templateCfg.EncryptionEnabled {
+		if usesEncryption && !templateResolverOptions.EncryptionEnabled {
 			log.V(1).Info("Found an object definition requiring encryption. Handling encryption keys.")
 			// Get/generate the encryption key
 			encryptionKey, err := r.getEncryptionKey(decision.ClusterName)
 			if err != nil {
 				log.Error(err, "Failed to get/generate the policy encryption key")
 
-				return templateRefObjs, err
+				return err
 			}
 
 			// Get/generate the initialization vector
@@ -567,34 +556,25 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 			if err != nil {
 				log.Error(err, "Failed to get initialization vector")
 
-				return templateRefObjs, err
+				return err
 			}
 
 			// Set the initialization vector in the annotations
 			replicatedPlc.SetAnnotations(annotations)
 
 			// Set the EncryptionConfig with the retrieved key
-			templateCfg.EncryptionConfig = templates.EncryptionConfig{
+			templateResolverOptions.EncryptionConfig = templates.EncryptionConfig{
 				EncryptionEnabled:    true,
 				AESKey:               encryptionKey,
 				InitializationVector: initializationVector,
 			}
-
-			err = tmplResolver.SetEncryptionConfig(templateCfg.EncryptionConfig)
-			if err != nil {
-				log.Error(err, "Error setting encryption configuration")
-
-				return templateRefObjs, err
-			}
 		}
 
-		templateResult, tplErr := tmplResolver.ResolveTemplate(policyT.ObjectDefinition.Raw, templateContext)
+		var tplErr error
 
-		// Record the referenced objects in the template even if there is an error. This is because a change in the
-		// object could fix the error.
-		for _, refObj := range templateResult.ReferencedObjects {
-			templateRefObjs[refObj] = true
-		}
+		templateResult, tplErr = r.TemplateResolver.ResolveTemplate(
+			policyT.ObjectDefinition.Raw, templateContext, &templateResolverOptions,
+		)
 
 		if tplErr != nil {
 			log.Error(tplErr, "Failed to resolve templates")
@@ -635,7 +615,7 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 				}
 			}
 
-			return templateRefObjs, tplErr
+			return tplErr
 		}
 
 		policyT.ObjectDefinition.Raw = templateResult.ResolvedJSON
@@ -646,7 +626,7 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 
 			jsonErr := json.Unmarshal(templateResult.ResolvedJSON, policyTObjectUnstructured)
 			if jsonErr != nil {
-				return templateRefObjs, fmt.Errorf("failed to unmarshal the object definition to JSON: %w", jsonErr)
+				return fmt.Errorf("failed to unmarshal the object definition to JSON: %w", jsonErr)
 			}
 
 			policyTAnnotations := policyTObjectUnstructured.GetAnnotations()
@@ -663,7 +643,7 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 
 				updatedPolicyT, jsonErr := json.Marshal(policyTObjectUnstructured)
 				if jsonErr != nil {
-					return templateRefObjs, fmt.Errorf("failed to marshal the policy template to JSON: %w", jsonErr)
+					return fmt.Errorf("failed to marshal the policy template to JSON: %w", jsonErr)
 				}
 
 				policyT.ObjectDefinition.Raw = updatedPolicyT
@@ -671,9 +651,16 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 		}
 	}
 
+	if templateResult.CacheCleanUp != nil {
+		err := templateResult.CacheCleanUp()
+		if err != nil {
+			return err
+		}
+	}
+
 	log.V(1).Info("Successfully processed templates")
 
-	return templateRefObjs, nil
+	return nil
 }
 
 func isConfigurationPolicy(policyT *policiesv1.PolicyTemplate) bool {

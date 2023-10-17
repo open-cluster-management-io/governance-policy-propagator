@@ -16,13 +16,13 @@ import (
 	"github.com/go-logr/zapr"
 	"github.com/spf13/pflag"
 	"github.com/stolostron/go-log-utils/zaputil"
+	templates "github.com/stolostron/go-template-utils/v4/pkg/templates"
 	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/klog/v2"
@@ -250,6 +250,7 @@ func main() {
 
 	controllerCtx := ctrl.SetupSignalHandler()
 
+	// This is used to trigger reconciles when a related policy set changes due to a dependency on a policy set.
 	dynamicWatcherReconciler, dynamicWatcherSource := k8sdepwatches.NewControllerRuntimeSource()
 
 	dynamicWatcher, err := k8sdepwatches.New(cfg, dynamicWatcherReconciler, nil)
@@ -292,11 +293,29 @@ func main() {
 		os.Exit(1)
 	}
 
+	templateResolver, templatesSource, err := templates.NewResolverWithCaching(
+		controllerCtx,
+		cfg,
+		templates.Config{
+			AdditionalIndentation: 8,
+			DisabledFunctions:     []string{},
+			StartDelim:            propagatorctrl.TemplateStartDelim,
+			StopDelim:             propagatorctrl.TemplateStopDelim,
+		},
+	)
+	if err != nil {
+		log.Error(err, "Unable to setup the template resolver the controller", "controller", "replicated-policy")
+		os.Exit(1)
+	}
+
 	if err = (&propagatorctrl.ReplicatedPolicyReconciler{
 		Propagator:       propagator,
 		ResourceVersions: replicatedResourceVersions,
 		DynamicWatcher:   dynamicWatcher,
-	}).SetupWithManager(mgr, replPolicyMaxConcurrency, dynamicWatcherSource, replicatedUpdatesSource); err != nil {
+		TemplateResolver: templateResolver,
+	}).SetupWithManager(
+		mgr, replPolicyMaxConcurrency, dynamicWatcherSource, replicatedUpdatesSource, templatesSource,
+	); err != nil {
 		log.Error(err, "Unable to create the controller", "controller", "replicated-policy")
 		os.Exit(1)
 	}
@@ -366,11 +385,6 @@ func main() {
 		log.Error(err, "Unable to set up ready check")
 		os.Exit(1)
 	}
-
-	// Setup config and client for propagator to talk to the apiserver
-	var generatedClient kubernetes.Interface = kubernetes.NewForConfigOrDie(mgr.GetConfig())
-
-	propagatorctrl.Initialize(cfg, &generatedClient)
 
 	cache := mgr.GetCache()
 
