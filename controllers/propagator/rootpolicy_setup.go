@@ -7,7 +7,6 @@ import (
 	"context"
 
 	"k8s.io/apimachinery/pkg/api/equality"
-	"k8s.io/apimachinery/pkg/types"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -44,8 +43,7 @@ func (r *RootPolicyReconciler) SetupWithManager(mgr ctrl.Manager, maxConcurrentR
 			builder.WithPredicates(rootPolicyNonStatusUpdates())).
 		Watches(
 			&policiesv1beta1.PolicySet{},
-			handler.EnqueueRequestsFromMapFunc(mapPolicySetToPolicies),
-			builder.WithPredicates(policySetPolicyListChanged())).
+			&common.EnqueueRequestsFromPolicySet{}).
 		Watches(
 			&policiesv1.PlacementBinding{},
 			handler.EnqueueRequestsFromMapFunc(mapBindingToPolicies(mgr.GetClient())),
@@ -86,50 +84,6 @@ func rootPolicyNonStatusUpdates() predicate.Funcs {
 			return e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration() ||
 				!equality.Semantic.DeepEqual(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels()) ||
 				!equality.Semantic.DeepEqual(e.ObjectOld.GetAnnotations(), e.ObjectNew.GetAnnotations())
-		},
-	}
-}
-
-// mapPolicySetToPolicies maps a PolicySet to all the Policies in its policies list.
-func mapPolicySetToPolicies(_ context.Context, object client.Object) []reconcile.Request {
-	log := log.WithValues("policySetName", object.GetName(), "namespace", object.GetNamespace())
-	log.V(2).Info("Reconcile Request for PolicySet")
-
-	var result []reconcile.Request
-
-	//nolint:forcetypeassert
-	policySet := object.(*policiesv1beta1.PolicySet)
-
-	for _, plc := range policySet.Spec.Policies {
-		log.V(2).Info("Found reconciliation request from a policyset", "policyName", string(plc))
-
-		request := reconcile.Request{NamespacedName: types.NamespacedName{
-			Name:      string(plc),
-			Namespace: object.GetNamespace(),
-		}}
-		result = append(result, request)
-	}
-
-	return result
-}
-
-// policySetPolicyListChanged triggers reconciliation if the list of policies in the PolicySet has
-// changed, or if the PolicySet was just created or deleted.
-func policySetPolicyListChanged() predicate.Funcs {
-	return predicate.Funcs{
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			//nolint:forcetypeassert
-			policySetObjNew := e.ObjectNew.(*policiesv1beta1.PolicySet)
-			//nolint:forcetypeassert
-			policySetObjOld := e.ObjectOld.(*policiesv1beta1.PolicySet)
-
-			return !equality.Semantic.DeepEqual(policySetObjNew.Spec.Policies, policySetObjOld.Spec.Policies)
-		},
-		CreateFunc: func(e event.CreateEvent) bool {
-			return true
-		},
-		DeleteFunc: func(e event.DeleteEvent) bool {
-			return true
 		},
 	}
 }
