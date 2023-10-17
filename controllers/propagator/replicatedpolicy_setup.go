@@ -1,20 +1,15 @@
 package propagator
 
 import (
-	"context"
 	"sync"
-	"time"
 
 	"k8s.io/apimachinery/pkg/api/equality"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
@@ -22,7 +17,11 @@ import (
 )
 
 func (r *ReplicatedPolicyReconciler) SetupWithManager(
-	mgr ctrl.Manager, maxConcurrentReconciles uint, dynWatcherSrc source.Source, updateSrc source.Source,
+	mgr ctrl.Manager,
+	maxConcurrentReconciles uint,
+	dependenciesSource source.Source,
+	updateSrc source.Source,
+	templateSrc source.Source,
 ) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.Options{MaxConcurrentReconciles: int(maxConcurrentReconciles)}).
@@ -30,18 +29,9 @@ func (r *ReplicatedPolicyReconciler) SetupWithManager(
 		For(
 			&policiesv1.Policy{},
 			builder.WithPredicates(replicatedPolicyPredicates(r.ResourceVersions))).
-		WatchesRawSource(
-			dynWatcherSrc,
-			// The dependency-watcher could create an event before the same sort of watch in the
-			// controller-runtime triggers an update in the cache. This tries to ensure the cache is
-			// updated before the reconcile is triggered.
-			&delayGeneric{
-				EventHandler: &handler.EnqueueRequestForObject{},
-				delay:        time.Second * 3,
-			}).
-		WatchesRawSource(
-			updateSrc,
-			&handler.EnqueueRequestForObject{}).
+		WatchesRawSource(dependenciesSource, &handler.EnqueueRequestForObject{}).
+		WatchesRawSource(updateSrc, &handler.EnqueueRequestForObject{}).
+		WatchesRawSource(templateSrc, &handler.EnqueueRequestForObject{}).
 		Complete(r)
 }
 
@@ -151,16 +141,4 @@ func safeWriteLoad(resourceVersions *sync.Map, key string) *lockingRsrcVersion {
 	}
 
 	return newRsrc
-}
-
-type delayGeneric struct {
-	handler.EventHandler
-	delay time.Duration
-}
-
-func (d *delayGeneric) Generic(_ context.Context, evt event.GenericEvent, q workqueue.RateLimitingInterface) {
-	q.AddAfter(reconcile.Request{NamespacedName: types.NamespacedName{
-		Name:      evt.Object.GetName(),
-		Namespace: evt.Object.GetNamespace(),
-	}}, d.delay)
 }

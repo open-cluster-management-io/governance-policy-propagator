@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	templates "github.com/stolostron/go-template-utils/v4/pkg/templates"
 	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -25,6 +26,7 @@ type ReplicatedPolicyReconciler struct {
 	Propagator
 	ResourceVersions *sync.Map
 	DynamicWatcher   k8sdepwatches.DynamicWatcher
+	TemplateResolver *templates.TemplateResolver
 }
 
 func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
@@ -33,7 +35,7 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 
 	// Set the hub template watch metric after reconcile
 	defer func() {
-		hubTempWatches := r.DynamicWatcher.GetWatchCount()
+		hubTempWatches := r.TemplateResolver.GetWatchCount()
 		log.V(3).Info("Setting hub template watch metric", "value", hubTempWatches)
 
 		hubTemplateActiveWatchesMetric.Set(float64(hubTempWatches))
@@ -207,6 +209,18 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 		return reconcile.Result{}, err
 	}
 
+	instanceGVK := desiredReplicatedPolicy.GroupVersionKind()
+	instanceObjID := k8sdepwatches.ObjectIdentifier{
+		Group:     instanceGVK.Group,
+		Version:   instanceGVK.Version,
+		Kind:      instanceGVK.Kind,
+		Namespace: request.Namespace,
+		Name:      request.Name,
+	}
+
+	// save the watcherError for later, so that the policy can still be updated now.
+	var watcherErr error
+
 	if policyHasTemplates(rootPolicy) {
 		if replicatedExists {
 			// If the replicated policy has an initialization vector specified, set it for processing
@@ -226,36 +240,23 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 		// #nosec G104 -- any errors are logged and recorded in the processTemplates method,
 		// but the ignored status will be handled appropriately by the policy controllers on
 		// the managed cluster(s).
-		templObjsToWatch, _ := r.processTemplates(desiredReplicatedPolicy, decision.Cluster, rootPolicy)
-
-		for objID, val := range templObjsToWatch {
-			if val {
-				objsToWatch[objID] = true
-			}
+		_ = r.processTemplates(desiredReplicatedPolicy, decision.Cluster, rootPolicy)
+	} else {
+		watcherErr := r.TemplateResolver.UncacheWatcher(instanceObjID)
+		if watcherErr != nil {
+			log.Error(watcherErr, "Failed to uncache objects related to the replicated policy's templates")
 		}
 	}
 
-	instanceGVK := desiredReplicatedPolicy.GroupVersionKind()
-	instanceObjID := k8sdepwatches.ObjectIdentifier{
-		Group:     instanceGVK.Group,
-		Version:   instanceGVK.Version,
-		Kind:      instanceGVK.Kind,
-		Namespace: request.Namespace,
-		Name:      request.Name,
-	}
-	refObjs := make([]k8sdepwatches.ObjectIdentifier, 0, len(objsToWatch))
+	if len(objsToWatch) != 0 {
+		refObjs := make([]k8sdepwatches.ObjectIdentifier, 0, len(objsToWatch))
+		for objToWatch := range objsToWatch {
+			refObjs = append(refObjs, objToWatch)
+		}
 
-	for refObj := range objsToWatch {
-		refObjs = append(refObjs, refObj)
-	}
-
-	// save the watcherError for later, so that the policy can still be updated now.
-	var watcherErr error
-
-	if len(refObjs) != 0 {
 		watcherErr = r.DynamicWatcher.AddOrUpdateWatcher(instanceObjID, refObjs...)
 		if watcherErr != nil {
-			log.Error(watcherErr, "Failed to update the dynamic watches for the hub policy templates")
+			log.Error(watcherErr, "Failed to update the dynamic watches for the policy set dependencies")
 		}
 	} else {
 		watcherErr = r.DynamicWatcher.RemoveWatcher(instanceObjID)
@@ -316,13 +317,24 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 func (r *ReplicatedPolicyReconciler) cleanUpReplicated(ctx context.Context, replicatedPolicy *policiesv1.Policy) error {
 	gvk := replicatedPolicy.GroupVersionKind()
 
-	watcherErr := r.DynamicWatcher.RemoveWatcher(k8sdepwatches.ObjectIdentifier{
+	objID := k8sdepwatches.ObjectIdentifier{
 		Group:     gvk.Group,
 		Version:   gvk.Version,
 		Kind:      gvk.Kind,
 		Namespace: replicatedPolicy.Namespace,
 		Name:      replicatedPolicy.Name,
-	})
+	}
+
+	watcherErr := r.DynamicWatcher.RemoveWatcher(objID)
+
+	uncacheErr := r.TemplateResolver.UncacheWatcher(objID)
+	if uncacheErr != nil {
+		if watcherErr == nil {
+			watcherErr = uncacheErr
+		} else {
+			watcherErr = fmt.Errorf("%w; %w", watcherErr, uncacheErr)
+		}
+	}
 
 	rsrcVersKey := replicatedPolicy.GetNamespace() + "/" + replicatedPolicy.GetName()
 
