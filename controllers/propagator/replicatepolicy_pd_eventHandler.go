@@ -60,7 +60,7 @@ func (e *handlerForDecision) Update(ctx context.Context,
 		return
 	}
 
-	rootPolicyResults, err := common.GetRootPolicyResult(ctx, e.c,
+	rootPolicyResults, err := common.GetRootPolicyRequests(ctx, e.c,
 		newObj.GetNamespace(), placementName, common.Placement)
 	if err != nil {
 		log.Error(err, "Failed to get RootPolicyResults to update by decision event")
@@ -115,7 +115,7 @@ func (e *handlerForDecision) getMappedReplicatedPolicy(ctx context.Context,
 		return nil
 	}
 
-	rootPolicyResults, err := common.GetRootPolicyResult(ctx, e.c,
+	rootPolicyResults, err := common.GetRootPolicyRequests(ctx, e.c,
 		pDecision.GetNamespace(), placementName, common.Placement)
 	if err != nil {
 		log.Error(err, "Failed to get RootPolicyResults by decision events")

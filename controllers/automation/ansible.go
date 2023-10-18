@@ -1,6 +1,6 @@
 // Copyright Contributors to the Open Cluster Management project
 
-package common
+package automation
 
 import (
 	"context"
@@ -15,20 +15,16 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	ctrl "sigs.k8s.io/controller-runtime"
 
 	policyv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
 )
 
 const (
-	ControllerName             string = "policy-automation"
 	PolicyAutomationLabel      string = "policy.open-cluster-management.io/policyautomation-name"
 	PolicyAutomationGeneration string = "policy.open-cluster-management.io/policyautomation-generation"
 	// policyautomation-ResouceVersion
 	PolicyAutomationResouceV string = "policy.open-cluster-management.io/policyautomation-resource-version"
 )
-
-var log = ctrl.Log.WithName(ControllerName)
 
 var ansibleJobRes = schema.GroupVersionResource{
 	Group: "tower.ansible.com", Version: "v1alpha1",

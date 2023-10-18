@@ -302,7 +302,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 	}
 
 	if policyAutomation.Annotations["policy.open-cluster-management.io/rerun"] == "true" {
-		AjExist, err := common.MatchPAResouceV(policyAutomation,
+		AjExist, err := MatchPAResouceV(policyAutomation,
 			r.DynamicClient, policyAutomation.GetResourceVersion())
 		if err != nil {
 			log.Error(err, "Failed to compare Ansible job's resourceVersion")
@@ -323,7 +323,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 
 		violationContext, _ := r.getViolationContext(ctx, policy, targetList, policyAutomation)
 
-		err = common.CreateAnsibleJob(
+		err = CreateAnsibleJob(
 			policyAutomation,
 			r.DynamicClient,
 			"manual",
@@ -373,7 +373,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 			if len(targetList) > 0 {
 				log.Info("Creating An Ansible job", "targetList", targetList)
 				violationContext, _ := r.getViolationContext(ctx, policy, targetList, policyAutomation)
-				err = common.CreateAnsibleJob(policyAutomation, r.DynamicClient, "scan",
+				err = CreateAnsibleJob(policyAutomation, r.DynamicClient, "scan",
 					violationContext)
 				if err != nil {
 					return reconcile.Result{RequeueAfter: requeueAfter}, err
@@ -395,7 +395,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 			if len(targetList) > 0 {
 				log.Info("Creating an Ansible job", "targetList", targetList)
 
-				AjExist, err := common.MatchPAGeneration(policyAutomation,
+				AjExist, err := MatchPAGeneration(policyAutomation,
 					r.DynamicClient, policyAutomation.GetGeneration())
 				if err != nil {
 					log.Error(err, "Failed to get Ansible job's generation")
@@ -406,7 +406,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 					return reconcile.Result{}, nil
 				}
 				violationContext, _ := r.getViolationContext(ctx, policy, targetList, policyAutomation)
-				err = common.CreateAnsibleJob(
+				err = CreateAnsibleJob(
 					policyAutomation,
 					r.DynamicClient,
 					string(policyv1beta1.Once),
@@ -517,7 +517,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 				}
 				log.Info("Creating An Ansible job", "trimmedTargetList", trimmedTargetList)
 				violationContext, _ := r.getViolationContext(ctx, policy, trimmedTargetList, policyAutomation)
-				err = common.CreateAnsibleJob(
+				err = CreateAnsibleJob(
 					policyAutomation,
 					r.DynamicClient,
 					string(policyv1beta1.EveryEvent),

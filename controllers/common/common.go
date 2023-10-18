@@ -15,6 +15,7 @@ import (
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -29,7 +30,10 @@ const (
 	RootPolicyLabel       string = APIGroup + "/root-policy"
 )
 
-var ErrInvalidLabelValue = errors.New("unexpected format of label value")
+var (
+	log                  = ctrl.Log.WithName("common")
+	ErrInvalidLabelValue = errors.New("unexpected format of label value")
+)
 
 // IsInClusterNamespace check if policy is in cluster namespace
 func IsInClusterNamespace(ctx context.Context, c client.Client, ns string) (bool, error) {
@@ -47,7 +51,7 @@ func IsInClusterNamespace(ctx context.Context, c client.Client, ns string) (bool
 	return true, nil
 }
 
-func IsReplicatedPolicy(c client.Client, policy client.Object) (bool, error) {
+func IsReplicatedPolicy(ctx context.Context, c client.Client, policy client.Object) (bool, error) {
 	rootPlcName := policy.GetLabels()[RootPolicyLabel]
 	if rootPlcName == "" {
 		return false, nil
@@ -58,7 +62,7 @@ func IsReplicatedPolicy(c client.Client, policy client.Object) (bool, error) {
 		return false, fmt.Errorf("invalid value set in %s: %w", RootPolicyLabel, err)
 	}
 
-	return IsInClusterNamespace(context.TODO(), c, policy.GetNamespace())
+	return IsInClusterNamespace(ctx, c, policy.GetNamespace())
 }
 
 // IsForPolicyOrPolicySet returns true if any of the subjects of the PlacementBinding are Policies
@@ -270,7 +274,7 @@ func GetRepPoliciesInPlacementBinding(
 	// Use this for removing duplicated policies
 	rootPolicyRequest := GetPoliciesInPlacementBinding(ctx, c, pb)
 
-	result := []reconcile.Request{}
+	result := make([]reconcile.Request, 0, len(rootPolicyRequest)*len(decisions))
 
 	for _, rp := range rootPolicyRequest {
 		for _, pd := range decisions {
@@ -324,9 +328,9 @@ const (
 	PlacementRule PlacementRefKinds = "PlacementRule"
 )
 
-// GetRootPolicyResult find and filter placementbindings which have namespace and placementRef.name.
+// GetRootPolicyRequests find and filter placementbindings which have namespace and placementRef.name.
 // Gather all root policies under placementbindings
-func GetRootPolicyResult(ctx context.Context, c client.Client,
+func GetRootPolicyRequests(ctx context.Context, c client.Client,
 	namespace, placementRefName string, refKind PlacementRefKinds,
 ) ([]reconcile.Request, error) {
 	kindGroupMap := map[PlacementRefKinds]string{
