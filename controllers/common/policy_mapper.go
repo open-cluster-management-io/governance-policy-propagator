@@ -21,7 +21,7 @@ func MapToRootPolicy(c client.Client) handler.MapFunc {
 
 		log.V(2).Info("Reconcile request for a policy")
 
-		isReplicated, err := IsReplicatedPolicy(c, object)
+		isReplicated, err := IsReplicatedPolicy(ctx, c, object)
 		if err != nil {
 			log.Error(err, "Failed to determine if this queued policy is a replicated policy")
 

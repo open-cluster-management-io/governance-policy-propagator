@@ -448,7 +448,7 @@ func (r *ReplicatedPolicyReconciler) isSingleClusterInDecisions(
 				subjectFound = true
 			}
 		case policiesv1.PolicySetKind:
-			if r.isPolicyInPolicySet(policyName, subject.Name, pb.GetNamespace()) {
+			if common.IsPolicyInPolicySet(ctx, r.Client, policyName, subject.Name, pb.GetNamespace()) {
 				subjectFound = true
 			}
 		}

@@ -37,7 +37,7 @@ func equivalentReplicatedPolicies(plc1 *policiesv1.Policy, plc2 *policiesv1.Poli
 // In particular, it adds labels that the policy framework uses, and ensures that policy dependencies
 // are in a consistent format suited for use on managed clusters.
 // It can return an error if it needed to canonicalize a dependency, but a PolicySet lookup failed.
-func (r *ReplicatedPolicyReconciler) buildReplicatedPolicy(
+func (r *ReplicatedPolicyReconciler) buildReplicatedPolicy(ctx context.Context,
 	root *policiesv1.Policy, clusterDec clusterDecision,
 ) (*policiesv1.Policy, error) {
 	decision := clusterDec.Cluster
@@ -102,14 +102,14 @@ func (r *ReplicatedPolicyReconciler) buildReplicatedPolicy(
 
 	var err error
 
-	replicated.Spec.Dependencies, err = r.canonicalizeDependencies(replicated.Spec.Dependencies, root.Namespace)
+	replicated.Spec.Dependencies, err = r.canonicalizeDependencies(ctx, replicated.Spec.Dependencies, root.Namespace)
 	if err != nil {
 		return replicated, err
 	}
 
 	for i, template := range replicated.Spec.PolicyTemplates {
 		replicated.Spec.PolicyTemplates[i].ExtraDependencies, err = r.canonicalizeDependencies(
-			template.ExtraDependencies, root.Namespace)
+			ctx, template.ExtraDependencies, root.Namespace)
 		if err != nil {
 			return replicated, err
 		}
@@ -136,7 +136,7 @@ func depIsPolicy(dep policiesv1.PolicyDependency) bool {
 // Policies. If a PolicySet could not be found, that dependency will be copied as-is. It will
 // return an error if there is an unexpected error looking up a PolicySet to replace.
 func (r *Propagator) canonicalizeDependencies(
-	rawDeps []policiesv1.PolicyDependency, defaultNamespace string,
+	ctx context.Context, rawDeps []policiesv1.PolicyDependency, defaultNamespace string,
 ) ([]policiesv1.PolicyDependency, error) {
 	deps := make([]policiesv1.PolicyDependency, 0)
 
@@ -148,7 +148,7 @@ func (r *Propagator) canonicalizeDependencies(
 				dep.Namespace = defaultNamespace
 			}
 
-			err := r.Get(context.TODO(), types.NamespacedName{
+			err := r.Get(ctx, types.NamespacedName{
 				Namespace: dep.Namespace,
 				Name:      dep.Name,
 			}, plcset)

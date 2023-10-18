@@ -56,7 +56,7 @@ func (e *handlerForRule) Update(ctx context.Context,
 		return
 	}
 
-	rootPolicyResults, err := common.GetRootPolicyResult(ctx, e.c,
+	rootPolicyResults, err := common.GetRootPolicyRequests(ctx, e.c,
 		newObj.GetNamespace(), newObj.GetName(), common.PlacementRule)
 	if err != nil {
 		log.Error(err, "Failed to get RootPolicyResults to update by Rule event")
@@ -106,7 +106,7 @@ func (e *handlerForRule) getMappedReplicatedPolicy(ctx context.Context,
 		return nil
 	}
 
-	rootPolicyResults, err := common.GetRootPolicyResult(ctx, e.c,
+	rootPolicyResults, err := common.GetRootPolicyRequests(ctx, e.c,
 		pRule.GetNamespace(), pRule.GetName(), common.PlacementRule)
 	if err != nil {
 		log.Error(err, "Failed to get RootPolicyResults By Rule event")

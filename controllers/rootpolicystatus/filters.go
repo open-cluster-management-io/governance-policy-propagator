@@ -59,7 +59,7 @@ func mapRuleToPolicies(c client.Client) handler.MapFunc {
 		//nolint:forcetypeassert
 		pr := object.(*appsv1.PlacementRule)
 
-		result, err := common.GetRootPolicyResult(ctx, c, pr.GetNamespace(), pr.GetName(), common.PlacementRule)
+		result, err := common.GetRootPolicyRequests(ctx, c, pr.GetNamespace(), pr.GetName(), common.PlacementRule)
 		if err != nil {
 			log.Error(err, "Getting root policy results  has error in mapRuleToPolicies")
 
@@ -79,7 +79,7 @@ func mapDecisionToPolicies(c client.Client) handler.MapFunc {
 		pd := object.(*clusterv1beta1.PlacementDecision)
 		placementName := pd.GetLabels()["cluster.open-cluster-management.io/placement"]
 
-		result, err := common.GetRootPolicyResult(ctx, c, pd.GetNamespace(), placementName, common.Placement)
+		result, err := common.GetRootPolicyRequests(ctx, c, pd.GetNamespace(), placementName, common.Placement)
 		if err != nil {
 			log.Error(err, "Getting root policy results  has error in mapDecisionToPolicies")
 
