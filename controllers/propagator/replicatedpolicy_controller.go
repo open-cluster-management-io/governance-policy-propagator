@@ -17,7 +17,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
-	policyv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
 	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
@@ -528,57 +527,7 @@ func (r *ReplicatedPolicyReconciler) isSingleClusterInDecisions(
 // Check this replicated policy related to policyset and
 // Check policyset existing and delete policies deteched from policyset
 func (r *ReplicatedPolicyReconciler) handlePolicySet(
-	ctx context.Context, rootPlc *policiesv1.Policy, replicatedPolicy *policiesv1.Policy,
+	_ context.Context, _ *policiesv1.Policy, _ *policiesv1.Policy,
 ) (isHandled bool, err error) {
-	// Find PlacementBinding
-	pbList := &policiesv1.PlacementBindingList{}
-
-	err = r.List(ctx, pbList, &client.ListOptions{Namespace: rootPlc.GetNamespace()})
-	if err != nil {
-		return false, err
-	}
-
-	for _, pb := range pbList.Items {
-		for _, sub := range pb.Subjects {
-			policySet := &policyv1beta1.PolicySet{}
-			if sub.Kind == "PolicySet" && policyv1beta1.GroupVersion.Group == sub.APIGroup {
-				if err := r.Get(ctx, types.NamespacedName{
-					Namespace: pb.Namespace,
-					Name:      sub.Name,
-				}, policySet); err != nil {
-					isCorrectPolicyset := false
-
-					for _, plc := range rootPlc.Status.Placement {
-						if plc.PolicySet == sub.Name {
-							isCorrectPolicyset = true
-						}
-					}
-
-					if !isCorrectPolicyset {
-						log.V(2).Info("Incorrect PolicySet", "policySetName", sub.Name)
-
-						return false, nil
-					}
-
-					if k8serrors.IsNotFound(err) {
-						log.Info("PolicySet deleted so delete related replicated policy")
-
-						if err := r.cleanUpReplicated(ctx, replicatedPolicy); err != nil {
-							if !k8serrors.IsNotFound(err) {
-								return false, err
-							}
-						}
-
-						return true, nil
-					}
-
-					log.Error(err, "Error to get policySet")
-
-					return false, err
-				}
-			}
-		}
-	}
-
 	return false, nil
 }
