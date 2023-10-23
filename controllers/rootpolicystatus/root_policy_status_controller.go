@@ -102,6 +102,11 @@ func (r *RootPolicyStatusReconciler) Reconcile(ctx context.Context, request ctrl
 		return reconcile.Result{}, err
 	}
 
+	// Replicated policies don't need to update status here
+	if _, ok := rootPolicy.Labels["policy.open-cluster-management.io/root-policy"]; ok {
+		return reconcile.Result{}, nil
+	}
+
 	_, err = common.RootStatusUpdate(ctx, r.Client, rootPolicy)
 	if err != nil {
 		return reconcile.Result{}, err
