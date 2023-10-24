@@ -51,7 +51,6 @@ func RootStatusUpdate(ctx context.Context, c client.Client, rootPolicy *policies
 	}
 
 	log.Info("Updating the root policy status", "RootPolicyName", rootPolicy.Name, "Namespace", rootPolicy.Namespace)
-
 	rootPolicy.Status.Status = cpcs
 	rootPolicy.Status.ComplianceState = complianceState
 	rootPolicy.Status.Placement = placements
@@ -235,6 +234,16 @@ func GetClusterDecisions(
 			placements = append(placements, plcPlacements...)
 		}
 	}
+
+	log.V(2).Info("Sorting placements", "RootPolicyName", rootPolicy.Name, "Namespace", rootPolicy.Namespace)
+	sort.SliceStable(placements, func(i, j int) bool {
+		pi := placements[i].PlacementBinding + " " + placements[i].Placement + " " +
+			placements[i].PlacementRule + " " + placements[i].PolicySet
+		pj := placements[j].PlacementBinding + " " + placements[j].Placement + " " +
+			placements[j].PlacementRule + " " + placements[j].PolicySet
+
+		return pi < pj
+	})
 
 	return placements, decisions, nil
 }
