@@ -1,0 +1,20 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: case17-test-policy-root-remediation
+spec:
+  remediationAction: inform
+  disabled: false
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: case17-cfplc3
+        spec:
+          severity: low
+          namespaceSelector:
+            exclude:
+              - kube-*
+            include:
+              - default
