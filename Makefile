@@ -314,36 +314,49 @@ install-resources:
 e2e-dependencies:
 	$(call go-get-tool,github.com/onsi/ginkgo/v2/ginkgo@$(shell awk '/github.com\/onsi\/ginkgo\/v2/ {print $$2}' go.mod))
 
+E2E_LABEL_FILTER = --label-filter="!webhook && !compliance-events-api && !policyautomation"
 .PHONY: e2e-test
 e2e-test: e2e-dependencies
-	$(GINKGO) -v --fail-fast $(E2E_TEST_ARGS) --label-filter="!webhook && !compliance-events-api" test/e2e
+	$(GINKGO) -v --fail-fast $(E2E_TEST_ARGS) $(E2E_LABEL_FILTER) test/e2e
 
-.PHONY: e2e-test-coverage
-e2e-test-coverage: E2E_TEST_ARGS = --json-report=report_e2e.json --output-dir=.
-e2e-test-coverage: e2e-run-instrumented e2e-test e2e-stop-instrumented
+.PHONY: e2e-test-webhook
+e2e-test-webhook: E2E_LABEL_FILTER = --label-filter="webhook"
+e2e-test-webhook: e2e-test
+
+.PHONY: e2e-test-compliance-events-api
+e2e-test-compliance-events-api: E2E_LABEL_FILTER = --label-filter="compliance-events-api"
+e2e-test-compliance-events-api: e2e-test
+
+.PHONY: e2e-test-coverage-compliance-events-api
+e2e-test-coverage-compliance-events-api: E2E_TEST_ARGS = --json-report=report_e2e_compliance_events_api.json --covermode=atomic --coverpkg=open-cluster-management.io/governance-policy-propagator/controllers/complianceeventsapi --coverprofile=coverage_e2e_compliance_events_api.out --output-dir=.
+e2e-test-coverage-compliance-events-api: e2e-test-compliance-events-api
+
+.PHONY: e2e-test-policyautomation
+e2e-test-policyautomation: E2E_LABEL_FILTER = --label-filter="policyautomation"
+e2e-test-policyautomation: e2e-test
 
 .PHONY: e2e-build-instrumented
 e2e-build-instrumented:
 	go test -covermode=atomic -coverpkg=$(shell cat go.mod | head -1 | cut -d ' ' -f 2)/... -c -tags e2e ./ -o build/_output/bin/$(IMG)-instrumented
 
+TEST_COVERAGE_OUT = coverage_e2e.out
 .PHONY: e2e-run-instrumented
 e2e-run-instrumented: e2e-build-instrumented
-	WATCH_NAMESPACE="$(WATCH_NAMESPACE)" ./build/_output/bin/$(IMG)-instrumented -test.run "^TestRunMain$$" -test.coverprofile=coverage_e2e.out &>build/_output/controller.log &
+	WATCH_NAMESPACE="$(WATCH_NAMESPACE)" ./build/_output/bin/$(IMG)-instrumented -test.run "^TestRunMain$$" -test.coverprofile=$(TEST_COVERAGE_OUT) &>build/_output/controller.log &
 
 .PHONY: e2e-stop-instrumented
 e2e-stop-instrumented:
 	ps -ef | grep '$(IMG)' | grep -v grep | awk '{print $$2}' | xargs kill
 
-e2e-test-webhook:
-	$(GINKGO) -v --fail-fast --label-filter="webhook" test/e2e 
+.PHONY: e2e-test-coverage
+e2e-test-coverage: E2E_TEST_ARGS = --json-report=report_e2e.json --output-dir=.
+e2e-test-coverage: e2e-run-instrumented e2e-test e2e-stop-instrumented
 
-.PHONY: e2e-test-compliance-events-api
-e2e-test-compliance-events-api:
-	$(GINKGO) -v --fail-fast $(E2E_TEST_ARGS) --label-filter="compliance-events-api" test/e2e
-
-.PHONY: e2e-test-coverage-compliance-events-api
-e2e-test-coverage-compliance-events-api: E2E_TEST_ARGS = --json-report=report_e2e_compliance_events_api.json --covermode=atomic --coverpkg=open-cluster-management.io/governance-policy-propagator/controllers/complianceeventsapi --coverprofile=coverage_e2e_compliance_events_api.out --output-dir=.
-e2e-test-coverage-compliance-events-api: e2e-test-compliance-events-api
+.PHONY: e2e-test-coverage-policyautomation
+e2e-test-coverage-policyautomation: E2E_TEST_ARGS = --json-report=report_e2e_policyautomation.json --output-dir=.
+e2e-test-coverage-policyautomation: E2E_LABEL_FILTER = --label-filter="policyautomation"
+e2e-test-coverage-policyautomation: TEST_COVERAGE_OUT = coverage_e2e_policyautomation.out
+e2e-test-coverage-policyautomation: e2e-test-coverage
 
 .PHONY: e2e-debug
 e2e-debug:

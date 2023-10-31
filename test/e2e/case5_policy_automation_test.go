@@ -27,7 +27,7 @@ const (
 
 const automationName string = "create-service.now-ticket"
 
-var _ = Describe("Test policy automation", Ordered, func() {
+var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, func() {
 	ansiblelistlen := 0
 	// Use this only when target_clusters managed1 managed2 managed3
 	getLastAnsiblejob := func() *unstructured.Unstructured {
