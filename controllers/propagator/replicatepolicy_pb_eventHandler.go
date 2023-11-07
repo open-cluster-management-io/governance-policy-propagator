@@ -49,7 +49,22 @@ func (e *handlerForBinding) Update(ctx context.Context,
 	oldRepPolcies := common.GetRepPoliciesInPlacementBinding(ctx, e.c, oldObj)
 	newRepPolcies := common.GetRepPoliciesInPlacementBinding(ctx, e.c, newObj)
 
-	// Send only affected replicated policies
+	// If the BindingOverrides or subFilter has changed, all new and old policies need to be checked
+	if newObj.BindingOverrides.RemediationAction != oldObj.BindingOverrides.RemediationAction ||
+		newObj.SubFilter != oldObj.SubFilter {
+		for _, obj := range newRepPolcies {
+			q.Add(obj)
+		}
+
+		// The workqueue will handle any de-duplication.
+		for _, obj := range oldRepPolcies {
+			q.Add(obj)
+		}
+
+		return
+	}
+
+	// Otherwise send only affected replicated policies
 	affectedRepPolicies := common.GetAffectedObjs(oldRepPolcies, newRepPolcies)
 	for _, obj := range affectedRepPolicies {
 		q.Add(obj)

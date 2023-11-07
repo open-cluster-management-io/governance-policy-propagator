@@ -76,7 +76,7 @@ var _ = Describe("Test selective policy enforcement", Ordered, func() {
 			)
 			Expect(err).ToNot(HaveOccurred())
 
-			By("Verifying no replicated policy created on cluster ns managed3")
+			By("Verifying no replicated policy created on cluster ns managed3 because of the subfilter")
 			Eventually(func() interface{} {
 				replicatedPlc := utils.GetWithTimeout(
 					clientHubDynamic, gvrPolicy, testNamespace+"."+case16PolicyName,
@@ -191,6 +191,61 @@ var _ = Describe("Test selective policy enforcement", Ordered, func() {
 
 				return rootPlc.Object["status"].(map[string]interface{})["placement"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(expectedPlacementStatus))
+		})
+
+		It("should propagate to all clusters when the subfilter is removed", func() {
+			By("Putting all clusters in the case16-test-policy-plr-enforce decisions")
+			plr := utils.GetWithTimeout(
+				clientHubDynamic, gvrPlacementRule, case16PolicyName+"-plr-enforce",
+				testNamespace, true, defaultTimeoutSeconds,
+			)
+			plr.Object["status"] = utils.GeneratePlrStatus("managed1", "managed2", "managed3")
+			_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
+				context.TODO(), plr, metav1.UpdateOptions{},
+			)
+			Expect(err).ToNot(HaveOccurred())
+
+			By("Verifying that the policy on managed3 is still not created")
+			Consistently(func() interface{} {
+				return utils.GetWithTimeout(
+					clientHubDynamic, gvrPolicy, testNamespace+"."+case16PolicyName,
+					"managed3", false, defaultTimeoutSeconds,
+				)
+			}, "5s", 1).Should(BeNil())
+
+			By("Removing the subfilter from the binding")
+			utils.Kubectl("patch", "placementbinding", "case16-test-policy-pb-enforce", "-n", testNamespace,
+				"--type=json", `-p=[{"op":"remove","path":"/subFilter"}]`)
+
+			By("Verifying the policies exist and are enforcing on all 3 clusters")
+			for _, clustername := range []string{"managed1", "managed2", "managed3"} {
+				Eventually(func() interface{} {
+					replicatedPlc := utils.GetWithTimeout(
+						clientHubDynamic, gvrPolicy, testNamespace+"."+case16PolicyName,
+						clustername, true, defaultTimeoutSeconds,
+					)
+
+					return replicatedPlc.Object["spec"].(map[string]interface{})["remediationAction"]
+				}, defaultTimeoutSeconds, 1).Should(Equal("enforce"))
+			}
+		})
+
+		It("should change remediationAction when the bindingOverrides are removed", func() {
+			By("Removing the overrides from the binding")
+			utils.Kubectl("patch", "placementbinding", "case16-test-policy-pb-enforce", "-n", testNamespace,
+				"--type=json", `-p=[{"op":"remove","path":"/bindingOverrides"}]`)
+
+			By("Verifying the policies are informing on all 3 clusters")
+			for _, clustername := range []string{"managed1", "managed2", "managed3"} {
+				Eventually(func() interface{} {
+					replicatedPlc := utils.GetWithTimeout(
+						clientHubDynamic, gvrPolicy, testNamespace+"."+case16PolicyName,
+						clustername, true, defaultTimeoutSeconds,
+					)
+
+					return replicatedPlc.Object["spec"].(map[string]interface{})["remediationAction"]
+				}, defaultTimeoutSeconds, 1).Should(Equal("inform"))
+			}
 		})
 	})
 })
