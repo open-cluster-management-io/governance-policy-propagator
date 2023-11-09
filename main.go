@@ -232,6 +232,17 @@ func main() {
 				&corev1.Secret{}: {
 					Field: fields.SelectorFromSet(fields.Set{"metadata.name": propagatorctrl.EncryptionKeySecret}),
 				},
+				&clusterv1.ManagedCluster{}: {
+					Transform: func(obj interface{}) (interface{}, error) {
+						cluster := obj.(*clusterv1.ManagedCluster)
+						// All that ManagedCluster objects are used for is to check their existence to see if a
+						// namespace is a cluster namespace.
+						guttedCluster := &clusterv1.ManagedCluster{}
+						guttedCluster.SetName(cluster.Name)
+
+						return guttedCluster, nil
+					},
+				},
 				&policyv1.Policy{}: {
 					Transform: func(obj interface{}) (interface{}, error) {
 						policy := obj.(*policyv1.Policy)
