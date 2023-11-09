@@ -232,6 +232,16 @@ func main() {
 				&corev1.Secret{}: {
 					Field: fields.SelectorFromSet(fields.Set{"metadata.name": propagatorctrl.EncryptionKeySecret}),
 				},
+				&policyv1.Policy{}: {
+					Transform: func(obj interface{}) (interface{}, error) {
+						policy := obj.(*policyv1.Policy)
+						// Remove unused large fields
+						delete(policy.Annotations, "kubectl.kubernetes.io/last-applied-configuration")
+						policy.ManagedFields = nil
+
+						return policy, nil
+					},
+				},
 			},
 		},
 	}
