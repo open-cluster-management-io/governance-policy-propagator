@@ -43,7 +43,12 @@ func (r *ReplicatedPolicyReconciler) buildReplicatedPolicy(ctx context.Context,
 	decision := clusterDec.Cluster
 	replicatedName := common.FullNameForPolicy(root)
 
-	replicated := root.DeepCopy()
+	// Create the copy this way to avoid copying the root policy's status which can be quite large in large
+	// environments.
+	replicated := &policiesv1.Policy{}
+	replicated.TypeMeta = root.TypeMeta
+	root.ObjectMeta.DeepCopyInto(&replicated.ObjectMeta)
+	root.Spec.DeepCopyInto(&replicated.Spec)
 	replicated.SetName(replicatedName)
 	replicated.SetNamespace(decision.ClusterNamespace)
 	replicated.SetResourceVersion("")
