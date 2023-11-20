@@ -181,7 +181,7 @@ jobs:
       run: |
         make kind-delete-cluster
 
-  coveage-verification:
+  coverage-verification:
     defaults:
       run:
         working-directory: '.'

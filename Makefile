@@ -29,19 +29,8 @@ export TESTARGS ?= $(TESTARGS_DEFAULT)
 VERSION ?= $(shell cat COMPONENT_VERSION 2> /dev/null)
 IMAGE_NAME_AND_VERSION ?= $(REGISTRY)/$(IMG)
 # Handle KinD configuration
-KIND_NAME ?= test-hub
+CLUSTER_NAME ?= hub
 KIND_NAMESPACE ?= open-cluster-management
-KIND_VERSION ?= latest
-# Set the Kind version tag
-ifeq ($(KIND_VERSION), minimum)
-	KIND_ARGS = --image kindest/node:v1.19.16
-else ifneq ($(KIND_VERSION), latest)
-	KIND_ARGS = --image kindest/node:$(KIND_VERSION)
-else
-	KIND_ARGS =
-endif
-
-KIND_ARGS += --config build/kind/kind-config.yaml
 
 # Test coverage threshold
 export COVERAGE_MIN ?= 75
@@ -52,13 +41,6 @@ IMG ?= $(shell cat COMPONENT_NAME 2> /dev/null)
 REGISTRY ?= quay.io/open-cluster-management
 TAG ?= latest
 
-# go-get-tool will 'go install' any package $1 and install it to LOCAL_BIN.
-define go-get-tool
-@set -e ;\
-echo "Checking installation of $(1)" ;\
-GOBIN=$(LOCAL_BIN) go install $(1)
-endef
-
 include build/common/Makefile.common.mk
 
 ############################################################
@@ -67,9 +49,6 @@ include build/common/Makefile.common.mk
 $(GOBIN):
 	@echo "create gobin"
 	@mkdir -p $(GOBIN)
-
-$(LOCAL_BIN):
-	@mkdir -p $(LOCAL_BIN)
 
 ############################################################
 # clean section
@@ -85,44 +64,18 @@ clean:
 	-rm -r vendor/
 
 ############################################################
-# format section
+# lint section
 ############################################################
 
-.PHONY: fmt-dependencies
-fmt-dependencies:
-	$(call go-get-tool,github.com/daixiang0/gci@v0.10.1)
-	$(call go-get-tool,mvdan.cc/gofumpt@v0.5.0)
+.PHONY: fmt
+fmt:
 
-# All available format: format-go format-protos format-python
-# Default value will run all formats, override these make target with your requirements:
-#    eg: fmt: format-go format-protos
-fmt: fmt-dependencies
-	find . -not \( -path "./.go" -prune \) -name "*.go" | xargs gofmt -s -w
-	find . -not \( -path "./.go" -prune \) -name "*.go" | xargs gci write -s standard -s default -s "prefix($(shell cat go.mod | head -1 | cut -d " " -f 2))"
-	find . -not \( -path "./.go" -prune \) -name "*.go" | xargs gofumpt -l -w
-
-############################################################
-# check section
-############################################################
-
-.PHONY: check
-check: lint
-
-.PHONY: lint-dependencies
-lint-dependencies:
-	$(call go-get-tool,github.com/golangci/golangci-lint/cmd/golangci-lint@v1.52.2)
-
-# All available linters: lint-dockerfiles lint-scripts lint-yaml lint-copyright-banner lint-go lint-python lint-helm lint-markdown lint-sass lint-typescript lint-protos
-# Default value will run all linters, override these make target with your requirements:
-#    eg: lint: lint-go lint-yaml
-lint: lint-dependencies lint-all
+.PHONY: lint
+lint:
 
 ############################################################
 # test section
 ############################################################
-GOSEC = $(LOCAL_BIN)/gosec
-KUBEBUILDER = $(LOCAL_BIN)/kubebuilder
-ENVTEST = $(LOCAL_BIN)/setup-envtest
 KBVERSION = 3.12.0
 ENVTEST_K8S_VERSION = 1.26.x
 
@@ -137,25 +90,8 @@ test-coverage: test
 .PHONY: test-dependencies
 test-dependencies: envtest kubebuilder
 
-.PHONY: kubebuilder
-kubebuilder:
-	@if [ "$$($(KUBEBUILDER) version 2>/dev/null | grep -o KubeBuilderVersion:\"[0-9]*\.[0-9]\.[0-9]*\")" != "KubeBuilderVersion:\"$(KBVERSION)\"" ]; then \
-		echo "Installing Kubebuilder"; \
-		curl -L https://github.com/kubernetes-sigs/kubebuilder/releases/download/v$(KBVERSION)/kubebuilder_$(GOOS)_$(GOARCH) -o $(KUBEBUILDER); \
-		chmod +x $(KUBEBUILDER); \
-	fi
-
-.PHONY: envtest
-envtest:
-	$(call go-get-tool,sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
-
-.PHONY: gosec
-gosec:
-	$(call go-get-tool,github.com/securego/gosec/v2/cmd/gosec@v2.15.0)
-
 .PHONY: gosec-scan
-gosec-scan: gosec
-	$(GOSEC) -fmt sonarqube -out gosec.json -no-fail -exclude-dir=.go ./...
+gosec-scan:
 
 ############################################################
 # build section
@@ -181,10 +117,8 @@ run:
 ############################################################
 # Generate manifests
 ############################################################
-CONTROLLER_GEN = $(LOCAL_BIN)/controller-gen
-KUSTOMIZE = $(LOCAL_BIN)/kustomize
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
-CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
+CRD_OPTIONS ?= crd:trivialVersions=true,preserveUnknownFields=false
 
 .PHONY: manifests
 manifests: kustomize controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
@@ -202,18 +136,9 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 generate-operator-yaml: kustomize manifests
 	$(KUSTOMIZE) build deploy/manager > deploy/operator.yaml
 
-.PHONY: controller-gen
-controller-gen: ## Download controller-gen locally if necessary.
-	$(call go-get-tool,sigs.k8s.io/controller-tools/cmd/controller-gen@v0.6.1)
-
-.PHONY: kustomize
-kustomize: ## Download kustomize locally if necessary.
-	$(call go-get-tool,sigs.k8s.io/kustomize/kustomize/v5@v5.0.1)
-
 ############################################################
 # e2e test section
 ############################################################
-GINKGO = $(LOCAL_BIN)/ginkgo
 
 .PHONY: kind-bootstrap-cluster
 kind-bootstrap-cluster: kind-create-cluster install-crds webhook kind-deploy-controller install-resources
@@ -274,6 +199,7 @@ kind-deploy-controller-dev: kind-deploy-controller
 
 # Specify KIND_VERSION to indicate the version tag of the KinD image
 .PHONY: kind-create-cluster
+kind-create-cluster: KIND_ARGS += --config build/kind/kind-config.yaml
 kind-create-cluster:
 	@echo "creating cluster"
 	kind create cluster --name $(KIND_NAME) $(KIND_ARGS)
@@ -309,10 +235,6 @@ install-resources:
 	kubectl apply -f test/resources/managed3-cluster.yaml
 	@echo setting a Hub cluster DNS name
 	kubectl apply -f test/resources/case5_policy_automation/cluster-dns.yaml
-
-.PHONY: e2e-dependencies
-e2e-dependencies:
-	$(call go-get-tool,github.com/onsi/ginkgo/v2/ginkgo@$(shell awk '/github.com\/onsi\/ginkgo\/v2/ {print $$2}' go.mod))
 
 E2E_LABEL_FILTER = --label-filter="!webhook && !compliance-events-api && !policyautomation"
 .PHONY: e2e-test
@@ -368,13 +290,8 @@ e2e-debug:
 ############################################################
 # test coverage
 ############################################################
-GOCOVMERGE = $(LOCAL_BIN)/gocovmerge
-.PHONY: coverage-dependencies
-coverage-dependencies:
-	$(call go-get-tool,github.com/wadey/gocovmerge@v0.0.0-20160331181800-b5bfa59ec0ad)
-
-
 COVERAGE_FILE = coverage.out
+
 .PHONY: coverage-merge
 coverage-merge: coverage-dependencies
 	@echo Merging the coverage reports into $(COVERAGE_FILE)
