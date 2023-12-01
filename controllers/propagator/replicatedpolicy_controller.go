@@ -2,6 +2,7 @@ package propagator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -236,11 +237,13 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 			}
 		}
 
-		// resolve hubTemplate before replicating
-		// #nosec G104 -- any errors are logged and recorded in the processTemplates method,
-		// but the ignored status will be handled appropriately by the policy controllers on
-		// the managed cluster(s).
-		_ = r.processTemplates(ctx, desiredReplicatedPolicy, decision.Cluster, rootPolicy)
+		// Any errors to expose to the user are logged and recorded in the processTemplates method. Only retry
+		// the request if it's determined to be a retryable error (i.e. don't retry syntax errors).
+		err := r.processTemplates(ctx, desiredReplicatedPolicy, decision.Cluster, rootPolicy)
+		if errors.Is(err, ErrRetryable) {
+			// Return the error if it's retryable, which will utilize controller-runtime's exponential backoff.
+			return reconcile.Result{}, err
+		}
 	} else {
 		watcherErr := r.TemplateResolver.UncacheWatcher(instanceObjID)
 		if watcherErr != nil {

@@ -5,6 +5,7 @@ package propagator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -33,6 +34,8 @@ const (
 	TemplateStopDelim       = "hub}}"
 	TriggerUpdateAnnotation = "policy.open-cluster-management.io/trigger-update"
 )
+
+var ErrRetryable = errors.New("")
 
 type Propagator struct {
 	client.Client
@@ -297,7 +300,7 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 			if err != nil {
 				log.Error(err, "Failed to get/generate the policy encryption key")
 
-				return err
+				return fmt.Errorf("%w%w", ErrRetryable, err)
 			}
 
 			// Get/generate the initialization vector
@@ -366,6 +369,16 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 				}
 			}
 
+			// If the failure was due to a Kubernetes API error that could be recoverable, let's retry it.
+			// Missing objects are handled by the templating library sending reconcile requests when they get created.
+			if errors.Is(tplErr, templates.ErrMissingAPIResource) ||
+				k8serrors.IsInternalError(tplErr) ||
+				k8serrors.IsServiceUnavailable(tplErr) ||
+				k8serrors.IsTimeout(tplErr) ||
+				k8serrors.IsTooManyRequests(tplErr) {
+				tplErr = fmt.Errorf("%w%w", ErrRetryable, tplErr)
+			}
+
 			return tplErr
 		}
 
@@ -405,7 +418,7 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 	if templateResult.CacheCleanUp != nil {
 		err := templateResult.CacheCleanUp()
 		if err != nil {
-			return err
+			return fmt.Errorf("%w%w", ErrRetryable, err)
 		}
 	}
 

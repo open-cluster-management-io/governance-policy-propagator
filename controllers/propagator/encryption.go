@@ -64,7 +64,14 @@ func (r *Propagator) getEncryptionKey(ctx context.Context, clusterName string) (
 		}
 
 		err = r.Create(ctx, encryptionSecret)
-		if err != nil {
+		if k8serrors.IsAlreadyExists(err) {
+			// Some kind of race condition occurred (e.g. cache not updated in time), so just refetch the encryption
+			// secret.
+			err := r.Get(ctx, objectKey, encryptionSecret)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get the Secret %s/%s: %w", clusterName, EncryptionKeySecret, err)
+			}
+		} else if err != nil {
 			return nil, fmt.Errorf("failed to create the Secret %s/%s: %w", clusterName, EncryptionKeySecret, err)
 		}
 	} else if err != nil {
