@@ -5,6 +5,7 @@ package e2e
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"os/user"
@@ -30,6 +31,7 @@ var (
 	testNamespace         string
 	clientHub             kubernetes.Interface
 	clientHubDynamic      dynamic.Interface
+	kubeconfigHub         string
 	gvrPolicy             schema.GroupVersionResource
 	gvrPolicyAutomation   schema.GroupVersionResource
 	gvrPolicySet          schema.GroupVersionResource
@@ -51,6 +53,9 @@ func TestE2e(t *testing.T) {
 
 func init() {
 	klog.SetOutput(GinkgoWriter)
+	klog.InitFlags(nil)
+	flag.StringVar(&kubeconfigHub, "kubeconfig_hub", "../../kubeconfig_hub_e2e",
+		"Location of the kubeconfig to use; defaults to current kubeconfig if set to an empty string")
 }
 
 var _ = BeforeSuite(func() {
@@ -85,8 +90,8 @@ var _ = BeforeSuite(func() {
 	gvrNamespace = schema.GroupVersionResource{
 		Group: "", Version: "v1", Resource: "namespaces",
 	}
-	clientHub = NewKubeClient("", "", "")
-	clientHubDynamic = NewKubeClientDynamic("", "", "")
+	clientHub = NewKubeClient("", kubeconfigHub, "")
+	clientHubDynamic = NewKubeClientDynamic("", kubeconfigHub, "")
 	defaultImageRegistry = "quay.io/open-cluster-management"
 	testNamespace = "policy-propagator-test"
 	defaultTimeoutSeconds = 30

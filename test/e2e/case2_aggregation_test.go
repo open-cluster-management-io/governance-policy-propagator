@@ -26,7 +26,8 @@ var _ = Describe("Test policy status aggregation", func() {
 			By("Creating " + case2PolicyYaml)
 			utils.Kubectl("apply",
 				"-f", case2PolicyYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			plc := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, case2PolicyName, testNamespace, true, defaultTimeoutSeconds,
 			)
@@ -121,7 +122,7 @@ var _ = Describe("Test policy status aggregation", func() {
 			By("Creating pb-plr-2 to binding second set of placement")
 			utils.Kubectl("apply",
 				"-f", "../resources/case2_aggregation/pb-plr-2.yaml",
-				"-n", testNamespace)
+				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			By("Checking the status of root policy")
 			yamlPlc := utils.ParseYaml("../resources/case2_aggregation/managed-both-placement-single-status.yaml")
 			Eventually(func() interface{} {
@@ -176,7 +177,7 @@ var _ = Describe("Test policy status aggregation", func() {
 			By("Remove" + case2PolicyName + "-plr")
 			utils.Kubectl("delete",
 				"placementrule", case2PolicyName+"-plr",
-				"-n", testNamespace)
+				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			By("Checking the status of root policy")
 			yamlPlc := utils.ParseYaml("../resources/case2_aggregation/managed-both-placement-status-missing-plr.yaml")
 			Eventually(func() interface{} {
@@ -191,7 +192,7 @@ var _ = Describe("Test policy status aggregation", func() {
 			By("Remove" + case2PolicyName + "-plr2")
 			utils.Kubectl("delete",
 				"placementrule", case2PolicyName+"-plr2",
-				"-n", testNamespace)
+				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			By("Checking the status of root policy")
 			yamlPlc := utils.ParseYaml("../resources/case2_aggregation/managed-both-placementbinding.yaml")
 			Eventually(func() interface{} {
@@ -206,10 +207,10 @@ var _ = Describe("Test policy status aggregation", func() {
 			By("Remove" + case2PolicyName + "-pb and " + case2PolicyName + "-pb2")
 			utils.Kubectl("delete",
 				"placementbinding", case2PolicyName+"-pb",
-				"-n", testNamespace)
+				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			utils.Kubectl("delete",
 				"placementbinding", case2PolicyName+"-pb2",
-				"-n", testNamespace)
+				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			By("Checking the status of root policy")
 			emptyStatus := map[string]interface{}{}
 			Eventually(func() interface{} {
@@ -223,7 +224,8 @@ var _ = Describe("Test policy status aggregation", func() {
 		It("should clean up", func() {
 			utils.Kubectl("delete",
 				"-f", case2PolicyYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			opt := metav1.ListOptions{}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 10)
 		})
@@ -240,7 +242,8 @@ var _ = Describe("Test policy status aggregation", func() {
 			By("Creating " + case2PolicyYaml)
 			utils.Kubectl("apply",
 				"-f", case2PolicyYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			plc := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, case2PolicyName, testNamespace, true, defaultTimeoutSeconds,
 			)
@@ -264,7 +267,7 @@ var _ = Describe("Test policy status aggregation", func() {
 
 		AfterAll(func() {
 			By("Cleaning up")
-			utils.Kubectl("delete", "-f", case2PolicyYaml, "-n", testNamespace)
+			utils.Kubectl("delete", "-f", case2PolicyYaml, "-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, metav1.ListOptions{}, 0, false, 10)
 		})
 

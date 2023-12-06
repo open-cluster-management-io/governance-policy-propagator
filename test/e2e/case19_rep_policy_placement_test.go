@@ -21,7 +21,8 @@ var _ = Describe("Test replicated_policy controller and propagation", Ordered, S
 		By("Creating " + case19PolicyName)
 		utils.Kubectl("apply",
 			"-f", case19PolicyYaml,
-			"-n", testNamespace)
+			"-n", testNamespace,
+			"--kubeconfig="+kubeconfigHub)
 		plc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, case19PolicyName, testNamespace, true, defaultTimeoutSeconds,
 		)
@@ -31,7 +32,9 @@ var _ = Describe("Test replicated_policy controller and propagation", Ordered, S
 		By("Creating " + case19PolicyName)
 		utils.Kubectl("delete",
 			"-f", case19PolicyYaml,
-			"-n", testNamespace, "--ignore-not-found")
+			"-n", testNamespace,
+			"--kubeconfig="+kubeconfigHub,
+			"--ignore-not-found")
 		plc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, case19PolicyName, testNamespace, false, defaultTimeoutSeconds,
 		)

@@ -41,13 +41,15 @@ var _ = Describe("Test policy encryption key rotation", func() {
 
 	It("should create some sample policies", func() {
 		By("Creating the root policies with placement rules and bindings")
-		utils.Kubectl("apply", "-f", policyOneYaml, "-n", testNamespace)
+		utils.Kubectl("apply", "-f", policyOneYaml,
+			"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 		rootOne := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, policyOneName, testNamespace, true, defaultTimeoutSeconds,
 		)
 		Expect(rootOne).NotTo(BeNil())
 
-		utils.Kubectl("apply", "-f", policyTwoYaml, "-n", testNamespace)
+		utils.Kubectl("apply", "-f", policyTwoYaml,
+			"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 		rootTwo := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, policyTwoName, testNamespace, true, defaultTimeoutSeconds,
 		)
@@ -90,7 +92,8 @@ var _ = Describe("Test policy encryption key rotation", func() {
 		utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 1, true, defaultTimeoutSeconds)
 
 		By("Adding the IV Annotation to the replicated policy-one")
-		utils.Kubectl("apply", "-n", "managed1", "-f", replicatedPolicyOneYaml)
+		utils.Kubectl("apply", "-n", "managed1",
+			"-f", replicatedPolicyOneYaml, "--kubeconfig="+kubeconfigHub)
 
 		Eventually(func() interface{} {
 			replicatedPolicy := utils.GetWithTimeout(
