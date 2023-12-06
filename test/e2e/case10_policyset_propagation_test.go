@@ -33,7 +33,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Creating " + case10PolicySetYaml)
 			_, err := utils.KubectlWithOutput("apply",
 				"-f", case10PolicySetYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName, testNamespace, true, defaultTimeoutSeconds,
@@ -150,7 +151,8 @@ var _ = Describe("Test policyset propagation", func() {
 		})
 		It("should remove policy from ns managed1 and managed2", func() {
 			By("Deleting policyset")
-			_, err := utils.KubectlWithOutput("delete", "policyset", case10PolicySetName, "-n", testNamespace)
+			_, err := utils.KubectlWithOutput("delete", "policyset",
+				case10PolicySetName, "-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName, testNamespace, false, defaultTimeoutSeconds,
@@ -165,7 +167,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Creating " + case10PolicySetYaml)
 			_, err := utils.KubectlWithOutput("apply",
 				"-f", case10PolicySetYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName, testNamespace, true, defaultTimeoutSeconds,
@@ -191,7 +194,7 @@ var _ = Describe("Test policyset propagation", func() {
 		It("should remove policy from ns managed1 and managed2", func() {
 			By("Deleting placementbinding")
 			_, err := utils.KubectlWithOutput("delete", "PlacementBinding", case10PolicySetName+"-pb", "-n",
-				testNamespace)
+				testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			opt := metav1.ListOptions{
 				LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case10PolicyName,
@@ -202,7 +205,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Creating " + case10PolicySetYaml)
 			_, err := utils.KubectlWithOutput("apply",
 				"-f", case10PolicySetYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName, testNamespace, true, defaultTimeoutSeconds,
@@ -228,7 +232,7 @@ var _ = Describe("Test policyset propagation", func() {
 		It("should remove policy from ns managed1 and managed2", func() {
 			By("Deleting placementrule")
 			_, err := utils.KubectlWithOutput("delete", "PlacementRule", case10PolicySetName+"-plr", "-n",
-				testNamespace)
+				testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			opt := metav1.ListOptions{
 				LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case10PolicyName,
@@ -239,7 +243,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Creating " + case10PolicySetYaml)
 			_, err := utils.KubectlWithOutput("apply",
 				"-f", case10PolicySetYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName, testNamespace, true, defaultTimeoutSeconds,
@@ -266,7 +271,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Deleting " + case10PolicySetYaml)
 			_, err := utils.KubectlWithOutput("delete",
 				"-f", case10PolicySetYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName, testNamespace, false, defaultTimeoutSeconds,
@@ -284,7 +290,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Creating " + case10PolicySetYaml)
 			_, err := utils.KubectlWithOutput("apply",
 				"-f", case10PolicySetPolicyYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName, testNamespace, true, defaultTimeoutSeconds,
@@ -384,7 +391,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Deleting " + case10PolicySetYaml)
 			_, err := utils.KubectlWithOutput("delete",
 				"-f", case10PolicySetPolicyYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName, testNamespace, false, defaultTimeoutSeconds,
@@ -402,7 +410,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Creating " + case10PolicySetPlacementYaml)
 			_, err := utils.KubectlWithOutput("apply",
 				"-f", case10PolicySetPlacementYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName, testNamespace, true, defaultTimeoutSeconds,
@@ -479,7 +488,8 @@ var _ = Describe("Test policyset propagation", func() {
 		})
 		It("should remove policy from ns managed1 and managed2", func() {
 			By("Deleting policyset")
-			_, err := utils.KubectlWithOutput("delete", "policyset", case10PolicySetName, "-n", testNamespace)
+			_, err := utils.KubectlWithOutput("delete", "policyset", case10PolicySetName,
+				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName, testNamespace, false, defaultTimeoutSeconds,
@@ -494,7 +504,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Creating " + case10PolicySetPlacementYaml)
 			_, err := utils.KubectlWithOutput("apply",
 				"-f", case10PolicySetPlacementYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName, testNamespace, true, defaultTimeoutSeconds,
@@ -530,7 +541,7 @@ var _ = Describe("Test policyset propagation", func() {
 		It("should remove policy from ns managed1 and managed2", func() {
 			By("Deleting placementbinding")
 			_, err := utils.KubectlWithOutput("delete", "PlacementBinding", case10PolicySetName+"-pb", "-n",
-				testNamespace)
+				testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			opt := metav1.ListOptions{
 				LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case10PolicyName,
@@ -541,7 +552,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Creating " + case10PolicySetPlacementYaml)
 			_, err := utils.KubectlWithOutput("apply",
 				"-f", case10PolicySetPlacementYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName, testNamespace, true, defaultTimeoutSeconds,
@@ -577,7 +589,7 @@ var _ = Describe("Test policyset propagation", func() {
 		It("should remove policy from ns managed1 and managed2", func() {
 			By("Deleting placementDecision")
 			_, err := utils.KubectlWithOutput("delete", "PlacementDecision", case10PolicySetName+"-plm-decision", "-n",
-				testNamespace)
+				testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			opt := metav1.ListOptions{
 				LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case10PolicyName,
@@ -588,7 +600,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Creating " + case10PolicySetPlacementYaml)
 			_, err := utils.KubectlWithOutput("apply",
 				"-f", case10PolicySetPlacementYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName, testNamespace, true, defaultTimeoutSeconds,
@@ -599,7 +612,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Deleting " + case10PolicySetPlacementYaml)
 			_, err := utils.KubectlWithOutput("delete",
 				"-f", case10PolicySetPlacementYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName, testNamespace, false, defaultTimeoutSeconds,
@@ -617,7 +631,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Creating " + case10PolicySetPolicyPlacementYaml)
 			_, err := utils.KubectlWithOutput("apply",
 				"-f", case10PolicySetPolicyPlacementYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName, testNamespace, true, defaultTimeoutSeconds,
@@ -675,7 +690,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Deleting " + case10PolicySetPolicyPlacementYaml)
 			_, err := utils.KubectlWithOutput("delete",
 				"-f", case10PolicySetPolicyPlacementYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName, testNamespace, false, defaultTimeoutSeconds,
@@ -693,7 +709,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Creating " + case10PolicySetYaml)
 			_, err := utils.KubectlWithOutput("apply",
 				"-f", case10PolicySetPolicyYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName, testNamespace, true, defaultTimeoutSeconds,
@@ -809,7 +826,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Deleting " + case10PolicySetYaml)
 			_, err := utils.KubectlWithOutput("delete",
 				"-f", case10PolicySetPolicyYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName, testNamespace, false, defaultTimeoutSeconds,
@@ -828,7 +846,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Creating " + case10PolicySetMultipleYaml)
 			_, err := utils.KubectlWithOutput("apply",
 				"-f", case10PolicySetMultipleYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet1 := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName+"1", testNamespace, true, defaultTimeoutSeconds,
@@ -886,7 +905,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Deleting " + case10PolicySetMultipleYaml)
 			_, err := utils.KubectlWithOutput("delete",
 				"-f", case10PolicySetMultipleYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet1 := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName+"1", testNamespace, false, defaultTimeoutSeconds,
@@ -909,7 +929,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Creating " + case10PolicySetMultipleSinglePBYaml)
 			_, err := utils.KubectlWithOutput("apply",
 				"-f", case10PolicySetMultipleSinglePBYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet1 := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName+"1", testNamespace, true, defaultTimeoutSeconds,
@@ -1059,7 +1080,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Deleting " + case10PolicySetMultipleSinglePBYaml)
 			_, err := utils.KubectlWithOutput("delete",
 				"-f", case10PolicySetMultipleSinglePBYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet1 := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName+"1", testNamespace, false, defaultTimeoutSeconds,
@@ -1082,7 +1104,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Creating " + case10PolicySetMultipleSinglePBYaml)
 			_, err := utils.KubectlWithOutput("apply",
 				"-f", case10PolicySetMultipleSinglePBYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet1 := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName+"1", testNamespace, true, defaultTimeoutSeconds,
@@ -1118,7 +1141,8 @@ var _ = Describe("Test policyset propagation", func() {
 			By("Deleting " + case10PolicySetMultipleSinglePBYaml)
 			_, err := utils.KubectlWithOutput("delete",
 				"-f", case10PolicySetMultipleSinglePBYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet1 := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicySet, case10PolicySetName+"1", testNamespace, false, defaultTimeoutSeconds,

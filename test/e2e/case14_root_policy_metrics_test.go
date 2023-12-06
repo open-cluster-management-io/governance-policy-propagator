@@ -38,7 +38,8 @@ var _ = Describe("Test root policy metrics", Ordered, func() {
 			By("Creating " + policyYaml)
 			utils.Kubectl("apply",
 				"-f", policyYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			plc := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, policyName, testNamespace, true, defaultTimeoutSeconds,
 			)
@@ -104,7 +105,8 @@ var _ = Describe("Test root policy metrics", Ordered, func() {
 		cleanup := func() {
 			utils.Kubectl("delete",
 				"-f", policyYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			opt := metav1.ListOptions{}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, defaultTimeoutSeconds)
 		}

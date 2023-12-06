@@ -42,7 +42,8 @@ var _ = Describe("Test policy templates", func() {
 			By("Creating " + case9PolicyYaml)
 			utils.Kubectl("apply",
 				"-f", case9PolicyYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			plc := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, case9PolicyName, testNamespace, true, defaultTimeoutSeconds,
 			)
@@ -81,7 +82,8 @@ var _ = Describe("Test policy templates", func() {
 		})
 		It("should update the templated value when the managed cluster labels change", func() {
 			By("Updating the label on managed1")
-			utils.Kubectl("label", "managedcluster", "managed1", "vendor=Fake", "--overwrite")
+			utils.Kubectl("label", "managedcluster", "managed1",
+				"vendor=Fake", "--overwrite", "--kubeconfig="+kubeconfigHub)
 
 			By("Verifying the policy is updated")
 			yamlPlc := utils.ParseYaml(case9ReplicatedPolicyYamlM1Update)
@@ -133,8 +135,10 @@ var _ = Describe("Test policy templates", func() {
 			utils.Kubectl("delete",
 				"-f", case9PolicyYaml,
 				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub,
 				"--ignore-not-found")
-			utils.Kubectl("label", "managedcluster", "managed1", "vendor=auto-detect", "--overwrite")
+			utils.Kubectl("label", "managedcluster", "managed1",
+				"vendor=auto-detect", "--overwrite", "--kubeconfig="+kubeconfigHub)
 			opt := metav1.ListOptions{}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, defaultTimeoutSeconds)
 		})
@@ -150,7 +154,8 @@ var _ = Describe("Test encrypted policy templates", func() {
 				By("Creating " + case9PolicyYamlEncrypted)
 				utils.Kubectl("apply",
 					"-f", case9PolicyYamlEncrypted,
-					"-n", testNamespace)
+					"-n", testNamespace,
+					"--kubeconfig="+kubeconfigHub)
 				plc := utils.GetWithTimeout(
 					clientHubDynamic, gvrPolicy, case9PolicyNameEncrypted, testNamespace,
 					true, defaultTimeoutSeconds,
@@ -162,7 +167,8 @@ var _ = Describe("Test encrypted policy templates", func() {
 				By("Initializing AES Encryption Secret")
 				_, err := utils.KubectlWithOutput("apply",
 					"-f", case9EncryptionSecret,
-					"-n", managedCluster)
+					"-n", managedCluster,
+					"--kubeconfig="+kubeconfigHub)
 				Expect(err).ToNot(HaveOccurred())
 
 				By("Patching test-policy-plr with decision of cluster " + managedCluster)
@@ -272,7 +278,8 @@ var _ = Describe("Test encrypted policy templates", func() {
 			It("should clean up the encryption key", func() {
 				utils.Kubectl("delete", "secret",
 					case9EncryptionSecretName,
-					"-n", managedCluster)
+					"-n", managedCluster,
+					"--kubeconfig="+kubeconfigHub)
 				utils.GetWithTimeout(
 					clientHubDynamic, gvrSecret, case9EncryptionSecretName, managedCluster,
 					false, defaultTimeoutSeconds,
@@ -280,7 +287,8 @@ var _ = Describe("Test encrypted policy templates", func() {
 			})
 
 			It("should clean up", func() {
-				utils.Kubectl("delete", "-f", case9PolicyYamlEncrypted, "-n", testNamespace)
+				utils.Kubectl("delete", "-f", case9PolicyYamlEncrypted,
+					"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 				opt := metav1.ListOptions{}
 				utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, defaultTimeoutSeconds)
 			})
@@ -297,7 +305,8 @@ var _ = Describe("Test encrypted policy templates with secret copy", func() {
 				By("Creating " + case9PolicyYamlCopy)
 				utils.Kubectl("apply",
 					"-f", case9PolicyYamlCopy,
-					"-n", testNamespace)
+					"-n", testNamespace,
+					"--kubeconfig="+kubeconfigHub)
 				plc := utils.GetWithTimeout(
 					clientHubDynamic, gvrPolicy, case9PolicyNameCopy, testNamespace,
 					true, defaultTimeoutSeconds,
@@ -309,7 +318,8 @@ var _ = Describe("Test encrypted policy templates with secret copy", func() {
 				By("Initializing AES Encryption Secret")
 				_, err := utils.KubectlWithOutput("apply",
 					"-f", case9EncryptionSecret,
-					"-n", managedCluster)
+					"-n", managedCluster,
+					"--kubeconfig="+kubeconfigHub)
 				Expect(err).ToNot(HaveOccurred())
 
 				By("Patching test-policy-plr with decision of cluster " + managedCluster)
@@ -419,7 +429,8 @@ var _ = Describe("Test encrypted policy templates with secret copy", func() {
 			It("should clean up the encryption key", func() {
 				utils.Kubectl("delete", "secret",
 					case9EncryptionSecretName,
-					"-n", managedCluster)
+					"-n", managedCluster,
+					"--kubeconfig="+kubeconfigHub)
 				utils.GetWithTimeout(
 					clientHubDynamic, gvrSecret, case9EncryptionSecretName, managedCluster,
 					false, defaultTimeoutSeconds,
@@ -427,15 +438,20 @@ var _ = Describe("Test encrypted policy templates with secret copy", func() {
 			})
 
 			It("should clean up", func() {
-				utils.Kubectl("delete", "-f", case9PolicyYamlCopy, "-n", testNamespace)
+				utils.Kubectl("delete", "-f", case9PolicyYamlCopy,
+					"-n", testNamespace,
+					"--kubeconfig="+kubeconfigHub)
 				opt := metav1.ListOptions{}
 				utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, defaultTimeoutSeconds)
 			})
 			AfterAll(func() {
 				utils.Kubectl("delete", "secret",
 					case9EncryptionSecretName,
-					"-n", managedCluster)
-				utils.Kubectl("delete", "-f", case9PolicyYamlCopy, "-n", testNamespace)
+					"-n", managedCluster,
+					"--kubeconfig="+kubeconfigHub)
+				utils.Kubectl("delete", "-f", case9PolicyYamlCopy,
+					"-n", testNamespace,
+					"--kubeconfig="+kubeconfigHub)
 			})
 		}
 	})
@@ -447,7 +463,8 @@ var _ = Describe("Test policy templates with cluster-scoped lookup", func() {
 			By("Creating " + case9PolicyWithCSLookupName)
 			utils.Kubectl("apply",
 				"-f", case9PolicyWithCSLookupYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			plc := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, case9PolicyWithCSLookupName, testNamespace, true, defaultTimeoutSeconds,
 			)
@@ -485,6 +502,7 @@ var _ = Describe("Test policy templates with cluster-scoped lookup", func() {
 			utils.Kubectl("delete",
 				"-f", case9PolicyWithCSLookupYaml,
 				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub,
 				"--ignore-not-found")
 			opt := metav1.ListOptions{}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, defaultTimeoutSeconds)

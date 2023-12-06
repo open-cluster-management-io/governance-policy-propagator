@@ -31,7 +31,7 @@ var _ = Describe("Test policy propagation", func() {
 	Describe("Test event emission when policy is disabled", Ordered, func() {
 		BeforeAll(func() {
 			By("Creating the policy, placementrule, and placementbinding")
-			utils.Kubectl("apply", "-f", case1PolicyYaml, "-n", testNamespace)
+			utils.Kubectl("apply", "-f", case1PolicyYaml, "-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			plc := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, case1PolicyName, testNamespace, true, defaultTimeoutSeconds,
 			)
@@ -118,7 +118,8 @@ var _ = Describe("Test policy propagation", func() {
 			By("Creating " + case1PolicyYaml)
 			utils.Kubectl("apply",
 				"-f", case1PolicyYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			plc := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, case1PolicyName, testNamespace, true, defaultTimeoutSeconds,
 			)
@@ -437,7 +438,8 @@ var _ = Describe("Test policy propagation", func() {
 		It("should clean up", func() {
 			utils.Kubectl("delete",
 				"-f", case1PolicyYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			opt := metav1.ListOptions{}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 10)
 		})
@@ -448,7 +450,8 @@ var _ = Describe("Test policy propagation", func() {
 			By("Creating " + case1PolicyYaml)
 			utils.Kubectl("apply",
 				"-f", case1PolicyYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			plc := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, case1PolicyName, testNamespace, true, defaultTimeoutSeconds,
 			)
@@ -520,7 +523,8 @@ var _ = Describe("Test policy propagation", func() {
 			By("Creating " + case1PolicyYaml)
 			utils.Kubectl("apply",
 				"-f", case1PolicyYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			plc := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, case1PolicyName, testNamespace, true, defaultTimeoutSeconds,
 			)
@@ -549,7 +553,8 @@ var _ = Describe("Test policy propagation", func() {
 			By("Creating ../resources/case1_propagation/case1-test-policy2.yaml")
 			utils.Kubectl("apply",
 				"-f", "../resources/case1_propagation/case1-test-policy2.yaml",
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			rootPlc := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, case1PolicyName, testNamespace, true, defaultTimeoutSeconds,
 			)
@@ -621,7 +626,7 @@ var _ = Describe("Test policy propagation", func() {
 		It("should clean up", func() {
 			utils.Kubectl("delete",
 				"-f", "../resources/case1_propagation/case1-test-policy2.yaml",
-				"-n", testNamespace)
+				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			opt := metav1.ListOptions{}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 10)
 		})

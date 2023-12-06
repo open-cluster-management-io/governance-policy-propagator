@@ -28,9 +28,11 @@ TESTARGS_DEFAULT := "-v"
 export TESTARGS ?= $(TESTARGS_DEFAULT)
 VERSION ?= $(shell cat COMPONENT_VERSION 2> /dev/null)
 IMAGE_NAME_AND_VERSION ?= $(REGISTRY)/$(IMG)
+CONTROLLER_NAME = $(shell cat COMPONENT_NAME 2> /dev/null)
+CONTROLLER_NAMESPACE ?= open-cluster-management
 # Handle KinD configuration
 CLUSTER_NAME ?= hub
-KIND_NAMESPACE ?= open-cluster-management
+KIND_NAMESPACE ?= $(CONTROLLER_NAMESPACE)
 
 # Test coverage threshold
 export COVERAGE_MIN ?= 75
@@ -60,7 +62,7 @@ clean:
 	-rm build/_output/bin/*
 	-rm coverage*.out
 	-rm report*.json
-	-rm kubeconfig_managed
+	-rm kubeconfig_*
 	-rm -r vendor/
 
 ############################################################
@@ -141,10 +143,10 @@ generate-operator-yaml: kustomize manifests
 ############################################################
 
 .PHONY: kind-bootstrap-cluster
-kind-bootstrap-cluster: kind-create-cluster install-crds webhook kind-deploy-controller install-resources
+kind-bootstrap-cluster: kind-bootstrap-cluster-dev webhook kind-deploy-controller install-resources
 
 .PHONY: kind-bootstrap-cluster-dev
-kind-bootstrap-cluster-dev: kind-create-cluster install-crds install-resources
+kind-bootstrap-cluster-dev: kind-create-cluster install-crds kind-controller-kubeconfig
 
 cert-manager:
 	@echo Installing cert-manager
@@ -200,9 +202,6 @@ kind-deploy-controller-dev: kind-deploy-controller
 # Specify KIND_VERSION to indicate the version tag of the KinD image
 .PHONY: kind-create-cluster
 kind-create-cluster: KIND_ARGS += --config build/kind/kind-config.yaml
-kind-create-cluster:
-	@echo "creating cluster"
-	kind create cluster --name $(KIND_NAME) $(KIND_ARGS)
 
 .PHONY: kind-delete-cluster
 kind-delete-cluster:
@@ -226,9 +225,13 @@ install-crds: manifests
 install-resources:
 	@echo creating namespaces
 	kubectl create ns policy-propagator-test
+	kubectl create ns $(KIND_NAMESPACE)
 	kubectl create ns managed1
 	kubectl create ns managed2
 	kubectl create ns managed3
+	@echo deploying roles and service account
+	kubectl apply -k deploy/rbac -n $(KIND_NAMESPACE)
+	kubectl apply -f deploy/manager/service-account.yaml -n $(KIND_NAMESPACE)
 	@echo creating cluster resources
 	kubectl apply -f test/resources/managed1-cluster.yaml
 	kubectl apply -f test/resources/managed2-cluster.yaml

@@ -30,7 +30,8 @@ var _ = Describe("Test policy propagation", func() {
 			By("Creating " + case7PolicyYaml)
 			utils.Kubectl("apply",
 				"-f", case7PolicyYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			plc := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, case7PolicyName, testNamespace, true, defaultTimeoutSeconds,
 			)
@@ -38,7 +39,8 @@ var _ = Describe("Test policy propagation", func() {
 			By("Creating " + case7BindingYaml1)
 			utils.Kubectl("apply",
 				"-f", case7BindingYaml1,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			binding := utils.GetWithTimeout(
 				clientHubDynamic,
 				gvrPlacementBinding,
@@ -51,7 +53,8 @@ var _ = Describe("Test policy propagation", func() {
 			By("Creating " + case7BindingYaml2)
 			utils.Kubectl("apply",
 				"-f", case7BindingYaml2,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			binding = utils.GetWithTimeout(
 				clientHubDynamic,
 				gvrPlacementBinding,
@@ -64,7 +67,8 @@ var _ = Describe("Test policy propagation", func() {
 			By("Creating " + case7BindingYaml3)
 			utils.Kubectl("apply",
 				"-f", case7BindingYaml3,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			binding = utils.GetWithTimeout(
 				clientHubDynamic,
 				gvrPlacementBinding,
@@ -77,7 +81,8 @@ var _ = Describe("Test policy propagation", func() {
 			By("Creating " + case7BindingYaml4)
 			utils.Kubectl("apply",
 				"-f", case7BindingYaml4,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			binding = utils.GetWithTimeout(
 				clientHubDynamic,
 				gvrPlacementBinding,
@@ -218,21 +223,26 @@ var _ = Describe("Test policy propagation", func() {
 			By("Clean up")
 			utils.Kubectl("delete",
 				"-f", case7PolicyYaml,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			opt := metav1.ListOptions{}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 10)
 			utils.Kubectl("delete",
 				"-f", case7BindingYaml1,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			utils.Kubectl("delete",
 				"-f", case7BindingYaml2,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			utils.Kubectl("delete",
 				"-f", case7BindingYaml3,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 			utils.Kubectl("delete",
 				"-f", case7BindingYaml4,
-				"-n", testNamespace)
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
 		})
 	})
 })

@@ -24,7 +24,8 @@ var _ = Describe("Test metrics appear locally", func() {
 		By("Creating " + case8PolicyYaml)
 		utils.Kubectl("apply",
 			"-f", case8PolicyYaml,
-			"-n", testNamespace)
+			"-n", testNamespace,
+			"--kubeconfig="+kubeconfigHub)
 		plc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, case8PolicyName, testNamespace, true, defaultTimeoutSeconds,
 		)
@@ -123,7 +124,8 @@ var _ = Describe("Test metrics appear locally", func() {
 		By("Deleting the policy")
 		utils.Kubectl("delete",
 			"-f", case8PolicyYaml,
-			"-n", testNamespace)
+			"-n", testNamespace,
+			"--kubeconfig="+kubeconfigHub)
 		opt := metav1.ListOptions{}
 		utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 10)
 		By("Checking metric endpoint for root policy status")

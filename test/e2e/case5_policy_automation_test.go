@@ -93,7 +93,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 		By("Creating " + case5PolicyName + " in user ns")
 		_, err := utils.KubectlWithOutput("apply",
 			"-f", case5PolicyYaml,
-			"-n", testNamespace)
+			"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 		Expect(err).ShouldNot(HaveOccurred())
 		plc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, case5PolicyName, testNamespace, true, defaultTimeoutSeconds,
@@ -121,7 +121,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 	cleanupPolicyAutomation := func() {
 		By("Removing config map")
 		_, err := utils.KubectlWithOutput(
-			"delete", "policyautomation", "-n", testNamespace, automationName,
+			"delete", "policyautomation", "-n", testNamespace, automationName, "--kubeconfig="+kubeconfigHub,
 			"--ignore-not-found",
 		)
 		Expect(err).ShouldNot(HaveOccurred())
@@ -171,7 +171,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			By("Creating an policyAutomation with mode=disable")
 			_, err := utils.KubectlWithOutput("apply",
 				"-f", "../resources/case5_policy_automation/case5-policy-automation-disable.yaml",
-				"-n", testNamespace)
+				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ShouldNot(HaveOccurred())
 			By("Should not create any ansiblejob when mode = disable")
 			Consistently(func() interface{} {
@@ -254,7 +254,8 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					context.TODO(), metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
-				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n", testNamespace)
+				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+					testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				return len(ansiblejobList.Items)
@@ -264,7 +265,8 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					context.TODO(), metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
-				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n", testNamespace)
+				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+					testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 				index := len(ansiblejobList.Items) - 1
 				spec := ansiblejobList.Items[index].Object["spec"]
@@ -332,7 +334,8 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					context.TODO(), metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
-				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n", testNamespace)
+				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+					testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				return len(ansiblejobList.Items)
@@ -370,7 +373,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 
 			By("Removing config map")
 			_, err = utils.KubectlWithOutput(
-				"delete", "policyautomation", "-n", testNamespace, automationName,
+				"delete", "policyautomation", "-n", testNamespace, automationName, "--kubeconfig="+kubeconfigHub,
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 			By("Ansiblejob should also be removed")
@@ -389,7 +392,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			By("Creating an policyAutomation with mode=everyEvent")
 			_, err := utils.KubectlWithOutput("apply",
 				"-f", "../resources/case5_policy_automation/case5-policy-automation-everyEvent.yaml",
-				"-n", testNamespace)
+				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			By("Should not create any new ansiblejob when Compliant")
@@ -438,7 +441,8 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					context.TODO(), metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
-				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n", testNamespace)
+				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+					testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				return len(ansiblejobList.Items)
@@ -449,7 +453,8 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					context.TODO(), metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
-				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n", testNamespace)
+				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+					testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				return len(ansiblejobList.Items)
@@ -555,7 +560,8 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					context.TODO(), metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
-				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n", testNamespace)
+				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+					testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				// This ansiblelistlen is the length created before changed to noncompliant
@@ -571,7 +577,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			By("Creating an policyAutomation with mode=everyEvent")
 			_, err := utils.KubectlWithOutput("apply",
 				"-f", "../resources/case5_policy_automation/case5-policy-automation-everyEvent.yaml",
-				"-n", testNamespace)
+				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			By("Patching everyEvent mode policyAutomation with delayAfterRunSeconds = 240")
@@ -634,7 +640,8 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			By("checking the last AnsibleJob has managed3 in target_clsuter for" +
 				"the first event during delayAfterRunSeconds period")
 			Eventually(func() interface{} {
-				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n", testNamespace)
+				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+					testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				return getLastJobCompliant()
@@ -646,7 +653,8 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 
-				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n", testNamespace)
+				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+					testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 				// Save ansiblelistlen for next test
 				ansiblelistlen = len(ansiblejobList.Items)
@@ -830,7 +838,8 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					context.TODO(), metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
-				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n", testNamespace)
+				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+					testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				return len(ansiblejobList.Items)
@@ -841,7 +850,8 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					context.TODO(), metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
-				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n", testNamespace)
+				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+					testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				return len(ansiblejobList.Items)
@@ -849,7 +859,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 
 			By("Removing config map")
 			_, err = utils.KubectlWithOutput(
-				"delete", "policyautomation", "-n", testNamespace, automationName,
+				"delete", "policyautomation", "-n", testNamespace, automationName, "--kubeconfig="+kubeconfigHub,
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 			By("Ansiblejob should also be removed")
@@ -914,6 +924,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					automationName,
 					"--overwrite",
 					"policy.open-cluster-management.io/rerun=true",
+					"--kubeconfig="+kubeconfigHub,
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
@@ -923,7 +934,8 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 						context.TODO(), metav1.ListOptions{},
 					)
 					Expect(err).ToNot(HaveOccurred())
-					_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n", testNamespace)
+					_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+						testNamespace, "--kubeconfig="+kubeconfigHub)
 					Expect(err).ShouldNot(HaveOccurred())
 
 					return len(ansiblejobList.Items)
@@ -933,7 +945,8 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 						context.TODO(), metav1.ListOptions{},
 					)
 					Expect(err).ShouldNot(HaveOccurred())
-					_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n", testNamespace)
+					_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+						testNamespace, "--kubeconfig="+kubeconfigHub)
 					Expect(err).ShouldNot(HaveOccurred())
 
 					return getTargetListlen(ansiblejobList)
@@ -986,6 +999,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					automationName,
 					"--overwrite",
 					"policy.open-cluster-management.io/rerun=true",
+					"--kubeconfig="+kubeconfigHub,
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 				By("Should still create one more ansiblejob when policy is Compliant")
@@ -994,7 +1008,8 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 						context.TODO(), metav1.ListOptions{},
 					)
 					Expect(err).ToNot(HaveOccurred())
-					_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n", testNamespace)
+					_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+						testNamespace, "--kubeconfig="+kubeconfigHub)
 					Expect(err).ShouldNot(HaveOccurred())
 
 					return len(ansiblejobList.Items)
@@ -1004,7 +1019,8 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 						context.TODO(), metav1.ListOptions{},
 					)
 					Expect(err).ToNot(HaveOccurred())
-					_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n", testNamespace)
+					_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+						testNamespace, "--kubeconfig="+kubeconfigHub)
 					Expect(err).ShouldNot(HaveOccurred())
 
 					return len(ansiblejobList.Items)
@@ -1041,7 +1057,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 				By("Creating an policyAutomation with mode=disable")
 				_, err = utils.KubectlWithOutput("apply",
 					"-f", "../resources/case5_policy_automation/case5-policy-automation-disable.yaml",
-					"-n", testNamespace)
+					"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 			It("Should no issue when policy set to disabled = true ", func() {
@@ -1054,6 +1070,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					automationName,
 					"--overwrite",
 					"policy.open-cluster-management.io/rerun=true",
+					"--kubeconfig="+kubeconfigHub,
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -1089,6 +1106,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					automationName,
 					"--overwrite",
 					"policy.open-cluster-management.io/rerun=true",
+					"--kubeconfig="+kubeconfigHub,
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -1109,7 +1127,8 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 
 	AfterAll(func() {
 		By("Removing policy")
-		_, err := utils.KubectlWithOutput("delete", "policy", "-n", testNamespace, case5PolicyName)
+		_, err := utils.KubectlWithOutput("delete", "policy", "-n",
+			testNamespace, case5PolicyName, "--kubeconfig="+kubeconfigHub)
 		Expect(err).ToNot(HaveOccurred())
 		By("PolicyAutomation should also be removed")
 		Eventually(func() *unstructured.Unstructured {
