@@ -6,6 +6,7 @@ package v1
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"unicode/utf8"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -37,7 +38,8 @@ var _ webhook.Validator = &Policy{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *Policy) ValidateCreate() (admission.Warnings, error) {
-	policylog.Info("Validate policy creation request", "name", r.Name)
+	log := policylog.WithValues("policyName", r.Name, "policyNamespace", r.Namespace)
+	log.V(1).Info("Validate policy creation request")
 
 	err := r.validateName()
 	if err != nil {
@@ -54,7 +56,8 @@ func (r *Policy) ValidateCreate() (admission.Warnings, error) {
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *Policy) ValidateUpdate(_ runtime.Object) (admission.Warnings, error) {
-	policylog.Info("Validate policy update request", "name", r.Name)
+	log := policylog.WithValues("policyName", r.Name, "policyNamespace", r.Namespace)
+	log.V(1).Info("Validate policy update request")
 
 	err := r.validateRemediationAction()
 	if err != nil {
@@ -71,7 +74,8 @@ func (r *Policy) ValidateDelete() (admission.Warnings, error) {
 
 // validate the policy name and namespace length
 func (r *Policy) validateName() error {
-	policylog.Info("Validating the policy name through a validating webhook")
+	log := policylog.WithValues("policyName", r.Name, "policyNamespace", r.Namespace)
+	log.V(1).Info("Validating the policy name through a validating webhook")
 
 	// replicated policies don't need pass this validation
 	if _, ok := r.GetLabels()["policy.open-cluster-management.io/root-policy"]; ok {
@@ -80,6 +84,8 @@ func (r *Policy) validateName() error {
 
 	// 1 character for "."
 	if (utf8.RuneCountInString(r.Name) + utf8.RuneCountInString(r.Namespace)) > 62 {
+		log.Info(fmt.Sprintf("Invalid policy name/namespace: %s", errName.Error()))
+
 		return errName
 	}
 
@@ -88,7 +94,8 @@ func (r *Policy) validateName() error {
 
 // validate the remediationAction field of the root policy and its policy templates
 func (r *Policy) validateRemediationAction() error {
-	policylog.Info("Validating the Policy and ConfigurationPolicy remediationAction through a validating webhook")
+	log := policylog.WithValues("policyName", r.Name, "policyNamespace", r.Namespace)
+	log.V(1).Info("Validating the Policy and ConfigurationPolicy remediationAction through a validating webhook")
 
 	if r.Spec.RemediationAction != "" {
 		return nil
@@ -103,6 +110,8 @@ func (r *Policy) validateRemediationAction() error {
 		if objUnstruct.GroupVersionKind().Kind == "ConfigurationPolicy" {
 			_, found, _ := unstructured.NestedString(objUnstruct.Object, "spec", "remediationAction")
 			if !found {
+				log.Info(fmt.Sprintf("Invalid remediationAction configuration: %s", errRemediation.Error()))
+
 				return errRemediation
 			}
 		}
