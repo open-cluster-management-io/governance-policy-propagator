@@ -257,6 +257,16 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 	}
 
 	var templateResult templates.TemplateResult
+	var cacheCleanUp templates.CacheCleanUpFunc
+
+	defer func() {
+		if cacheCleanUp != nil {
+			err := cacheCleanUp()
+			if err != nil {
+				log.Error(err, "Failed to perform the cache clean up after template resolution")
+			}
+		}
+	}()
 
 	// A policy can have multiple policy templates within it, iterate and process each
 	for _, policyT := range replicatedPlc.Spec.PolicyTemplates {
@@ -329,6 +339,10 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 		templateResult, tplErr = r.TemplateResolver.ResolveTemplate(
 			policyT.ObjectDefinition.Raw, templateContext, &templateResolverOptions,
 		)
+
+		if templateResult.CacheCleanUp != nil {
+			cacheCleanUp = templateResult.CacheCleanUp
+		}
 
 		if tplErr != nil {
 			log.Error(tplErr, "Failed to resolve templates")
@@ -412,13 +426,6 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 
 				policyT.ObjectDefinition.Raw = updatedPolicyT
 			}
-		}
-	}
-
-	if templateResult.CacheCleanUp != nil {
-		err := templateResult.CacheCleanUp()
-		if err != nil {
-			return fmt.Errorf("%w%w", ErrRetryable, err)
 		}
 	}
 

@@ -13,8 +13,8 @@ require (
 	github.com/prometheus/client_golang v1.17.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stolostron/go-log-utils v0.1.2
-	github.com/stolostron/go-template-utils/v4 v4.0.0
-	github.com/stolostron/kubernetes-dependency-watches v0.5.1
+	github.com/stolostron/go-template-utils/v4 v4.0.1-0.20231212190701-4dc096ec1b40
+	github.com/stolostron/kubernetes-dependency-watches v0.5.2-0.20231212185913-628ab39622b8
 	k8s.io/api v0.27.7
 	k8s.io/apimachinery v0.27.7
 	k8s.io/client-go v0.27.7
