@@ -100,6 +100,7 @@ func (r *RootPolicyReconciler) Reconcile(ctx context.Context, request ctrl.Reque
 }
 
 //+kubebuilder:object:root=true
+//+kubebuilder:skip
 
 type GuttedObject struct {
 	metav1.TypeMeta   `json:",inline"`
