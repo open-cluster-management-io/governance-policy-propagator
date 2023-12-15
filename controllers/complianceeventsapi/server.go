@@ -13,10 +13,6 @@ import (
 	"net/http"
 	"sync"
 	"time"
-
-	"github.com/doug-martin/goqu/v9"
-	_ "github.com/doug-martin/goqu/v9/dialect/postgres" // blank import the dialect driver
-	_ "github.com/lib/pq"
 )
 
 var (
@@ -58,13 +54,11 @@ func (s *complianceAPIServer) Start(dbURL string) error {
 		return err
 	}
 
-	goquDB := goqu.New("postgres", db)
-
 	// register handlers here
 	mux.HandleFunc("/api/v1/compliance-events", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
-			postComplianceEvent(goquDB, w, r)
+			postComplianceEvent(db, w, r)
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -102,7 +96,7 @@ func (s *complianceAPIServer) Stop() error {
 	return nil
 }
 
-func postComplianceEvent(goquDB *goqu.Database, w http.ResponseWriter, r *http.Request) {
+func postComplianceEvent(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Error(err, "error reading request body")
@@ -125,7 +119,7 @@ func postComplianceEvent(goquDB *goqu.Database, w http.ResponseWriter, r *http.R
 		return
 	}
 
-	clusterFK, err := getClusterForeignKey(r.Context(), goquDB, reqEvent.Cluster)
+	clusterFK, err := getClusterForeignKey(r.Context(), db, reqEvent.Cluster)
 	if err != nil {
 		log.Error(err, "error getting cluster foreign key")
 		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
@@ -136,7 +130,7 @@ func postComplianceEvent(goquDB *goqu.Database, w http.ResponseWriter, r *http.R
 	reqEvent.Event.ClusterID = clusterFK
 
 	if reqEvent.ParentPolicy != nil {
-		pfk, err := getParentPolicyForeignKey(r.Context(), goquDB, *reqEvent.ParentPolicy)
+		pfk, err := getParentPolicyForeignKey(r.Context(), db, *reqEvent.ParentPolicy)
 		if err != nil {
 			log.Error(err, "error getting parent policy foreign key")
 			writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
@@ -144,10 +138,10 @@ func postComplianceEvent(goquDB *goqu.Database, w http.ResponseWriter, r *http.R
 			return
 		}
 
-		reqEvent.Policy.ParentPolicyID = &pfk
+		reqEvent.Event.ParentPolicyID = &pfk
 	}
 
-	policyFK, err := getPolicyForeignKey(r.Context(), goquDB, reqEvent.Policy)
+	policyFK, err := getPolicyForeignKey(r.Context(), db, reqEvent.Policy)
 	if err != nil {
 		if errors.Is(err, errRequiredFieldNotProvided) {
 			writeErrMsgJSON(w, err.Error(), http.StatusBadRequest)
@@ -163,9 +157,7 @@ func postComplianceEvent(goquDB *goqu.Database, w http.ResponseWriter, r *http.R
 
 	reqEvent.Event.PolicyID = policyFK
 
-	insert := goquDB.Insert("compliance_events").Rows(reqEvent.Event).Executor()
-
-	_, err = insert.Exec()
+	err = reqEvent.Create(r.Context(), db)
 	if err != nil {
 		log.Error(err, "error inserting compliance event")
 		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
@@ -174,7 +166,7 @@ func postComplianceEvent(goquDB *goqu.Database, w http.ResponseWriter, r *http.R
 	}
 
 	// remove the spec to only respond with the specHash
-	reqEvent.Policy.Spec = nil
+	reqEvent.Policy.Spec = ""
 
 	resp, err := json.Marshal(reqEvent)
 	if err != nil {
@@ -191,43 +183,24 @@ func postComplianceEvent(goquDB *goqu.Database, w http.ResponseWriter, r *http.R
 	}
 }
 
-func getClusterForeignKey(ctx context.Context, goquDB *goqu.Database, cluster Cluster) (int, error) {
+func getClusterForeignKey(ctx context.Context, db *sql.DB, cluster Cluster) (int, error) {
 	// Check cache
 	key, ok := clusterKeyCache.Load(cluster.ClusterID)
 	if ok {
 		return key.(int), nil
 	}
 
-	foundCluster := new(Cluster)
-
-	found, err := goquDB.From("clusters").
-		Where(goqu.Ex{"cluster_id": cluster.ClusterID}).
-		ScanStructContext(ctx, foundCluster)
+	err := cluster.GetOrCreate(ctx, db)
 	if err != nil {
 		return 0, err
 	}
 
-	// If the row already exists
-	if found {
-		clusterKeyCache.Store(cluster.ClusterID, foundCluster.KeyID)
+	clusterKeyCache.Store(cluster.ClusterID, cluster.KeyID)
 
-		return foundCluster.KeyID, nil
-	}
-
-	// Otherwise, create a new row in the table
-	insert := goquDB.Insert("clusters").Returning("id").Rows(cluster).Executor()
-
-	id := new(int)
-	if _, err := insert.ScanValContext(ctx, id); err != nil {
-		return 0, err
-	}
-
-	clusterKeyCache.Store(cluster.ClusterID, *id)
-
-	return *id, nil
+	return cluster.KeyID, nil
 }
 
-func getParentPolicyForeignKey(ctx context.Context, goquDB *goqu.Database, parent ParentPolicy) (int, error) {
+func getParentPolicyForeignKey(ctx context.Context, db *sql.DB, parent ParentPolicy) (int, error) {
 	// Check cache
 	parKey := parent.key()
 
@@ -236,51 +209,26 @@ func getParentPolicyForeignKey(ctx context.Context, goquDB *goqu.Database, paren
 		return key.(int), nil
 	}
 
-	foundParent := new(ParentPolicy)
-
-	qu := goquDB.From("parent_policies").Where(goqu.Ex{
-		"name":       parent.Name,
-		"categories": goqu.L("?::text[]", parent.Categories),
-		"controls":   goqu.L("?::text[]", parent.Controls),
-		"standards":  goqu.L("?::text[]", parent.Standards),
-	})
-
-	found, err := qu.ScanStructContext(ctx, foundParent)
+	err := parent.GetOrCreate(ctx, db)
 	if err != nil {
 		return 0, err
 	}
 
-	// If the row already exists
-	if found {
-		parentPolicyKeyCache.Store(parKey, foundParent.KeyID)
+	parentPolicyKeyCache.Store(parKey, parent.KeyID)
 
-		return foundParent.KeyID, nil
-	}
-
-	// Otherwise, create a new row in the table
-	insert := goquDB.Insert("parent_policies").Returning("id").Rows(parent).Executor()
-
-	id := new(int)
-	if _, err := insert.ScanValContext(ctx, id); err != nil {
-		return 0, err
-	}
-
-	parentPolicyKeyCache.Store(parKey, *id)
-
-	return *id, nil
+	return parent.KeyID, nil
 }
 
-func getPolicyForeignKey(ctx context.Context, goquDB *goqu.Database, pol Policy) (int, error) {
+func getPolicyForeignKey(ctx context.Context, db *sql.DB, pol Policy) (int, error) {
 	// Fill in missing fields that can be inferred from other fields
-	if pol.SpecHash == nil {
+	if pol.SpecHash == "" {
 		var buf bytes.Buffer
-		if err := json.Compact(&buf, []byte(*pol.Spec)); err != nil {
+		if err := json.Compact(&buf, []byte(pol.Spec)); err != nil {
 			return 0, err // This kind of error would have been found during validation
 		}
 
 		sum := sha1.Sum(buf.Bytes()) // #nosec G401 -- for convenience, not cryptography
-		hash := hex.EncodeToString(sum[:])
-		pol.SpecHash = &hash
+		pol.SpecHash = hex.EncodeToString(sum[:])
 	}
 
 	// Check cache
@@ -291,46 +239,37 @@ func getPolicyForeignKey(ctx context.Context, goquDB *goqu.Database, pol Policy)
 		return key.(int), nil
 	}
 
-	foundPolicy := new(Policy)
+	if pol.Spec == "" {
+		row := db.QueryRowContext(
+			ctx, fmt.Sprintf("SELECT spec FROM %s WHERE spec_hash = $1 LIMIT 1", policyTableName), pol.SpecHash,
+		)
+		if row.Err() != nil {
+			return 0, fmt.Errorf("could not determine the spec from the provided spec hash: %w", row.Err())
+		}
 
-	qu := goquDB.From("policies").Where(goqu.Ex{
-		"kind":             pol.Kind,
-		"api_group":        pol.APIGroup,
-		"name":             pol.Name,
-		"spec_hash":        pol.SpecHash,
-		"namespace":        pol.Namespace,
-		"parent_policy_id": pol.ParentPolicyID,
-		"severity":         pol.Severity,
-	})
+		err := row.Scan(&pol.Spec)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return 0, fmt.Errorf(
+					"%w: could not determine the spec from the provided spec hash; the spec is required in the request",
+					errRequiredFieldNotProvided,
+				)
+			}
 
-	found, err := qu.ScanStructContext(ctx, foundPolicy)
+			return 0, fmt.Errorf(
+				"the database returned an unexpected spec value for the provided spec hash: %w", err,
+			)
+		}
+	}
+
+	err := pol.GetOrCreate(ctx, db)
 	if err != nil {
 		return 0, err
 	}
 
-	// If the row already exists
-	if found {
-		policyKeyCache.Store(polKey, foundPolicy.KeyID)
+	policyKeyCache.Store(polKey, pol.KeyID)
 
-		return foundPolicy.KeyID, nil
-	}
-
-	// When creating a new row, `spec` is required
-	if pol.Spec == nil {
-		return 0, fmt.Errorf("%w: policy.spec is not optional for new policies", errRequiredFieldNotProvided)
-	}
-
-	// Otherwise, create a new row in the table
-	insert := goquDB.Insert("policies").Returning("id").Rows(pol).Executor()
-
-	id := new(int)
-	if _, err := insert.ScanValContext(ctx, id); err != nil {
-		return 0, err
-	}
-
-	policyKeyCache.Store(polKey, *id)
-
-	return *id, nil
+	return pol.KeyID, nil
 }
 
 type errorMessage struct {

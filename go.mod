@@ -3,7 +3,6 @@ module open-cluster-management.io/governance-policy-propagator
 go 1.20
 
 require (
-	github.com/doug-martin/goqu/v9 v9.18.0
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/go-logr/zapr v1.2.4
 	github.com/golang-migrate/migrate/v4 v4.16.2
@@ -20,6 +19,7 @@ require (
 	k8s.io/apimachinery v0.27.7
 	k8s.io/client-go v0.27.7
 	k8s.io/klog/v2 v2.100.1
+	k8s.io/utils v0.0.0-20230726121419-3b25d923346b
 	open-cluster-management.io/api v0.12.0
 	open-cluster-management.io/multicloud-operators-subscription v0.12.0
 	sigs.k8s.io/controller-runtime v0.15.2
@@ -89,7 +89,6 @@ require (
 	k8s.io/component-base v0.27.7 // indirect
 	k8s.io/klog v1.0.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20231010175941-2dd684a91f00 // indirect
-	k8s.io/utils v0.0.0-20230726121419-3b25d923346b // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.3.0 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect

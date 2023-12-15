@@ -15,6 +15,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/client-go/rest"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"open-cluster-management.io/governance-policy-propagator/controllers/complianceeventsapi"
 )
@@ -85,6 +86,8 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 
 		mgrCtx, mgrCancel := context.WithCancel(context.Background())
 
+		ctrllog.SetLogger(GinkgoLogr)
+
 		err = complianceeventsapi.StartManager(mgrCtx, k8sConfig, false, "localhost:5480")
 		DeferCleanup(func() {
 			mgrCancel()
@@ -119,7 +122,8 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 					"cluster_id": "test1-cluster1-fake-uuid-1"
 				},
 				"parent_policy": {
-					"name": "policies.etcd-encryption1",
+					"name": "etcd-encryption1",
+					"namespace": "policies",
 					"categories": ["cat-1", "cat-2"],
 					"controls": ["ctrl-1"],
 					"standards": ["stand-1"]
@@ -169,20 +173,23 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 			})
 
 			It("Should have created the parent policy in a table", func() {
-				rows, err := db.Query("SELECT * FROM parent_policies WHERE name = $1", "policies.etcd-encryption1")
+				rows, err := db.Query(
+					"SELECT * FROM parent_policies WHERE name = $1 AND namespace= $2", "etcd-encryption1", "policies",
+				)
 				Expect(err).ToNot(HaveOccurred())
 
 				count := 0
 				for rows.Next() {
 					var (
-						id     int
-						name   string
-						cats   pq.StringArray
-						ctrls  pq.StringArray
-						stands pq.StringArray
+						id        int
+						name      string
+						namespace string
+						cats      pq.StringArray
+						ctrls     pq.StringArray
+						stands    pq.StringArray
 					)
 
-					err := rows.Scan(&id, &name, &cats, &ctrls, &stands)
+					err := rows.Scan(&id, &name, &namespace, &cats, &ctrls, &stands)
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).NotTo(Equal(0))
@@ -207,13 +214,12 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						apiGroup string
 						name     string
 						ns       *string
-						pid      *int
 						spec     *string
 						specHash *string
 						severity *string
 					)
 
-					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &pid, &spec, &specHash, &severity)
+					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &spec, &specHash, &severity)
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).NotTo(Equal(0))
@@ -221,8 +227,6 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 					Expect(apiGroup).To(Equal("policy.open-cluster-management.io"))
 					Expect(ns).ToNot(BeNil())
 					Expect(*ns).To(Equal("local-cluster"))
-					Expect(pid).ToNot(BeNil())
-					Expect(*pid).ToNot(Equal(0))
 					Expect(spec).ToNot(BeNil())
 					Expect(*spec).To(Equal(`{"test":"one","severity":"low"}`))
 					Expect(specHash).ToNot(BeNil())
@@ -244,23 +248,26 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 				count := 0
 				for rows.Next() {
 					var (
-						id         int
-						clusterID  int
-						policyID   int
-						compliance string
-						message    string
-						timestamp  string
-						metadata   complianceeventsapi.JSONMap
-						reportedBy *string
+						id             int
+						clusterID      int
+						policyID       int
+						parentPolicyID *int
+						compliance     string
+						message        string
+						timestamp      string
+						metadata       complianceeventsapi.JSONMap
+						reportedBy     *string
 					)
 
-					err := rows.Scan(&id, &clusterID, &policyID, &compliance, &message, &timestamp,
+					err := rows.Scan(&id, &clusterID, &policyID, &parentPolicyID, &compliance, &message, &timestamp,
 						&metadata, &reportedBy)
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).NotTo(Equal(0))
 					Expect(clusterID).NotTo(Equal(0))
 					Expect(policyID).NotTo(Equal(0))
+					Expect(parentPolicyID).NotTo(BeNil())
+					Expect(*parentPolicyID).NotTo(Equal(0))
 					Expect(compliance).To(Equal("NonCompliant"))
 					Expect(message).To(Equal("configmaps [etcd] not found in namespace default"))
 					Expect(timestamp).To(Equal("2023-01-01T01:01:01.111Z"))
@@ -351,13 +358,12 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						apiGroup string
 						name     string
 						ns       *string
-						pid      *int
 						spec     *string
 						specHash *string
 						severity *string
 					)
 
-					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &pid, &spec, &specHash, &severity)
+					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &spec, &specHash, &severity)
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).NotTo(Equal(0))
@@ -379,23 +385,25 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 				messages := make([]string, 0)
 				for rows.Next() {
 					var (
-						id         int
-						clusterID  int
-						policyID   int
-						compliance string
-						message    string
-						timestamp  string
-						metadata   *string
-						reportedBy *string
+						id             int
+						clusterID      int
+						policyID       int
+						parentPolicyID *int
+						compliance     string
+						message        string
+						timestamp      string
+						metadata       *string
+						reportedBy     *string
 					)
 
-					err := rows.Scan(&id, &clusterID, &policyID, &compliance, &message, &timestamp,
+					err := rows.Scan(&id, &clusterID, &policyID, &parentPolicyID, &compliance, &message, &timestamp,
 						&metadata, &reportedBy)
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).NotTo(Equal(0))
 					Expect(clusterID).NotTo(Equal(0))
 					Expect(policyID).NotTo(Equal(0))
+					Expect(parentPolicyID).To(BeNil())
 
 					messages = append(messages, message)
 				}
@@ -415,7 +423,8 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 					"cluster_id": "test3-cluster4-fake-uuid-4"
 				},
 				"parent_policy": {
-					"name": "policies.common-parent",
+					"name": "common-parent",
+					"namespace": "policies",
 					"categories": ["cat-3", "cat-4"],
 					"controls": ["ctrl-2"],
 					"standards": ["stand-2"]
@@ -441,7 +450,8 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 					"cluster_id": "test3-cluster4-fake-uuid-4"
 				},
 				"parent_policy": {
-					"name": "policies.common-parent",
+					"name": "common-parent",
+					"namespace": "policies",
 					"categories": ["cat-3", "cat-4"],
 					"controls": ["ctrl-2"],
 					"standards": ["stand-2"]
@@ -488,20 +498,23 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 			})
 
 			It("Should have only created one parent policy in a table", func() {
-				rows, err := db.Query("SELECT * FROM parent_policies WHERE name = $1", "policies.common-parent")
+				rows, err := db.Query(
+					"SELECT * FROM parent_policies WHERE name = $1 AND namespace = $2", "common-parent", "policies",
+				)
 				Expect(err).ToNot(HaveOccurred())
 
 				count := 0
 				for rows.Next() {
 					var (
-						id     int
-						name   string
-						cats   pq.StringArray
-						ctrls  pq.StringArray
-						stands pq.StringArray
+						id        int
+						name      string
+						namespace string
+						cats      pq.StringArray
+						ctrls     pq.StringArray
+						stands    pq.StringArray
 					)
 
-					err := rows.Scan(&id, &name, &cats, &ctrls, &stands)
+					err := rows.Scan(&id, &name, &namespace, &cats, &ctrls, &stands)
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).NotTo(Equal(0))
@@ -523,13 +536,12 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						apiGroup string
 						name     string
 						ns       *string
-						pid      *int
 						spec     *string
 						specHash *string
 						severity *string
 					)
 
-					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &pid, &spec, &specHash, &severity)
+					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &spec, &specHash, &severity)
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).NotTo(Equal(0))
@@ -550,23 +562,26 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 				timestamps := make([]string, 0)
 				for rows.Next() {
 					var (
-						id         int
-						clusterID  int
-						policyID   int
-						compliance string
-						message    string
-						timestamp  string
-						metadata   *string
-						reportedBy *string
+						id             int
+						clusterID      int
+						policyID       int
+						parentPolicyID *int
+						compliance     string
+						message        string
+						timestamp      string
+						metadata       *string
+						reportedBy     *string
 					)
 
-					err := rows.Scan(&id, &clusterID, &policyID, &compliance, &message, &timestamp,
+					err := rows.Scan(&id, &clusterID, &policyID, &parentPolicyID, &compliance, &message, &timestamp,
 						&metadata, &reportedBy)
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).NotTo(Equal(0))
 					Expect(clusterID).NotTo(Equal(0))
 					Expect(policyID).NotTo(Equal(0))
+					Expect(parentPolicyID).NotTo(BeNil())
+					Expect(*parentPolicyID).NotTo(Equal(0))
 
 					timestamps = append(timestamps, timestamp)
 				}
@@ -586,7 +601,8 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 					"cluster_id": "test5-cluster5-fake-uuid-5"
 				},
 				"parent_policy": {
-					"name": "policies.parent-a",
+					"name": "parent-a",
+					"namespace": "policies",
 					"standards": ["stand-3"]
 				},
 				"policy": {
@@ -611,7 +627,8 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 					"cluster_id": "test5-cluster5-fake-uuid-5"
 				},
 				"parent_policy": {
-					"name": "policies.parent-a"
+					"name": "parent-a",
+					"namespace": "policies"
 				},
 				"policy": {
 					"apiGroup": "policy.open-cluster-management.io",
@@ -635,7 +652,8 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 					"cluster_id": "test5-cluster5-fake-uuid-5"
 				},
 				"parent_policy": {
-					"name": "policies.parent-a",
+					"name": "parent-a",
+					"namespace": "policies",
 					"standards": []
 				},
 				"policy": {
@@ -660,20 +678,23 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 			})
 
 			It("Should have created two parent policies", func() {
-				rows, err := db.Query("SELECT * FROM parent_policies WHERE name = $1", "policies.parent-a")
+				rows, err := db.Query(
+					"SELECT * FROM parent_policies WHERE name = $1 AND namespace = $2", "parent-a", "policies",
+				)
 				Expect(err).ToNot(HaveOccurred())
 
 				standardArrays := make([]pq.StringArray, 0)
 				for rows.Next() {
 					var (
-						id     int
-						name   string
-						cats   pq.StringArray
-						ctrls  pq.StringArray
-						stands pq.StringArray
+						id        int
+						name      string
+						namespace string
+						cats      pq.StringArray
+						ctrls     pq.StringArray
+						stands    pq.StringArray
 					)
 
-					err := rows.Scan(&id, &name, &cats, &ctrls, &stands)
+					err := rows.Scan(&id, &name, &namespace, &cats, &ctrls, &stands)
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).NotTo(Equal(0))
@@ -686,14 +707,11 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 				))
 			})
 
-			It("Should have created two policies in a table, with different parents", func() {
+			It("Should have created a single policy", func() {
 				rows, err := db.Query("SELECT * FROM policies WHERE name = $1", "common-a")
 				Expect(err).ToNot(HaveOccurred())
 
 				ids := make([]int, 0)
-				names := make([]string, 0)
-				pids := make([]int, 0)
-				hashes := make([]string, 0)
 				for rows.Next() {
 					var (
 						id       int
@@ -701,28 +719,20 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						apiGroup string
 						name     string
 						ns       *string
-						pid      *int
 						spec     *string
 						specHash string
 						severity *string
 					)
 
-					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &pid, &spec, &specHash, &severity)
+					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &spec, &specHash, &severity)
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).NotTo(Equal(0))
 					Expect(specHash).ToNot(BeNil())
 					ids = append(ids, id)
-					names = append(names, name)
-					pids = append(pids, *pid)
-					hashes = append(hashes, specHash)
 				}
 
-				Expect(ids).To(HaveLen(2))
-				Expect(ids[0]).ToNot(Equal(ids[1]))
-				Expect(names[0]).To(Equal(names[1]))
-				Expect(pids[0]).ToNot(Equal(pids[1]))
-				Expect(hashes[0]).To(Equal(hashes[1]))
+				Expect(ids).To(HaveLen(1))
 			})
 		})
 
@@ -734,7 +744,8 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 					"cluster_id": "test6-cluster6-fake-uuid-6"
 				},
 				"parent_policy": {
-					"name": "policies.parent-b"
+					"name": "parent-b",
+					"namespace": "policies"
 				},
 				"policy": {
 					"apiGroup": "policy.open-cluster-management.io",
@@ -758,7 +769,8 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 					"cluster_id": "test6-cluster6-fake-uuid-6"
 				},
 				"parent_policy": {
-					"name": "policies.parent-b"
+					"name": "parent-b",
+					"namespace": "policies"
 				},
 				"policy": {
 					"apiGroup": "policy.open-cluster-management.io",
@@ -781,20 +793,23 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 			})
 
 			It("Should have created one parent policy", func() {
-				rows, err := db.Query("SELECT * FROM parent_policies WHERE name = $1", "policies.parent-b")
+				rows, err := db.Query(
+					"SELECT * FROM parent_policies WHERE name = $1 AND namespace = $2", "parent-b", "policies",
+				)
 				Expect(err).ToNot(HaveOccurred())
 
 				count := 0
 				for rows.Next() {
 					var (
-						id     int
-						name   string
-						cats   pq.StringArray
-						ctrls  pq.StringArray
-						stands pq.StringArray
+						id        int
+						name      string
+						namespace string
+						cats      pq.StringArray
+						ctrls     pq.StringArray
+						stands    pq.StringArray
 					)
 
-					err := rows.Scan(&id, &name, &cats, &ctrls, &stands)
+					err := rows.Scan(&id, &name, &namespace, &cats, &ctrls, &stands)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(id).NotTo(Equal(0))
 					count++
@@ -810,7 +825,6 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 				ids := make([]int, 0)
 				names := make([]string, 0)
 				namespaces := make([]string, 0)
-				pids := make([]int, 0)
 				hashes := make([]string, 0)
 				for rows.Next() {
 					var (
@@ -819,20 +833,18 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						apiGroup string
 						name     string
 						ns       *string
-						pid      *int
 						spec     *string
 						specHash string
 						severity *string
 					)
 
-					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &pid, &spec, &specHash, &severity)
+					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &spec, &specHash, &severity)
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).NotTo(Equal(0))
 					Expect(specHash).ToNot(BeNil())
 					ids = append(ids, id)
 					names = append(names, name)
-					pids = append(pids, *pid)
 					hashes = append(hashes, specHash)
 
 					if ns != nil {
@@ -844,7 +856,6 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 				Expect(ids[0]).ToNot(Equal(ids[1]))
 				Expect(names[0]).To(Equal(names[1]))
 				Expect(namespaces).To(ConsistOf("default"))
-				Expect(pids[0]).To(Equal(pids[1]))
 				Expect(hashes[0]).To(Equal(hashes[1]))
 			})
 		})
@@ -852,6 +863,30 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 		Describe("POST invalid events", func() {
 			It("should require the cluster to be specified", func(ctx context.Context) {
 				Eventually(postEvent(ctx, []byte(`{
+					"parent_policy": {
+						"name": "validity-parent",
+						"namespace": "policies"
+					},
+					"policy": {
+						"apiGroup": "policy.open-cluster-management.io",
+						"kind": "ConfigurationPolicy",
+						"name": "validity",
+						"spec": "{\"test\":\"validity\",\"severity\":\"low\"}"
+					},
+					"event": {
+						"compliance": "Compliant",
+						"message": "configmaps [valid] valid in namespace valid",
+						"timestamp": "2023-09-09T09:09:09.999Z"
+					}
+				}`)), "5s", "1s").Should(MatchError(ContainSubstring("Got non-201 status code 400")))
+			})
+
+			It("should require the parent policy namespace to be specified", func(ctx context.Context) {
+				Eventually(postEvent(ctx, []byte(`{
+					"cluster": {
+						"name": "validity-test",
+						"cluster_id": "test-validity-fake-uuid"
+					},
 					"parent_policy": {
 						"name": "validity-parent"
 					},
@@ -877,7 +912,8 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						"cluster_id": "test-validity-fake-uuid"
 					},
 					"parent_policy": {
-						"name": "validity-parent"
+						"name": "validity-parent",
+						"namespace": "policies"
 					},
 					"policy": {
 						"apiGroup": "policy.open-cluster-management.io",
@@ -900,7 +936,8 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						"cluster_id": "test-validity-fake-uuid"
 					},
 					"parent_policy": {
-						"name": "validity-parent"
+						"name": "validity-parent",
+						"namespace": "policies"
 					},
 					"policy": {
 						"apiGroup": "policy.open-cluster-management.io",
@@ -926,7 +963,8 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						"cluster_id": "test-validity-fake-uuid"
 					},
 					"parent_policy": {
-						"name": "validity-parent"
+						"name": "validity-parent",
+						"namespace": "policies"
 					},
 					"policy": {
 						"apiGroup": "policy.open-cluster-management.io",
@@ -951,7 +989,8 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						"cluster_id": "test-validity-fake-uuid"
 					},
 					"parent_policy": {
-						"name": "validity-parent"
+						"name": "validity-parent",
+						"namespace": "policies"
 					},
 					"policy": {
 						"apiGroup": "policy.open-cluster-management.io",
@@ -964,7 +1003,9 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						"message": "configmaps [valid] valid in namespace valid",
 						"timestamp": "2023-09-09T09:09:09.999Z"
 					}
-				}`)), "5s", "1s").Should(MatchError(ContainSubstring("policy.spec is not optional for new policies")))
+				}`)), "5s", "1s").Should(MatchError(ContainSubstring(
+					"could not determine the spec from the provided spec hash; the spec is required in the request",
+				)))
 			})
 		})
 	})
