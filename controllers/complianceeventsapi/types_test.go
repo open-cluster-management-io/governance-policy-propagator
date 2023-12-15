@@ -72,8 +72,12 @@ func TestParentPolicyValidation(t *testing.T) {
 		errMsg string
 	}{
 		"no name": {
-			ParentPolicy{Categories: []string{"hello"}},
+			ParentPolicy{Namespace: "policies", Categories: []string{"hello"}},
 			"field not provided: parent_policy.name",
+		},
+		"no namespace": {
+			ParentPolicy{Name: "my-policy", Categories: []string{"hello"}},
+			"field not provided: parent_policy.namespace",
 		},
 	}
 
@@ -106,8 +110,8 @@ func TestPolicyValidation(t *testing.T) {
 			Policy{
 				Kind:     "policy",
 				APIGroup: "v1",
-				Spec:     &basespec,
-				SpecHash: &basehash,
+				Spec:     basespec,
+				SpecHash: basehash,
 			},
 			"field not provided: policy.name",
 		},
@@ -115,8 +119,8 @@ func TestPolicyValidation(t *testing.T) {
 			Policy{
 				Kind:     "policy",
 				Name:     "foobar",
-				Spec:     &basespec,
-				SpecHash: &basehash,
+				Spec:     basespec,
+				SpecHash: basehash,
 			},
 			"field not provided: policy.apiGroup",
 		},
@@ -124,8 +128,8 @@ func TestPolicyValidation(t *testing.T) {
 			Policy{
 				APIGroup: "v1",
 				Name:     "foobar",
-				Spec:     &basespec,
-				SpecHash: &basehash,
+				Spec:     basespec,
+				SpecHash: basehash,
 			},
 			"field not provided: policy.kind",
 		},
@@ -142,7 +146,7 @@ func TestPolicyValidation(t *testing.T) {
 				Kind:     "policy",
 				APIGroup: "v1",
 				Name:     "foobar",
-				Spec:     &badspec,
+				Spec:     badspec,
 			},
 			"policy.spec is not valid JSON",
 		},
@@ -151,7 +155,7 @@ func TestPolicyValidation(t *testing.T) {
 				Kind:     "policy",
 				APIGroup: "v1",
 				Name:     "foobar",
-				Spec:     &noncompactspec,
+				Spec:     noncompactspec,
 			},
 			"policy.spec is not compact JSON",
 		},
@@ -160,8 +164,8 @@ func TestPolicyValidation(t *testing.T) {
 				Kind:     "policy",
 				APIGroup: "v1",
 				Name:     "foobar",
-				Spec:     &basespec,
-				SpecHash: &badhash,
+				Spec:     basespec,
+				SpecHash: badhash,
 			},
 			"policy.specHash does not match the compact policy.Spec",
 		},
