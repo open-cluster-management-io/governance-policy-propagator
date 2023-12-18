@@ -68,6 +68,10 @@ spec:
             - ssl_key_file=/var/lib/postgresql/tls/tls.key
             - -c
             - ssl_ca_file=/var/lib/postgresql/tls/ca.crt
+            - -c
+            - log_statement=all
+            - -c
+            - log_destination=stderr
           # This is a mirror of postgres:13 on Docker Hub to avoid rate limits.
           image: quay.io/stolostron/grc-ci-postgres:13
           imagePullPolicy: "IfNotPresent"
