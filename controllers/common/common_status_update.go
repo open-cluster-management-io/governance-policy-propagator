@@ -151,7 +151,7 @@ func GetPolicyPlacementDecisions(ctx context.Context, c client.Client,
 	return decisions, placements, err
 }
 
-type DecisionSet map[appsv1.PlacementDecision]bool
+type DecisionSet map[string]bool
 
 // GetClusterDecisions identifies all managed clusters which should have a replicated policy using the root policy
 // This returns unique decisions and placements that are NOT under Restricted subset.
@@ -166,7 +166,7 @@ func GetClusterDecisions(
 	[]*policiesv1.Placement, DecisionSet, error,
 ) {
 	log := log.WithValues("policyName", rootPolicy.GetName(), "policyNamespace", rootPolicy.GetNamespace())
-	decisions := make(map[appsv1.PlacementDecision]bool)
+	decisions := make(map[string]bool)
 
 	pbList := &policiesv1.PlacementBindingList{}
 
@@ -197,7 +197,7 @@ func GetClusterDecisions(
 
 		// Decisions are all unique
 		for _, plcDecision := range plcDecisions {
-			decisions[plcDecision] = true
+			decisions[plcDecision.ClusterName] = true
 		}
 
 		placements = append(placements, plcPlacements...)
@@ -223,11 +223,11 @@ func GetClusterDecisions(
 
 		// Decisions are all unique
 		for _, plcDecision := range plcDecisions {
-			if _, ok := decisions[plcDecision]; ok {
+			if _, ok := decisions[plcDecision.ClusterName]; ok {
 				foundInDecisions = true
 			}
 
-			decisions[plcDecision] = true
+			decisions[plcDecision.ClusterName] = true
 		}
 
 		if foundInDecisions {
@@ -268,15 +268,15 @@ func CalculatePerClusterStatus(
 	for dec := range decisions {
 		replicatedPolicy := &policiesv1.Policy{}
 		key := types.NamespacedName{
-			Namespace: dec.ClusterNamespace, Name: rootPolicy.Namespace + "." + rootPolicy.Name,
+			Namespace: dec, Name: rootPolicy.Namespace + "." + rootPolicy.Name,
 		}
 
 		err := c.Get(ctx, key, replicatedPolicy)
 		if err != nil {
 			if k8serrors.IsNotFound(err) {
 				status = append(status, &policiesv1.CompliancePerClusterStatus{
-					ClusterName:      dec.ClusterName,
-					ClusterNamespace: dec.ClusterNamespace,
+					ClusterName:      dec,
+					ClusterNamespace: dec,
 				})
 
 				continue
@@ -287,8 +287,8 @@ func CalculatePerClusterStatus(
 
 		status = append(status, &policiesv1.CompliancePerClusterStatus{
 			ComplianceState:  replicatedPolicy.Status.ComplianceState,
-			ClusterName:      dec.ClusterName,
-			ClusterNamespace: dec.ClusterNamespace,
+			ClusterName:      dec,
+			ClusterNamespace: dec,
 		})
 	}
 

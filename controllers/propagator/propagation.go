@@ -62,11 +62,7 @@ func (r *RootPolicyReconciler) cleanUpOrphanedRplPolicies(
 	log := log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
 
 	for _, cluster := range originalCPCS {
-		key := appsv1.PlacementDecision{
-			ClusterName:      cluster.ClusterNamespace,
-			ClusterNamespace: cluster.ClusterNamespace,
-		}
-		if allDecisions[key] {
+		if allDecisions[cluster.ClusterName] {
 			continue
 		}
 
@@ -78,7 +74,7 @@ func (r *RootPolicyReconciler) cleanUpOrphanedRplPolicies(
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      common.FullNameForPolicy(instance),
-				Namespace: cluster.ClusterNamespace,
+				Namespace: cluster.ClusterName,
 			},
 		}
 
@@ -138,7 +134,7 @@ func (r *RootPolicyReconciler) handleRootPolicy(ctx context.Context, instance *p
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      common.FullNameForPolicy(instance),
-				Namespace: decision.ClusterNamespace,
+				Namespace: decision,
 			},
 		}
 
