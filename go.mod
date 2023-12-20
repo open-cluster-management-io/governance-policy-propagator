@@ -3,6 +3,7 @@ module open-cluster-management.io/governance-policy-propagator
 go 1.20
 
 require (
+	github.com/doug-martin/goqu/v9 v9.18.0
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/go-logr/zapr v1.2.4
 	github.com/golang-migrate/migrate/v4 v4.16.2

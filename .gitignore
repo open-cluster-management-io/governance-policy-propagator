@@ -97,4 +97,5 @@ gosec.json
 vendor/
 bin
 testbin/*
-kubeconfig_*
+
+kubeconfig*

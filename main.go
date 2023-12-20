@@ -7,6 +7,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"runtime"
 	"strconv"
@@ -101,6 +102,8 @@ func main() {
 		replPolicyMaxConcurrency    uint
 		enableComplianceEventsStore bool
 		enableWebhooks              bool
+		eventHistoryAPIHost         string
+		eventHistoryAPIPort         string
 	)
 
 	pflag.StringVar(&metricsAddr, "metrics-bind-address", ":8383", "The address the metric endpoint binds to.")
@@ -147,6 +150,14 @@ func main() {
 		"replicated-policy-max-concurrency",
 		10,
 		"The maximum number of concurrent reconciles for the replicated-policy controller",
+	)
+	pflag.StringVar(
+		&eventHistoryAPIHost, "event-history-api-host", "localhost",
+		"The hostname that the event history API will listen on",
+	)
+	pflag.StringVar(
+		&eventHistoryAPIPort, "event-history-api-port", "5480",
+		"The port that the event history API will listen on",
 	)
 
 	pflag.Parse()
@@ -427,8 +438,10 @@ func main() {
 
 	log.Info("Starting manager")
 
+	historyAPIAddr := net.JoinHostPort(eventHistoryAPIHost, eventHistoryAPIPort)
+
 	if enableComplianceEventsStore {
-		err = complianceeventsapi.StartManager(controllerCtx, cfg, enableLeaderElection)
+		err = complianceeventsapi.StartManager(controllerCtx, cfg, enableLeaderElection, historyAPIAddr)
 		if err != nil {
 			log.Error(err, "Ignoring since this is technical preview")
 		}

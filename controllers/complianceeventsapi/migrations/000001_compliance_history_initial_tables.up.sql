@@ -39,9 +39,9 @@ CREATE TABLE IF NOT EXISTS policies(
    name TEXT NOT NULL,
    namespace TEXT,
    parent_policy_id INT,
-   spec TEXT,
+   spec TEXT NOT NULL,
    -- SHA1 hash
-   spec_hash CHAR[40],
+   spec_hash CHAR(40) NOT NULL,
    severity TEXT,
    CONSTRAINT fk_parent_policy_id
       FOREIGN KEY(parent_policy_id) 
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS compliance_events(
    compliance TEXT NOT NULL,
    message TEXT NOT NULL,
    timestamp TIMESTAMP NOT NULL,
-   metadata TEXT,
+   metadata JSONB,
    reported_by TEXT,
    CONSTRAINT fk_policy_id
       FOREIGN KEY(policy_id) 
