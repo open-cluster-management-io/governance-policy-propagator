@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -77,7 +78,11 @@ type ComplianceEventsAPIReconciler struct {
 	Scheme *k8sruntime.Scheme
 	// TempDir is used for temporary files such as a custom CA to use to verify the Postgres TLS connection. The
 	// caller is responsible for cleaning it up after the controller stops.
-	TempDir       string
+	TempDir string
+
+	// compAPIServer is the http server used to accept requests from other clients and pass them on to Postgres
+	compAPIServer complianceAPIServer
+
 	connectionURL string
 }
 
@@ -103,7 +108,7 @@ func (r *ComplianceEventsAPIReconciler) Reconcile(ctx context.Context, request c
 	err := r.Get(ctx, request.NamespacedName, &dbSecret)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			return reconcile.Result{}, nil
+			return reconcile.Result{}, r.compAPIServer.Stop()
 		}
 
 		return reconcile.Result{}, err
@@ -113,7 +118,7 @@ func (r *ComplianceEventsAPIReconciler) Reconcile(ctx context.Context, request c
 	if errors.Is(err, ErrInvalidDBSecret) {
 		log.Error(err, "Will retry once the invalid secret is updated")
 
-		return reconcile.Result{}, nil
+		return reconcile.Result{}, r.compAPIServer.Stop()
 	} else if err != nil {
 		log.Error(err, "Will retry in 30 seconds due to the error")
 
@@ -123,7 +128,12 @@ func (r *ComplianceEventsAPIReconciler) Reconcile(ctx context.Context, request c
 	// r.connectionURL is only ever set if the database migration succeeded previously so if the URL is the same then
 	// skip any further work.
 	if r.connectionURL == parsedConnectionURL {
-		return reconcile.Result{}, nil
+		err := r.compAPIServer.Start(r.connectionURL)
+		if err != nil {
+			log.Error(err, "Unable to start dbServer")
+		}
+
+		return reconcile.Result{}, err
 	}
 
 	m, err := migrate.NewWithSourceInstance("iofs", migrationsSource, parsedConnectionURL)
@@ -133,7 +143,7 @@ func (r *ComplianceEventsAPIReconciler) Reconcile(ctx context.Context, request c
 
 		_ = r.sendDBErrorEvent(ctx, &dbSecret, msg)
 
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: 30 * time.Second}, r.compAPIServer.Stop()
 	}
 
 	defer m.Close()
@@ -149,7 +159,7 @@ func (r *ComplianceEventsAPIReconciler) Reconcile(ctx context.Context, request c
 
 		_ = r.sendDBErrorEvent(ctx, &dbSecret, msg)
 
-		return reconcile.Result{}, nil
+		return reconcile.Result{}, r.compAPIServer.Stop()
 	} else {
 		// The errors don't need to be checked because we know the database migration was successful so there is a
 		// valid version assigned.
@@ -162,7 +172,12 @@ func (r *ComplianceEventsAPIReconciler) Reconcile(ctx context.Context, request c
 
 	r.connectionURL = parsedConnectionURL
 
-	return reconcile.Result{}, nil
+	err = r.compAPIServer.Start(r.connectionURL)
+	if err != nil {
+		log.Error(err, "Unable to start dbServer")
+	}
+
+	return reconcile.Result{}, err
 }
 
 func parseDBSecret(dbSecret *corev1.Secret, tempDirPath string) (string, error) {
@@ -296,7 +311,7 @@ func (r *ComplianceEventsAPIReconciler) sendDBErrorEvent(
 	return r.sendDBEvent(ctx, dbSecret, "Warning", "OCMComplianceEventsDBError", fullMsg)
 }
 
-func StartManager(ctx context.Context, k8sConfig *rest.Config, enableLeaderElection bool) error {
+func StartManager(ctx context.Context, k8sConfig *rest.Config, enableLeaderElection bool, listenAddress string) error {
 	complianceEventsNamespace, _ := os.LookupEnv(WatchNamespaceEnvVar)
 	if complianceEventsNamespace == "" {
 		complianceEventsNamespace = "open-cluster-management"
@@ -337,6 +352,10 @@ func StartManager(ctx context.Context, k8sConfig *rest.Config, enableLeaderElect
 		Client:  complianceEventsMgr.GetClient(),
 		Scheme:  complianceEventsMgr.GetScheme(),
 		TempDir: tempDir,
+		compAPIServer: complianceAPIServer{
+			Lock: &sync.Mutex{},
+			addr: listenAddress,
+		},
 	}).SetupWithManager(complianceEventsMgr); err != nil {
 		return fmt.Errorf("%w: %w", ErrCouldNotStart, err)
 	}
