@@ -2,7 +2,7 @@ package complianceeventsapi
 
 import (
 	"bytes"
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G505 -- for convenience, not cryptography
 	"database/sql/driver"
 	"encoding/hex"
 	"encoding/json"
@@ -164,7 +164,7 @@ func (p *Policy) Validate() error {
 		} else if buf.String() != *p.Spec {
 			errs = append(errs, fmt.Errorf("%w: policy.spec is not compact JSON", errInvalidInput))
 		} else if p.SpecHash != nil {
-			sum := sha1.Sum(buf.Bytes())
+			sum := sha1.Sum(buf.Bytes()) // #nosec G401 -- for convenience, not cryptography
 
 			if *p.SpecHash != hex.EncodeToString(sum[:]) {
 				errs = append(errs, fmt.Errorf("%w: policy.specHash does not match the compact policy.Spec",

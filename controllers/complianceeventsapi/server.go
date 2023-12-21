@@ -3,7 +3,7 @@ package complianceeventsapi
 import (
 	"bytes"
 	"context"
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G505 -- for convenience, not cryptography
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
@@ -278,7 +278,7 @@ func getPolicyForeignKey(ctx context.Context, goquDB *goqu.Database, pol Policy)
 			return 0, err // This kind of error would have been found during validation
 		}
 
-		sum := sha1.Sum(buf.Bytes())
+		sum := sha1.Sum(buf.Bytes()) // #nosec G401 -- for convenience, not cryptography
 		hash := hex.EncodeToString(sum[:])
 		pol.SpecHash = &hash
 	}
