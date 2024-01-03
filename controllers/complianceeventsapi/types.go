@@ -87,7 +87,7 @@ func (ce *ComplianceEvent) Create(ctx context.Context, db *sql.DB) error {
 }
 
 type Cluster struct {
-	KeyID     int    `db:"id" json:"-"`
+	KeyID     int32  `db:"id" json:"-"`
 	Name      string `db:"name" json:"name"`
 	ClusterID string `db:"cluster_id" json:"cluster_id"` //nolint:tagliatelle
 }
@@ -132,10 +132,10 @@ func (c *Cluster) GetOrCreate(ctx context.Context, db *sql.DB) error {
 }
 
 type EventDetails struct {
-	KeyID          int       `db:"id" json:"-"`
-	ClusterID      int       `db:"cluster_id" json:"-"`
-	PolicyID       int       `db:"policy_id" json:"-"`
-	ParentPolicyID *int      `db:"parent_policy_id" json:"-"`
+	KeyID          int32     `db:"id" json:"-"`
+	ClusterID      int32     `db:"cluster_id" json:"-"`
+	PolicyID       int32     `db:"policy_id" json:"-"`
+	ParentPolicyID *int32    `db:"parent_policy_id" json:"-"`
 	Compliance     string    `db:"compliance" json:"compliance"`
 	Message        string    `db:"message" json:"message"`
 	Timestamp      time.Time `db:"timestamp" json:"timestamp"`
@@ -180,7 +180,7 @@ func (e *EventDetails) InsertQuery() (string, []any) {
 }
 
 type ParentPolicy struct {
-	KeyID      int            `db:"id" json:"-"`
+	KeyID      int32          `db:"id" json:"-"`
 	Name       string         `db:"name" json:"name"`
 	Namespace  string         `db:"namespace" json:"namespace"`
 	Categories pq.StringArray `db:"categories" json:"categories,omitempty"`
@@ -235,7 +235,7 @@ func (p ParentPolicy) key() string {
 }
 
 type Policy struct {
-	KeyID     int     `db:"id" json:"-"`
+	KeyID     int32   `db:"id" json:"-"`
 	Kind      string  `db:"kind" json:"kind"`
 	APIGroup  string  `db:"api_group" json:"apiGroup"`
 	Name      string  `db:"name" json:"name"`
@@ -381,7 +381,7 @@ func getOrCreate(ctx context.Context, db *sql.DB, obj dbRow) error {
 		return row.Err()
 	}
 
-	var primaryKey int
+	var primaryKey int32
 
 	err := row.Scan(&primaryKey)
 	if errors.Is(err, sql.ErrNoRows) {

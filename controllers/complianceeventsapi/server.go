@@ -183,11 +183,11 @@ func postComplianceEvent(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getClusterForeignKey(ctx context.Context, db *sql.DB, cluster Cluster) (int, error) {
+func getClusterForeignKey(ctx context.Context, db *sql.DB, cluster Cluster) (int32, error) {
 	// Check cache
 	key, ok := clusterKeyCache.Load(cluster.ClusterID)
 	if ok {
-		return key.(int), nil
+		return key.(int32), nil
 	}
 
 	err := cluster.GetOrCreate(ctx, db)
@@ -200,13 +200,13 @@ func getClusterForeignKey(ctx context.Context, db *sql.DB, cluster Cluster) (int
 	return cluster.KeyID, nil
 }
 
-func getParentPolicyForeignKey(ctx context.Context, db *sql.DB, parent ParentPolicy) (int, error) {
+func getParentPolicyForeignKey(ctx context.Context, db *sql.DB, parent ParentPolicy) (int32, error) {
 	// Check cache
 	parKey := parent.key()
 
 	key, ok := parentPolicyKeyCache.Load(parKey)
 	if ok {
-		return key.(int), nil
+		return key.(int32), nil
 	}
 
 	err := parent.GetOrCreate(ctx, db)
@@ -219,7 +219,7 @@ func getParentPolicyForeignKey(ctx context.Context, db *sql.DB, parent ParentPol
 	return parent.KeyID, nil
 }
 
-func getPolicyForeignKey(ctx context.Context, db *sql.DB, pol Policy) (int, error) {
+func getPolicyForeignKey(ctx context.Context, db *sql.DB, pol Policy) (int32, error) {
 	// Fill in missing fields that can be inferred from other fields
 	if pol.SpecHash == "" {
 		var buf bytes.Buffer
@@ -236,7 +236,7 @@ func getPolicyForeignKey(ctx context.Context, db *sql.DB, pol Policy) (int, erro
 
 	key, ok := policyKeyCache.Load(polKey)
 	if ok {
-		return key.(int), nil
+		return key.(int32), nil
 	}
 
 	if pol.Spec == "" {
