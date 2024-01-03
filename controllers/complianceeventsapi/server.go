@@ -241,7 +241,7 @@ func getPolicyForeignKey(ctx context.Context, db *sql.DB, pol Policy) (int, erro
 
 	if pol.Spec == "" {
 		row := db.QueryRowContext(
-			ctx, fmt.Sprintf("SELECT spec FROM %s WHERE spec_hash = $1 LIMIT 1", policyTableName), pol.SpecHash,
+			ctx, "SELECT spec FROM policies WHERE spec_hash=$1 LIMIT 1", pol.SpecHash,
 		)
 		if row.Err() != nil {
 			return 0, fmt.Errorf("could not determine the spec from the provided spec hash: %w", row.Err())

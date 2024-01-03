@@ -11,19 +11,10 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/lib/pq"
-	"k8s.io/utils/strings/slices"
-)
-
-const (
-	complianceEventsTableName = "compliance_events"
-	clustersTableName         = "clusters"
-	parentPolicyTableName     = "parent_policies"
-	policyTableName           = "policies"
 )
 
 var (
@@ -34,9 +25,8 @@ var (
 type dbRow interface {
 	FromRow(*sql.Rows) error
 	GetOrCreate(ctx context.Context, db *sql.DB) error
-	GetTableName() string
 	InsertQuery() (string, []any)
-	InsertQueryFromFields(map[string]dbField) (string, []any)
+	SelectQuery(returnedColumns ...string) (string, []any)
 }
 
 type ComplianceEvent struct {
@@ -85,7 +75,7 @@ func (ce *ComplianceEvent) Create(ctx context.Context, db *sql.DB) error {
 
 	insertQuery, insertArgs := ce.Event.InsertQuery()
 
-	row := db.QueryRowContext(ctx, insertQuery+"RETURNING id", insertArgs...) //nolint:execinquery
+	row := db.QueryRowContext(ctx, insertQuery+" RETURNING id", insertArgs...) //nolint:execinquery
 	if row.Err() != nil {
 		return row.Err()
 	}
@@ -99,9 +89,9 @@ func (ce *ComplianceEvent) Create(ctx context.Context, db *sql.DB) error {
 }
 
 type Cluster struct {
-	KeyID     int    `db:"id" json:"-" dbOptions:"primaryKey"`
-	Name      string `db:"name" json:"name" dbOptions:"inUniqueConstraint"`
-	ClusterID string `db:"cluster_id" json:"cluster_id" dbOptions:"inUniqueConstraint"` //nolint:tagliatelle
+	KeyID     int    `db:"id" json:"-"`
+	Name      string `db:"name" json:"name"`
+	ClusterID string `db:"cluster_id" json:"cluster_id"` //nolint:tagliatelle
 }
 
 func (c Cluster) Validate() error {
@@ -118,22 +108,29 @@ func (c Cluster) Validate() error {
 	return errors.Join(errs...)
 }
 
-func (c Cluster) GetTableName() string {
-	return clustersTableName
-}
-
 func (c *Cluster) FromRow(rows *sql.Rows) error {
 	return fromRow(rows, c)
 }
 
 func (c *Cluster) InsertQuery() (string, []any) {
-	fields := getFields(c)
+	sql := `INSERT INTO clusters (cluster_id, name) VALUES ($1, $2)`
+	values := []any{c.ClusterID, c.Name}
 
-	return c.InsertQueryFromFields(fields)
+	return sql, values
 }
 
-func (c *Cluster) InsertQueryFromFields(fields map[string]dbField) (string, []any) {
-	return generateInsertQuery(c.GetTableName(), fields)
+func (c *Cluster) SelectQuery(returnedColumns ...string) (string, []any) {
+	if len(returnedColumns) == 0 {
+		returnedColumns = []string{"*"}
+	}
+
+	sql := fmt.Sprintf(
+		`SELECT %s FROM clusters WHERE cluster_id=$1 AND name=$2`,
+		strings.Join(returnedColumns, ", "),
+	)
+	values := []any{c.ClusterID, c.Name}
+
+	return sql, values
 }
 
 func (c *Cluster) GetOrCreate(ctx context.Context, db *sql.DB) error {
@@ -141,7 +138,7 @@ func (c *Cluster) GetOrCreate(ctx context.Context, db *sql.DB) error {
 }
 
 type EventDetails struct {
-	KeyID          int       `db:"id" json:"-" dbOptions:"primaryKey"`
+	KeyID          int       `db:"id" json:"-"`
 	ClusterID      int       `db:"cluster_id" json:"-"`
 	PolicyID       int       `db:"policy_id" json:"-"`
 	ParentPolicyID *int      `db:"parent_policy_id" json:"-"`
@@ -177,31 +174,28 @@ func (e EventDetails) Validate() error {
 	return errors.Join(errs...)
 }
 
-func (e EventDetails) GetTableName() string {
-	return complianceEventsTableName
-}
-
 func (e *EventDetails) FromRow(rows *sql.Rows) error {
 	return fromRow(rows, e)
 }
 
 func (e *EventDetails) InsertQuery() (string, []any) {
-	fields := getFields(e)
+	sql := `INSERT INTO compliance_events` +
+		`(cluster_id, compliance, message, metadata, parent_policy_id, policy_id, reported_by, timestamp) ` +
+		`VALUES($1, $2, $3, $4, $5, $6, $7, $8)`
+	values := []any{
+		e.ClusterID, e.Compliance, e.Message, e.Metadata, e.ParentPolicyID, e.PolicyID, e.ReportedBy, e.Timestamp,
+	}
 
-	return e.InsertQueryFromFields(fields)
-}
-
-func (e *EventDetails) InsertQueryFromFields(fields map[string]dbField) (string, []any) {
-	return generateInsertQuery(e.GetTableName(), fields)
+	return sql, values
 }
 
 type ParentPolicy struct {
-	KeyID      int            `db:"id" json:"-" dbOptions:"primaryKey"`
-	Name       string         `db:"name" json:"name" dbOptions:"inUniqueConstraint"`
-	Namespace  string         `db:"namespace" json:"namespace" dbOptions:"inUniqueConstraint"`
-	Categories pq.StringArray `db:"categories" json:"categories,omitempty" dbOptions:"inUniqueConstraint"`
-	Controls   pq.StringArray `db:"controls" json:"controls,omitempty" dbOptions:"inUniqueConstraint"`
-	Standards  pq.StringArray `db:"standards" json:"standards,omitempty" dbOptions:"inUniqueConstraint"`
+	KeyID      int            `db:"id" json:"-"`
+	Name       string         `db:"name" json:"name"`
+	Namespace  string         `db:"namespace" json:"namespace"`
+	Categories pq.StringArray `db:"categories" json:"categories,omitempty"`
+	Controls   pq.StringArray `db:"controls" json:"controls,omitempty"`
+	Standards  pq.StringArray `db:"standards" json:"standards,omitempty"`
 }
 
 func (p ParentPolicy) Validate() error {
@@ -218,22 +212,32 @@ func (p ParentPolicy) Validate() error {
 	return errors.Join(errs...)
 }
 
-func (p ParentPolicy) GetTableName() string {
-	return parentPolicyTableName
-}
-
 func (p *ParentPolicy) FromRow(rows *sql.Rows) error {
 	return fromRow(rows, p)
 }
 
 func (p *ParentPolicy) InsertQuery() (string, []any) {
-	fields := getFields(p)
+	sql := `INSERT INTO parent_policies` +
+		`(categories, controls, name, namespace, standards) ` +
+		`VALUES($1, $2, $3, $4, $5)`
+	values := []any{p.Categories, p.Controls, p.Name, p.Namespace, p.Standards}
 
-	return p.InsertQueryFromFields(fields)
+	return sql, values
 }
 
-func (p *ParentPolicy) InsertQueryFromFields(fields map[string]dbField) (string, []any) {
-	return generateInsertQuery(p.GetTableName(), fields)
+func (p *ParentPolicy) SelectQuery(returnedColumns ...string) (string, []any) {
+	if len(returnedColumns) == 0 {
+		returnedColumns = []string{"*"}
+	}
+
+	sql := fmt.Sprintf(
+		`SELECT %s FROM parent_policies `+
+			`WHERE categories=$1 AND controls=$2 AND name=$3 AND namespace=$4 AND standards=$5`,
+		strings.Join(returnedColumns, ", "),
+	)
+	values := []any{p.Categories, p.Controls, p.Name, p.Namespace, p.Standards}
+
+	return sql, values
 }
 
 func (p *ParentPolicy) GetOrCreate(ctx context.Context, db *sql.DB) error {
@@ -245,14 +249,14 @@ func (p ParentPolicy) key() string {
 }
 
 type Policy struct {
-	KeyID     int     `db:"id" json:"-" dbOptions:"primaryKey"`
-	Kind      string  `db:"kind" json:"kind" dbOptions:"inUniqueConstraint"`
-	APIGroup  string  `db:"api_group" json:"apiGroup" dbOptions:"inUniqueConstraint"`
-	Name      string  `db:"name" json:"name" dbOptions:"inUniqueConstraint"`
-	Namespace *string `db:"namespace" json:"namespace,omitempty" dbOptions:"inUniqueConstraint"`
+	KeyID     int     `db:"id" json:"-"`
+	Kind      string  `db:"kind" json:"kind"`
+	APIGroup  string  `db:"api_group" json:"apiGroup"`
+	Name      string  `db:"name" json:"name"`
+	Namespace *string `db:"namespace" json:"namespace,omitempty"`
 	Spec      string  `db:"spec" json:"spec,omitempty"`
-	SpecHash  string  `db:"spec_hash" json:"specHash" dbOptions:"inUniqueConstraint"`
-	Severity  *string `db:"severity" json:"severity,omitempty" dbOptions:"inUniqueConstraint"`
+	SpecHash  string  `db:"spec_hash" json:"specHash"`
+	Severity  *string `db:"severity" json:"severity,omitempty"`
 }
 
 func (p *Policy) Validate() error {
@@ -293,22 +297,32 @@ func (p *Policy) Validate() error {
 	return errors.Join(errs...)
 }
 
-func (p Policy) GetTableName() string {
-	return policyTableName
-}
-
 func (p *Policy) FromRow(rows *sql.Rows) error {
 	return fromRow(rows, p)
 }
 
 func (p *Policy) InsertQuery() (string, []any) {
-	fields := getFields(p)
+	sql := `INSERT INTO policies` +
+		`(api_group, kind, name, namespace, severity, spec, spec_hash)` +
+		`VALUES($1, $2, $3, $4, $5, $6, $7)`
+	values := []any{p.APIGroup, p.Kind, p.Name, p.Namespace, p.Severity, p.Spec, p.SpecHash}
 
-	return p.InsertQueryFromFields(fields)
+	return sql, values
 }
 
-func (p *Policy) InsertQueryFromFields(fields map[string]dbField) (string, []any) {
-	return generateInsertQuery(p.GetTableName(), fields)
+func (p *Policy) SelectQuery(returnedColumns ...string) (string, []any) {
+	if len(returnedColumns) == 0 {
+		returnedColumns = []string{"*"}
+	}
+
+	sql := fmt.Sprintf(
+		`SELECT %s FROM policies `+
+			`WHERE api_group=$1 AND kind=$2 AND name=$3 AND namespace=$4 AND severity=$5 AND spec_hash=$6`,
+		strings.Join(returnedColumns, ", "),
+	)
+	values := []any{p.APIGroup, p.Kind, p.Name, p.Namespace, p.Severity, p.SpecHash}
+
+	return sql, values
 }
 
 func (p *Policy) GetOrCreate(ctx context.Context, db *sql.DB) error {
@@ -375,11 +389,6 @@ func (j *JSONMap) Scan(src interface{}) error {
 type dbField struct {
 	// value is the underlying value set on the struct field.
 	value any
-	// primaryKey is set when the struct field represents the primary key in the database row.
-	primaryKey bool
-	// inUniqueConstraint is set when this field is part of a unique constraint so that only unique columns are used in
-	// SELECT queries.
-	inUniqueConstraint bool
 	// fieldIndex is the index used to access this struct field on the struct instance this field is a part of. This is
 	// useful to set the value on the struct after a database query.
 	fieldIndex int
@@ -411,18 +420,6 @@ func getFields(obj any) map[string]dbField {
 			goType:     structField.Type,
 		}
 
-		if structField.Tag.Get("dbOptions") != "" {
-			dbOptions := strings.Split(structField.Tag.Get("dbOptions"), ";")
-
-			if slices.Contains(dbOptions, "primaryKey") {
-				field.primaryKey = true
-			}
-
-			if slices.Contains(dbOptions, "inUniqueConstraint") {
-				field.inUniqueConstraint = true
-			}
-		}
-
 		if reflectField.IsZero() {
 			field.value = nil
 		} else {
@@ -433,39 +430,6 @@ func getFields(obj any) map[string]dbField {
 	}
 
 	return fields
-}
-
-// generateInsertQuery generates the SQL query and arguments for `db.Exec` based on the input `fields`. Note that this
-// does not explicitly support nested structs.
-func generateInsertQuery(tableName string, fields map[string]dbField) (string, []any) {
-	fieldNames := make([]string, 0, len(fields))
-	valueVariables := make([]string, 0, len(fields))
-
-	for field := range fields {
-		if fields[field].primaryKey {
-			continue
-		}
-
-		fieldNames = append(fieldNames, field)
-		valueVariables = append(valueVariables, fmt.Sprintf("$%d", len(fieldNames)))
-	}
-
-	sort.Strings(fieldNames)
-
-	values := make([]any, 0, len(fields))
-
-	for _, field := range fieldNames {
-		values = append(values, fields[field].value)
-	}
-
-	insertQuery := fmt.Sprintf(
-		`INSERT INTO "%s"(%s) VALUES(%s)`,
-		tableName,
-		strings.Join(fieldNames, ", "),
-		strings.Join(valueVariables, ", "),
-	)
-
-	return insertQuery, values
 }
 
 // fromRow assigns the output from `rows.Scan` to the input `obj`. Note that this does not explicitly support
@@ -485,7 +449,7 @@ func fromRow(rows *sql.Rows, obj any) error {
 
 	for _, column := range columns {
 		if _, ok := objFields[column]; !ok {
-			continue
+			panic("The column is not defined on the struct: " + column)
 		}
 
 		scans = append(scans, reflect.New(objFields[column].goType).Interface())
@@ -497,10 +461,6 @@ func fromRow(rows *sql.Rows, obj any) error {
 	}
 
 	for i, column := range columns {
-		if _, ok := objFields[column]; !ok {
-			continue
-		}
-
 		field := values.Field(objFields[column].fieldIndex)
 		src := reflect.Indirect(reflect.ValueOf(scans[i]))
 		field.Set(src)
@@ -515,27 +475,10 @@ func fromRow(rows *sql.Rows, obj any) error {
 // goroutines creating the same row.
 func getOrCreate(ctx context.Context, db *sql.DB, obj dbRow) error {
 	dbFields := getFields(obj)
-	insertQuery, insertArgs := obj.InsertQueryFromFields(dbFields)
-
-	var primaryKeyColumn string
-
-	for field, fieldDetails := range dbFields {
-		if fieldDetails.primaryKey {
-			primaryKeyColumn = field
-
-			break
-		}
-	}
-
-	if primaryKeyColumn == "" {
-		// This is a programming error which is why panic is used.
-		panic("No primary key column is set")
-	}
+	insertQuery, insertArgs := obj.InsertQuery()
 
 	// On inserts, it returns the primary key value (e.g. id). If it already exists, nothing is returned.
-	row := db.QueryRowContext(
-		ctx, fmt.Sprintf(`%s ON CONFLICT DO NOTHING RETURNING "%s"`, insertQuery, primaryKeyColumn), insertArgs...,
-	)
+	row := db.QueryRowContext(ctx, fmt.Sprintf(`%s ON CONFLICT DO NOTHING RETURNING "id"`, insertQuery), insertArgs...)
 	if row.Err() != nil {
 		return row.Err()
 	}
@@ -547,31 +490,9 @@ func getOrCreate(ctx context.Context, db *sql.DB, obj dbRow) error {
 		// The insertion did not return anything, so that means the value already exists, so perform a SELECT query
 		// just using the unique columns. No more information is needed to get the right row and it allows the unique
 		// indexes to be used to make the query more efficient.
-		uniqueColumnValues := []any{}
-		uniqueSelectQuery := []string{}
+		selectQuery, selectArgs := obj.SelectQuery("id")
 
-		for field, fieldDetails := range dbFields {
-			if fieldDetails.inUniqueConstraint {
-				uniqueColumnValues = append(uniqueColumnValues, fieldDetails.value)
-				uniqueSelectQuery = append(uniqueSelectQuery, fmt.Sprintf("%s=$%d", field, len(uniqueSelectQuery)+1))
-			}
-		}
-
-		if len(uniqueColumnValues) == 0 {
-			// This is a programming error which is why panic is used.
-			panic("No columns are part of a unique constraint")
-		}
-
-		row = db.QueryRowContext(
-			ctx,
-			fmt.Sprintf(
-				`SELECT %s FROM %s WHERE %s`,
-				primaryKeyColumn,
-				obj.GetTableName(),
-				strings.Join(uniqueSelectQuery, " AND "),
-			),
-			uniqueColumnValues...,
-		)
+		row = db.QueryRowContext(ctx, selectQuery, selectArgs...)
 		if row.Err() != nil {
 			return row.Err()
 		}
@@ -586,7 +507,7 @@ func getOrCreate(ctx context.Context, db *sql.DB, obj dbRow) error {
 
 	// Set the primary key value on the object
 	values := reflect.Indirect(reflect.ValueOf(obj))
-	field := values.Field(dbFields[primaryKeyColumn].fieldIndex)
+	field := values.Field(dbFields["id"].fieldIndex)
 	field.Set(reflect.ValueOf(primaryKey))
 
 	return nil
