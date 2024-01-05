@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/lib/pq"
 	. "github.com/onsi/ginkgo/v2"
@@ -19,6 +20,10 @@ import (
 
 	"open-cluster-management.io/governance-policy-propagator/controllers/complianceeventsapi"
 )
+
+const eventsEndpoint = "http://localhost:5480/api/v1/compliance-events"
+
+var httpClient = http.Client{Timeout: 30 * time.Second}
 
 func getTableNames(db *sql.DB) ([]string, error) {
 	tableNameRows, err := db.Query("SELECT tablename FROM pg_tables WHERE schemaname = current_schema()")
@@ -47,7 +52,7 @@ func getTableNames(db *sql.DB) ([]string, error) {
 }
 
 // Note: These tests require a running Postgres server running in the Kind cluster from the "postgres" Make target.
-var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered, func() {
+var _ = Describe("Test the compliance events API", Label("compliance-events-api"), Ordered, func() {
 	var k8sConfig *rest.Config
 	var db *sql.DB
 
@@ -133,7 +138,7 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 					"kind": "ConfigurationPolicy",
 					"name": "etcd-encryption1",
 					"namespace": "local-cluster",
-					"spec": "{\"test\":\"one\",\"severity\":\"low\"}",
+					"spec": {"test": "one", "severity": "low"},
 					"severity": "low"
 				},
 				"event": {
@@ -214,12 +219,11 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						apiGroup string
 						name     string
 						ns       *string
-						spec     *string
-						specHash *string
+						spec     complianceeventsapi.JSONMap
 						severity *string
 					)
 
-					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &spec, &specHash, &severity)
+					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &spec, &severity)
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).NotTo(Equal(0))
@@ -228,9 +232,7 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 					Expect(ns).ToNot(BeNil())
 					Expect(*ns).To(Equal("local-cluster"))
 					Expect(spec).ToNot(BeNil())
-					Expect(*spec).To(Equal(`{"test":"one","severity":"low"}`))
-					Expect(specHash).ToNot(BeNil())
-					Expect(*specHash).To(Equal("cb84fe29e44202e3aeb46d39ba46993f60cdc6af"))
+					Expect(spec).To(BeEquivalentTo(map[string]any{"test": "one", "severity": "low"}))
 					Expect(severity).ToNot(BeNil())
 					Expect(*severity).To(Equal("low"))
 
@@ -263,11 +265,11 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						&metadata, &reportedBy)
 					Expect(err).ToNot(HaveOccurred())
 
-					Expect(id).NotTo(Equal(0))
-					Expect(clusterID).NotTo(Equal(0))
-					Expect(policyID).NotTo(Equal(0))
+					Expect(id).To(Equal(1))
+					Expect(clusterID).To(Equal(1))
+					Expect(policyID).To(Equal(1))
 					Expect(parentPolicyID).NotTo(BeNil())
-					Expect(*parentPolicyID).NotTo(Equal(0))
+					Expect(*parentPolicyID).To(Equal(1))
 					Expect(compliance).To(Equal("NonCompliant"))
 					Expect(message).To(Equal("configmaps [etcd] not found in namespace default"))
 					Expect(timestamp).To(Equal("2023-01-01T01:01:01.111Z"))
@@ -291,7 +293,7 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 					"apiGroup": "policy.open-cluster-management.io",
 					"kind": "ConfigurationPolicy",
 					"name": "etcd-encryption2",
-					"spec": "{\"test\":\"two\"}"
+					"spec": {"test": "two"}
 				},
 				"event": {
 					"compliance": "NonCompliant",
@@ -309,7 +311,7 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 					"apiGroup": "policy.open-cluster-management.io",
 					"kind": "ConfigurationPolicy",
 					"name": "etcd-encryption2",
-					"spec": "{\"different-spec-test\":\"two-and-a-half\"}"
+					"spec": {"different-spec-test": "two-and-a-half"}
 				},
 				"event": {
 					"compliance": "Compliant",
@@ -339,7 +341,6 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 					err := rows.Scan(&id, &name, &clusterID)
 					Expect(err).ToNot(HaveOccurred())
 
-					Expect(id).NotTo(Equal(0))
 					clusternames = append(clusternames, name)
 				}
 
@@ -350,7 +351,8 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 				rows, err := db.Query("SELECT * FROM policies WHERE name = $1", "etcd-encryption2")
 				Expect(err).ToNot(HaveOccurred())
 
-				hashes := make([]string, 0)
+				rowCount := 0
+
 				for rows.Next() {
 					var (
 						id       int
@@ -358,23 +360,18 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						apiGroup string
 						name     string
 						ns       *string
-						spec     *string
-						specHash *string
+						spec     complianceeventsapi.JSONMap
 						severity *string
 					)
 
-					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &spec, &specHash, &severity)
+					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &spec, &severity)
 					Expect(err).ToNot(HaveOccurred())
 
-					Expect(id).NotTo(Equal(0))
-					Expect(specHash).ToNot(BeNil())
-					hashes = append(hashes, *specHash)
+					rowCount++
+					Expect(id).To(Equal(1 + rowCount))
 				}
 
-				Expect(hashes).To(ConsistOf(
-					"8cfd1ee0a4b10aadaa4e4f3b2b9ec15e6616c1e5",
-					"2c6c7170351bfaa98eb45453b93766c18d24fa04",
-				))
+				Expect(rowCount).To(Equal(2))
 			})
 
 			It("Should have created both events in a table", func() {
@@ -400,12 +397,12 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						&metadata, &reportedBy)
 					Expect(err).ToNot(HaveOccurred())
 
+					messages = append(messages, message)
+
 					Expect(id).NotTo(Equal(0))
 					Expect(clusterID).NotTo(Equal(0))
-					Expect(policyID).NotTo(Equal(0))
+					Expect(policyID).To(Equal(1 + len(messages)))
 					Expect(parentPolicyID).To(BeNil())
-
-					messages = append(messages, message)
 				}
 
 				Expect(messages).To(ConsistOf(
@@ -433,7 +430,7 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 					"apiGroup": "policy.open-cluster-management.io",
 					"kind": "ConfigurationPolicy",
 					"name": "common",
-					"spec": "{\"test\":\"three\",\"severity\":\"low\"}",
+					"spec": {"test": "three", "severity": "low"},
 					"severity": "low"
 				},
 				"event": {
@@ -443,25 +440,17 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 				}
 			}`)
 
-			// payload2 just uses the specHash for the policy.
+			// payload2 just uses the ids for the policy and parent_policy.
 			payload2 := []byte(`{
 				"cluster": {
 					"name": "cluster4",
 					"cluster_id": "test3-cluster4-fake-uuid-4"
 				},
 				"parent_policy": {
-					"name": "common-parent",
-					"namespace": "policies",
-					"categories": ["cat-3", "cat-4"],
-					"controls": ["ctrl-2"],
-					"standards": ["stand-2"]
+					"id": 2
 				},
 				"policy": {
-					"apiGroup": "policy.open-cluster-management.io",
-					"kind": "ConfigurationPolicy",
-					"name": "common",
-					"specHash": "5382228c69c6017d4efbd6e42717930cb2020da0",
-					"severity": "low"
+					"id": 4
 				},
 				"event": {
 					"compliance": "NonCompliant",
@@ -528,7 +517,7 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 				rows, err := db.Query("SELECT * FROM policies WHERE name = $1", "common")
 				Expect(err).ToNot(HaveOccurred())
 
-				hashes := make([]string, 0)
+				specs := make([]complianceeventsapi.JSONMap, 0, 1)
 				for rows.Next() {
 					var (
 						id       int
@@ -536,22 +525,19 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						apiGroup string
 						name     string
 						ns       *string
-						spec     *string
-						specHash *string
+						spec     complianceeventsapi.JSONMap
 						severity *string
 					)
 
-					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &spec, &specHash, &severity)
+					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &spec, &severity)
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).NotTo(Equal(0))
-					Expect(specHash).ToNot(BeNil())
-					hashes = append(hashes, *specHash)
+					specs = append(specs, spec)
 				}
 
-				Expect(hashes).To(ConsistOf(
-					"5382228c69c6017d4efbd6e42717930cb2020da0",
-				))
+				Expect(specs).To(HaveLen(1))
+				Expect(specs[0]).To(BeEquivalentTo(map[string]any{"test": "three", "severity": "low"}))
 			})
 
 			It("Should have created both events in a table", func() {
@@ -579,9 +565,9 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 
 					Expect(id).NotTo(Equal(0))
 					Expect(clusterID).NotTo(Equal(0))
-					Expect(policyID).NotTo(Equal(0))
+					Expect(policyID).To(Equal(4))
 					Expect(parentPolicyID).NotTo(BeNil())
-					Expect(*parentPolicyID).NotTo(Equal(0))
+					Expect(*parentPolicyID).To(Equal(2))
 
 					timestamps = append(timestamps, timestamp)
 				}
@@ -609,7 +595,7 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 					"apiGroup": "policy.open-cluster-management.io",
 					"kind": "ConfigurationPolicy",
 					"name": "common-a",
-					"spec": "{\"test\":\"four\",\"severity\":\"low\"}",
+					"spec": {"test": "four", "severity": "low"},
 					"severity": "low"
 				},
 				"event": {
@@ -634,7 +620,7 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 					"apiGroup": "policy.open-cluster-management.io",
 					"kind": "ConfigurationPolicy",
 					"name": "common-a",
-					"spec": "{\"test\":\"four\",\"severity\":\"low\"}",
+					"spec": {"test": "four", "severity": "low"},
 					"severity": "low"
 				},
 				"event": {
@@ -660,7 +646,7 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 					"apiGroup": "policy.open-cluster-management.io",
 					"kind": "ConfigurationPolicy",
 					"name": "common-a",
-					"spec": "{\"test\":\"four\",\"severity\":\"low\"}",
+					"spec": {"test": "four", "severity": "low"},
 					"severity": "low"
 				},
 				"event": {
@@ -719,16 +705,14 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						apiGroup string
 						name     string
 						ns       *string
-						spec     *string
-						specHash string
+						spec     complianceeventsapi.JSONMap
 						severity *string
 					)
 
-					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &spec, &specHash, &severity)
+					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &spec, &severity)
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).NotTo(Equal(0))
-					Expect(specHash).ToNot(BeNil())
 					ids = append(ids, id)
 				}
 
@@ -751,7 +735,7 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 					"apiGroup": "policy.open-cluster-management.io",
 					"kind": "ConfigurationPolicy",
 					"name": "common-b",
-					"spec": "{\"test\":\"four\",\"severity\":\"low\"}",
+					"spec": {"test": "four", "severity": "low"},
 					"severity": "low",
 					"namespace": "default"
 				},
@@ -776,7 +760,7 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 					"apiGroup": "policy.open-cluster-management.io",
 					"kind": "ConfigurationPolicy",
 					"name": "common-b",
-					"spec": "{\"test\":\"four\",\"severity\":\"low\"}",
+					"spec": {"test": "four", "severity": "low"},
 					"severity": "low"
 				},
 				"event": {
@@ -825,7 +809,7 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 				ids := make([]int, 0)
 				names := make([]string, 0)
 				namespaces := make([]string, 0)
-				hashes := make([]string, 0)
+				specs := make([]complianceeventsapi.JSONMap, 0, 2)
 				for rows.Next() {
 					var (
 						id       int
@@ -833,19 +817,17 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						apiGroup string
 						name     string
 						ns       *string
-						spec     *string
-						specHash string
+						spec     complianceeventsapi.JSONMap
 						severity *string
 					)
 
-					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &spec, &specHash, &severity)
+					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &spec, &severity)
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).NotTo(Equal(0))
-					Expect(specHash).ToNot(BeNil())
 					ids = append(ids, id)
 					names = append(names, name)
-					hashes = append(hashes, specHash)
+					specs = append(specs, spec)
 
 					if ns != nil {
 						namespaces = append(namespaces, *ns)
@@ -856,7 +838,7 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 				Expect(ids[0]).ToNot(Equal(ids[1]))
 				Expect(names[0]).To(Equal(names[1]))
 				Expect(namespaces).To(ConsistOf("default"))
-				Expect(hashes[0]).To(Equal(hashes[1]))
+				Expect(specs[0]).To(Equal(specs[1]))
 			})
 		})
 
@@ -871,7 +853,7 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						"apiGroup": "policy.open-cluster-management.io",
 						"kind": "ConfigurationPolicy",
 						"name": "validity",
-						"spec": "{\"test\":\"validity\",\"severity\":\"low\"}"
+						"spec": {"test":"validity", "severity": "low"}
 					},
 					"event": {
 						"compliance": "Compliant",
@@ -894,7 +876,7 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						"apiGroup": "policy.open-cluster-management.io",
 						"kind": "ConfigurationPolicy",
 						"name": "validity",
-						"spec": "{\"test\":\"validity\",\"severity\":\"low\"}",
+						"spec": {"test":"validity", "severity": "low"},
 						"severity": "low"
 					},
 					"event": {
@@ -919,38 +901,12 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						"apiGroup": "policy.open-cluster-management.io",
 						"kind": "ConfigurationPolicy",
 						"name": "validity",
-						"spec": "{\"test\":\"validity\",\"severity\":\"low\"}",
+						"spec": {"test": "validity", "severity": "low"},
 						"severity": "low"
 					},
 					"event": {
 						"compliance": "Compliant",
 						"message": "configmaps [valid] valid in namespace valid"
-					}
-				}`)), "5s", "1s").Should(MatchError(ContainSubstring("Got non-201 status code 400")))
-			})
-
-			It("should require the policy spec and hash to match", func(ctx context.Context) {
-				Eventually(postEvent(ctx, []byte(`{
-					"cluster": {
-						"name": "validity-test",
-						"cluster_id": "test-validity-fake-uuid"
-					},
-					"parent_policy": {
-						"name": "validity-parent",
-						"namespace": "policies"
-					},
-					"policy": {
-						"apiGroup": "policy.open-cluster-management.io",
-						"kind": "ConfigurationPolicy",
-						"name": "validity",
-						"spec": "{\"test\":\"validity\",\"severity\":\"low\"}",
-						"severity": "low",
-						"specHash": "foobar"
-					},
-					"event": {
-						"compliance": "Compliant",
-						"message": "configmaps [valid] valid in namespace valid",
-						"timestamp": "2023-09-09T09:09:09.999Z"
 					}
 				}`)), "5s", "1s").Should(MatchError(ContainSubstring("Got non-201 status code 400")))
 			})
@@ -970,7 +926,7 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						"apiGroup": "policy.open-cluster-management.io",
 						"kind": "ConfigurationPolicy",
 						"name": "validity",
-						"spec": "{\"test\":\"validity\",\"severity\":\"low\"}",
+						"spec": {"test": "validity", "severity": "low"},
 						"severity": "low",
 						"specHash": "foobar"
 					},
@@ -989,14 +945,10 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						"cluster_id": "test-validity-fake-uuid"
 					},
 					"parent_policy": {
-						"name": "validity-parent",
-						"namespace": "policies"
+						"id": 1231234
 					},
 					"policy": {
-						"apiGroup": "policy.open-cluster-management.io",
-						"kind": "ConfigurationPolicy",
-						"name": "validity",
-						"specHash": "0123456789abcdefzzzzzzzzzzzzzzzzzzzzzzzz"
+						"id": 123123
 					},
 					"event": {
 						"compliance": "Compliant",
@@ -1004,16 +956,91 @@ var _ = Describe("Test policy webhook", Label("compliance-events-api"), Ordered,
 						"timestamp": "2023-09-09T09:09:09.999Z"
 					}
 				}`)), "5s", "1s").Should(MatchError(ContainSubstring(
-					"could not determine the spec from the provided spec hash; the spec is required in the request",
+					`invalid input: parent_policy.id not found\\ninvalid input: policy.id not found`,
 				)))
 			})
 		})
 	})
 })
 
+var _ = Describe("Test query generation", Label("compliance-events-api"), func() {
+	It("Tests the select query for a cluster", func() {
+		cluster := complianceeventsapi.Cluster{
+			ClusterID: "my-cluster-id",
+			Name:      "my-cluster",
+		}
+		sql, vals := cluster.SelectQuery("id", "spec")
+		Expect(sql).To(Equal("SELECT id, spec FROM clusters WHERE cluster_id=$1 AND name=$2"))
+		Expect(vals).To(HaveLen(2))
+	})
+
+	It("Tests the select query for a minimum parent policy", func() {
+		parent := complianceeventsapi.ParentPolicy{
+			Name:      "parent-a",
+			Namespace: "policies",
+		}
+		sql, vals := parent.SelectQuery("id", "spec")
+		Expect(sql).To(Equal(
+			"SELECT id, spec FROM parent_policies WHERE name=$1 AND namespace=$2 AND categories IS NULL AND " +
+				"controls IS NULL AND standards IS NULL",
+		))
+		Expect(vals).To(HaveLen(2))
+	})
+
+	It("Tests the select query for a parent policy with all options", func() {
+		parent := complianceeventsapi.ParentPolicy{
+			Name:       "parent-a",
+			Namespace:  "policies",
+			Categories: pq.StringArray{"cat-1"},
+			Controls:   pq.StringArray{"control-1", "control-2"},
+			Standards:  pq.StringArray{"standard-1"},
+		}
+		sql, vals := parent.SelectQuery("id")
+		Expect(sql).To(Equal(
+			"SELECT id FROM parent_policies WHERE name=$1 AND namespace=$2 AND categories=$3 AND controls=$4 " +
+				"AND standards=$5",
+		))
+		Expect(vals).To(HaveLen(5))
+	})
+
+	It("Tests the select query for a minimum policy", func() {
+		policy := complianceeventsapi.Policy{
+			Name:     "parent-a",
+			Kind:     "ConfigurationPolicy",
+			APIGroup: "policy.open-cluster-management.io",
+			Spec:     complianceeventsapi.JSONMap{"spec": "this-out"},
+		}
+		sql, vals := policy.SelectQuery("id")
+		Expect(sql).To(Equal(
+			"SELECT id FROM policies WHERE api_group=$1 AND kind=$2 AND name=$3 AND spec=$4 AND namespace is NULL " +
+				"AND severity is NULL",
+		))
+		Expect(vals).To(HaveLen(4))
+	})
+
+	It("Tests the select query for a policy with all options", func() {
+		ns := "policies"
+		severity := "critical"
+
+		policy := complianceeventsapi.Policy{
+			Name:      "parent-a",
+			Namespace: &ns,
+			Kind:      "ConfigurationPolicy",
+			APIGroup:  "policy.open-cluster-management.io",
+			Spec:      complianceeventsapi.JSONMap{"spec": "this-out"},
+			Severity:  &severity,
+		}
+		sql, vals := policy.SelectQuery("id")
+		Expect(sql).To(Equal(
+			"SELECT id FROM policies WHERE api_group=$1 AND kind=$2 AND name=$3 AND spec=$4 AND namespace=$5 " +
+				"AND severity=$6",
+		))
+		Expect(vals).To(HaveLen(6))
+	})
+})
+
 func postEvent(ctx context.Context, payload []byte) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		"http://localhost:5480/api/v1/compliance-events", bytes.NewBuffer(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, eventsEndpoint, bytes.NewBuffer(payload))
 	if err != nil {
 		return err
 	}
@@ -1022,9 +1049,7 @@ func postEvent(ctx context.Context, payload []byte) error {
 
 	errs := make([]error, 0)
 
-	client := &http.Client{}
-
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		errs = append(errs, err)
 	}

@@ -96,11 +96,7 @@ func TestParentPolicyValidation(t *testing.T) {
 }
 
 func TestPolicyValidation(t *testing.T) {
-	basespec := `{"test":"one","severity":"low"}`
-	basehash := "cb84fe29e44202e3aeb46d39ba46993f60cdc6af"
-	badhash := "foobarbaz"
-	badspec := `{foo: bar: baz`
-	noncompactspec := `{"foo" : "bar"   }`
+	var basespec JSONMap = map[string]interface{}{"test": "one", "severity": "low"}
 
 	tests := map[string]struct {
 		obj    Policy
@@ -111,16 +107,14 @@ func TestPolicyValidation(t *testing.T) {
 				Kind:     "policy",
 				APIGroup: "v1",
 				Spec:     basespec,
-				SpecHash: basehash,
 			},
 			"field not provided: policy.name",
 		},
 		"no API group": {
 			Policy{
-				Kind:     "policy",
-				Name:     "foobar",
-				Spec:     basespec,
-				SpecHash: basehash,
+				Kind: "policy",
+				Name: "foobar",
+				Spec: basespec,
 			},
 			"field not provided: policy.apiGroup",
 		},
@@ -129,7 +123,6 @@ func TestPolicyValidation(t *testing.T) {
 				APIGroup: "v1",
 				Name:     "foobar",
 				Spec:     basespec,
-				SpecHash: basehash,
 			},
 			"field not provided: policy.kind",
 		},
@@ -139,35 +132,7 @@ func TestPolicyValidation(t *testing.T) {
 				APIGroup: "v1",
 				Name:     "foobar",
 			},
-			"field not provided: policy.spec or policy.specHash",
-		},
-		"not valid json": {
-			Policy{
-				Kind:     "policy",
-				APIGroup: "v1",
-				Name:     "foobar",
-				Spec:     badspec,
-			},
-			"policy.spec is not valid JSON",
-		},
-		"not compact json": {
-			Policy{
-				Kind:     "policy",
-				APIGroup: "v1",
-				Name:     "foobar",
-				Spec:     noncompactspec,
-			},
-			"policy.spec is not compact JSON",
-		},
-		"not matching hash": {
-			Policy{
-				Kind:     "policy",
-				APIGroup: "v1",
-				Name:     "foobar",
-				Spec:     basespec,
-				SpecHash: badhash,
-			},
-			"policy.specHash does not match the compact policy.Spec",
+			"field not provided: policy.spec",
 		},
 	}
 

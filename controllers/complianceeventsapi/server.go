@@ -1,14 +1,10 @@
 package complianceeventsapi
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha1" // #nosec G505 -- for convenience, not cryptography
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"sync"
@@ -113,7 +109,7 @@ func postComplianceEvent(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := reqEvent.Validate(); err != nil {
+	if err := reqEvent.Validate(r.Context(), db); err != nil {
 		writeErrMsgJSON(w, err.Error(), http.StatusBadRequest)
 
 		return
@@ -165,8 +161,8 @@ func postComplianceEvent(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// remove the spec to only respond with the specHash
-	reqEvent.Policy.Spec = ""
+	// remove the spec so it's not returned in the JSON.
+	reqEvent.Policy.Spec = nil
 
 	resp, err := json.Marshal(reqEvent)
 	if err != nil {
@@ -201,6 +197,10 @@ func getClusterForeignKey(ctx context.Context, db *sql.DB, cluster Cluster) (int
 }
 
 func getParentPolicyForeignKey(ctx context.Context, db *sql.DB, parent ParentPolicy) (int32, error) {
+	if parent.KeyID != 0 {
+		return parent.KeyID, nil
+	}
+
 	// Check cache
 	parKey := parent.key()
 
@@ -220,15 +220,8 @@ func getParentPolicyForeignKey(ctx context.Context, db *sql.DB, parent ParentPol
 }
 
 func getPolicyForeignKey(ctx context.Context, db *sql.DB, pol Policy) (int32, error) {
-	// Fill in missing fields that can be inferred from other fields
-	if pol.SpecHash == "" {
-		var buf bytes.Buffer
-		if err := json.Compact(&buf, []byte(pol.Spec)); err != nil {
-			return 0, err // This kind of error would have been found during validation
-		}
-
-		sum := sha1.Sum(buf.Bytes()) // #nosec G401 -- for convenience, not cryptography
-		pol.SpecHash = hex.EncodeToString(sum[:])
+	if pol.KeyID != 0 {
+		return pol.KeyID, nil
 	}
 
 	// Check cache
@@ -237,29 +230,6 @@ func getPolicyForeignKey(ctx context.Context, db *sql.DB, pol Policy) (int32, er
 	key, ok := policyKeyCache.Load(polKey)
 	if ok {
 		return key.(int32), nil
-	}
-
-	if pol.Spec == "" {
-		row := db.QueryRowContext(
-			ctx, "SELECT spec FROM policies WHERE spec_hash=$1 LIMIT 1", pol.SpecHash,
-		)
-		if row.Err() != nil {
-			return 0, fmt.Errorf("could not determine the spec from the provided spec hash: %w", row.Err())
-		}
-
-		err := row.Scan(&pol.Spec)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return 0, fmt.Errorf(
-					"%w: could not determine the spec from the provided spec hash; the spec is required in the request",
-					errRequiredFieldNotProvided,
-				)
-			}
-
-			return 0, fmt.Errorf(
-				"the database returned an unexpected spec value for the provided spec hash: %w", err,
-			)
-		}
 	}
 
 	err := pol.GetOrCreate(ctx, db)
