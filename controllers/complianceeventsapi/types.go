@@ -1,12 +1,9 @@
 package complianceeventsapi
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha1" // #nosec G505 -- for convenience, not cryptography
 	"database/sql"
 	"database/sql/driver"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,13 +25,17 @@ type dbRow interface {
 }
 
 type ComplianceEvent struct {
+	EventID      int32         `json:"id"`
 	Cluster      Cluster       `json:"cluster"`
 	Event        EventDetails  `json:"event"`
-	ParentPolicy *ParentPolicy `json:"parent_policy,omitempty"` //nolint:tagliatelle
+	ParentPolicy *ParentPolicy `json:"parent_policy"` //nolint:tagliatelle
 	Policy       Policy        `json:"policy"`
 }
 
-func (ce ComplianceEvent) Validate() error {
+// Validate ensures that a valid POST request for a compliance event is set. This means that if the shorthand approach
+// of providing parent_policy.id and/or policy.id is used, the other fields for ParentPolicy and Policy will not be
+// present.
+func (ce ComplianceEvent) Validate(ctx context.Context, db *sql.DB) error {
 	errs := make([]error, 0)
 
 	if err := ce.Cluster.Validate(); err != nil {
@@ -42,7 +43,33 @@ func (ce ComplianceEvent) Validate() error {
 	}
 
 	if ce.ParentPolicy != nil {
-		if err := ce.ParentPolicy.Validate(); err != nil {
+		if ce.ParentPolicy.KeyID != 0 {
+			row := db.QueryRowContext(
+				ctx, `SELECT EXISTS(SELECT * FROM parent_policies WHERE id=$1);`, ce.ParentPolicy.KeyID,
+			)
+
+			if row.Err() != nil {
+				log.Error(row.Err(), "Failed to query for the existence of the parent policy ID")
+
+				return errors.New("failed to determine if parent_policy.id is valid")
+			}
+
+			var exists bool
+
+			err := row.Scan(&exists)
+			if err != nil {
+				log.Error(row.Err(), "Failed to scan for the existence of the parent policy ID")
+
+				return errors.New("failed to determine if parent_policy.id is valid")
+			}
+
+			if exists {
+				// If the user provided extra data, ignore it since it won't be validated that it matches the database
+				ce.ParentPolicy = &ParentPolicy{KeyID: ce.ParentPolicy.KeyID}
+			} else {
+				errs = append(errs, fmt.Errorf("%w: parent_policy.id not found", errInvalidInput))
+			}
+		} else if err := ce.ParentPolicy.Validate(); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -51,7 +78,30 @@ func (ce ComplianceEvent) Validate() error {
 		errs = append(errs, err)
 	}
 
-	if err := ce.Policy.Validate(); err != nil {
+	if ce.Policy.KeyID != 0 {
+		row := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT * FROM policies WHERE id=$1);`, ce.Policy.KeyID)
+		if row.Err() != nil {
+			log.Error(row.Err(), "Failed to query for the existence of the policy ID")
+
+			return errors.New("failed to determine if policy.id is valid")
+		}
+
+		var exists bool
+
+		err := row.Scan(&exists)
+		if err != nil {
+			log.Error(row.Err(), "Failed to scan for the existence of the policy ID")
+
+			return errors.New("failed to determine if policy.id is valid")
+		}
+
+		if exists {
+			// If the user provided extra data, ignore it since it won't be validated that it matches the database
+			ce.Policy = Policy{KeyID: ce.Policy.KeyID}
+		} else {
+			errs = append(errs, fmt.Errorf("%w: policy.id not found", errInvalidInput))
+		}
+	} else if err := ce.Policy.Validate(); err != nil {
 		errs = append(errs, err)
 	}
 
@@ -139,8 +189,8 @@ type EventDetails struct {
 	Compliance     string    `db:"compliance" json:"compliance"`
 	Message        string    `db:"message" json:"message"`
 	Timestamp      time.Time `db:"timestamp" json:"timestamp"`
-	Metadata       JSONMap   `db:"metadata" json:"metadata,omitempty"`
-	ReportedBy     *string   `db:"reported_by" json:"reported_by,omitempty"` //nolint:tagliatelle
+	Metadata       JSONMap   `db:"metadata" json:"metadata"`
+	ReportedBy     *string   `db:"reported_by" json:"reported_by"` //nolint:tagliatelle
 }
 
 func (e EventDetails) Validate() error {
@@ -180,12 +230,12 @@ func (e *EventDetails) InsertQuery() (string, []any) {
 }
 
 type ParentPolicy struct {
-	KeyID      int32          `db:"id" json:"-"`
+	KeyID      int32          `db:"id" json:"id"`
 	Name       string         `db:"name" json:"name"`
 	Namespace  string         `db:"namespace" json:"namespace"`
-	Categories pq.StringArray `db:"categories" json:"categories,omitempty"`
-	Controls   pq.StringArray `db:"controls" json:"controls,omitempty"`
-	Standards  pq.StringArray `db:"standards" json:"standards,omitempty"`
+	Categories pq.StringArray `db:"categories" json:"categories"`
+	Controls   pq.StringArray `db:"controls" json:"controls"`
+	Standards  pq.StringArray `db:"standards" json:"standards"`
 }
 
 func (p ParentPolicy) Validate() error {
@@ -217,11 +267,36 @@ func (p *ParentPolicy) SelectQuery(returnedColumns ...string) (string, []any) {
 	}
 
 	sql := fmt.Sprintf(
-		`SELECT %s FROM parent_policies `+
-			`WHERE categories=$1 AND controls=$2 AND name=$3 AND namespace=$4 AND standards=$5`,
+		`SELECT %s FROM parent_policies WHERE name=$1 AND namespace=$2`,
 		strings.Join(returnedColumns, ", "),
 	)
-	values := []any{p.Categories, p.Controls, p.Name, p.Namespace, p.Standards}
+	values := []any{p.Name, p.Namespace}
+
+	columnCount := 2
+
+	if p.Categories == nil {
+		sql += " AND categories IS NULL"
+	} else {
+		columnCount++
+		sql += fmt.Sprintf(" AND categories=$%d", columnCount)
+		values = append(values, p.Categories)
+	}
+
+	if p.Controls == nil {
+		sql += " AND controls IS NULL"
+	} else {
+		columnCount++
+		sql += fmt.Sprintf(" AND controls=$%d", columnCount)
+		values = append(values, p.Controls)
+	}
+
+	if p.Standards == nil {
+		sql += " AND standards IS NULL"
+	} else {
+		columnCount++
+		sql += fmt.Sprintf(" AND standards=$%d", columnCount)
+		values = append(values, p.Standards)
+	}
 
 	return sql, values
 }
@@ -235,14 +310,13 @@ func (p ParentPolicy) key() string {
 }
 
 type Policy struct {
-	KeyID     int32   `db:"id" json:"-"`
+	KeyID     int32   `db:"id" json:"id"`
 	Kind      string  `db:"kind" json:"kind"`
 	APIGroup  string  `db:"api_group" json:"apiGroup"`
 	Name      string  `db:"name" json:"name"`
-	Namespace *string `db:"namespace" json:"namespace,omitempty"`
-	Spec      string  `db:"spec" json:"spec,omitempty"`
-	SpecHash  string  `db:"spec_hash" json:"specHash"`
-	Severity  *string `db:"severity" json:"severity,omitempty"`
+	Namespace *string `db:"namespace" json:"namespace"`
+	Spec      JSONMap `db:"spec" json:"spec,omitempty"`
+	Severity  *string `db:"severity" json:"severity"`
 }
 
 func (p *Policy) Validate() error {
@@ -260,24 +334,8 @@ func (p *Policy) Validate() error {
 		errs = append(errs, fmt.Errorf("%w: policy.name", errRequiredFieldNotProvided))
 	}
 
-	if p.Spec == "" && p.SpecHash == "" {
-		errs = append(errs, fmt.Errorf("%w: policy.spec or policy.specHash", errRequiredFieldNotProvided))
-	}
-
-	if p.Spec != "" {
-		var buf bytes.Buffer
-		if err := json.Compact(&buf, []byte(p.Spec)); err != nil {
-			errs = append(errs, fmt.Errorf("%w: policy.spec is not valid JSON: %w", errInvalidInput, err))
-		} else if buf.String() != p.Spec {
-			errs = append(errs, fmt.Errorf("%w: policy.spec is not compact JSON", errInvalidInput))
-		} else if p.SpecHash != "" {
-			sum := sha1.Sum(buf.Bytes()) // #nosec G401 -- for convenience, not cryptography
-
-			if p.SpecHash != hex.EncodeToString(sum[:]) {
-				errs = append(errs, fmt.Errorf("%w: policy.specHash does not match the compact policy.Spec",
-					errInvalidInput))
-			}
-		}
+	if p.Spec == nil {
+		errs = append(errs, fmt.Errorf("%w: policy.spec", errRequiredFieldNotProvided))
 	}
 
 	return errors.Join(errs...)
@@ -285,9 +343,9 @@ func (p *Policy) Validate() error {
 
 func (p *Policy) InsertQuery() (string, []any) {
 	sql := `INSERT INTO policies` +
-		`(api_group, kind, name, namespace, severity, spec, spec_hash)` +
-		`VALUES($1, $2, $3, $4, $5, $6, $7)`
-	values := []any{p.APIGroup, p.Kind, p.Name, p.Namespace, p.Severity, p.Spec, p.SpecHash}
+		`(api_group, kind, name, namespace, severity, spec)` +
+		`VALUES($1, $2, $3, $4, $5, $6)`
+	values := []any{p.APIGroup, p.Kind, p.Name, p.Namespace, p.Severity, p.Spec}
 
 	return sql, values
 }
@@ -299,10 +357,29 @@ func (p *Policy) SelectQuery(returnedColumns ...string) (string, []any) {
 
 	sql := fmt.Sprintf(
 		`SELECT %s FROM policies `+
-			`WHERE api_group=$1 AND kind=$2 AND name=$3 AND namespace=$4 AND severity=$5 AND spec_hash=$6`,
+			`WHERE api_group=$1 AND kind=$2 AND name=$3 AND spec=$4`,
 		strings.Join(returnedColumns, ", "),
 	)
-	values := []any{p.APIGroup, p.Kind, p.Name, p.Namespace, p.Severity, p.SpecHash}
+
+	values := []any{p.APIGroup, p.Kind, p.Name, p.Spec}
+
+	columnCount := 4
+
+	if p.Namespace == nil {
+		sql += " AND namespace is NULL"
+	} else {
+		columnCount++
+		sql += fmt.Sprintf(" AND namespace=$%d", columnCount)
+		values = append(values, p.Namespace)
+	}
+
+	if p.Severity == nil {
+		sql += " AND severity is NULL"
+	} else {
+		columnCount++
+		sql += fmt.Sprintf(" AND severity=$%d", columnCount)
+		values = append(values, p.Severity)
+	}
 
 	return sql, values
 }
@@ -311,36 +388,22 @@ func (p *Policy) GetOrCreate(ctx context.Context, db *sql.DB) error {
 	return getOrCreate(ctx, db, p)
 }
 
-func (p *Policy) key() policyKey {
-	key := policyKey{
-		Kind:     p.Kind,
-		APIGroup: p.APIGroup,
-		Name:     p.Name,
-	}
+func (p *Policy) key() string {
+	var namespace string
 
 	if p.Namespace != nil {
-		key.Namespace = *p.Namespace
+		namespace = *p.Namespace
 	}
 
-	if p.SpecHash != "" {
-		key.SpecHash = p.SpecHash
-	}
+	var severity string
 
 	if p.Severity != nil {
-		key.Severity = *p.Severity
+		severity = *p.Severity
 	}
 
-	return key
-}
-
-type policyKey struct {
-	Kind      string
-	APIGroup  string
-	Name      string
-	Namespace string
-	ParentID  string
-	SpecHash  string
-	Severity  string
+	// Note that as of Go 1.20, it sorts the keys in the underlying map of p.Spec, which is why this is deterministic.
+	// https://github.com/golang/go/blob/97c8ff8d53759e7a82b1862403df1694f2b6e073/src/fmt/print.go#L816-L828
+	return fmt.Sprintf("%s;%s;%s;%v;%v;%v", p.APIGroup, p.Kind, p.Name, namespace, severity, p.Spec)
 }
 
 type JSONMap map[string]interface{}

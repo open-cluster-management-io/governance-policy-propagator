@@ -21,17 +21,17 @@ CREATE TABLE IF NOT EXISTS parent_policies(
 
 -- This is required until we only support Postgres 15+ to utilize NULLS NOT DISTINCT.
 -- Partial indexes with 1 nullable unique field provided (e.g. A, B, C)
-CREATE UNIQUE INDEX parent_policies_null1 ON parent_policies (name, namespace, controls, standards) WHERE categories IS NULL;
-CREATE UNIQUE INDEX parent_policies_null2 ON parent_policies (name, namespace, categories, standards) WHERE controls IS NULL;
-CREATE UNIQUE INDEX parent_policies_null3 ON parent_policies (name, namespace, categories, controls) WHERE standards IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS parent_policies_null1 ON parent_policies (name, namespace, controls, standards) WHERE categories IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS parent_policies_null2 ON parent_policies (name, namespace, categories, standards) WHERE controls IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS parent_policies_null3 ON parent_policies (name, namespace, categories, controls) WHERE standards IS NULL;
 
 -- Partial indexes with 2 nullable unique field provided (e.g. AB AC BC)
-CREATE UNIQUE INDEX parent_policies_null4 ON parent_policies (name, namespace, standards) WHERE categories IS NULL AND controls IS NULL;
-CREATE UNIQUE INDEX parent_policies_null5 ON parent_policies (name, namespace, controls) WHERE categories IS NULL AND standards IS NULL;
-CREATE UNIQUE INDEX parent_policies_null6 ON parent_policies (name, namespace, categories) WHERE controls IS NULL AND standards IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS parent_policies_null4 ON parent_policies (name, namespace, standards) WHERE categories IS NULL AND controls IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS parent_policies_null5 ON parent_policies (name, namespace, controls) WHERE categories IS NULL AND standards IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS parent_policies_null6 ON parent_policies (name, namespace, categories) WHERE controls IS NULL AND standards IS NULL;
 
 -- Partial index with no nullable unique fields provided (e.g. ABC)
-CREATE UNIQUE INDEX parent_policies_null7 ON parent_policies (name, namespace) WHERE categories IS NULL AND controls IS NULL AND standards IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS parent_policies_null7 ON parent_policies (name, namespace) WHERE categories IS NULL AND controls IS NULL AND standards IS NULL;
 
 CREATE TABLE IF NOT EXISTS policies(
    id serial PRIMARY KEY,
@@ -39,22 +39,20 @@ CREATE TABLE IF NOT EXISTS policies(
    api_group TEXT NOT NULL,
    name TEXT NOT NULL,
    namespace TEXT,
-   spec TEXT NOT NULL,
-   -- SHA1 hash
-   spec_hash CHAR(40) NOT NULL,
+   spec JSONB NOT NULL,
    severity TEXT,
-   UNIQUE (kind, api_group, name, namespace, spec_hash, severity)
+   UNIQUE (kind, api_group, name, namespace, spec, severity)
 );
 
 -- This is required until we only support Postgres 15+ to utilize NULLS NOT DISTINCT.
 -- Partial indexes with 1 nullable unique field provided (e.g. A, B)
-CREATE UNIQUE INDEX policies_null1 ON policies (kind, api_group, name, spec_hash, severity) WHERE namespace IS NULL;
-CREATE UNIQUE INDEX policies_null2 ON policies (kind, api_group, name, namespace, spec_hash) WHERE severity IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS policies_null1 ON policies (kind, api_group, name, spec, severity) WHERE namespace IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS policies_null2 ON policies (kind, api_group, name, namespace, spec) WHERE severity IS NULL;
 
 -- Partial index with no nullable unique fields provided (e.g. AB)
-CREATE UNIQUE INDEX policies_null3 ON policies (kind, api_group, name, spec_hash) WHERE namespace IS NULL AND severity IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS policies_null3 ON policies (kind, api_group, name, spec) WHERE namespace IS NULL AND severity IS NULL;
 
-CREATE INDEX IF NOT EXISTS idx_policies_spec_hash ON policies (spec_hash);
+CREATE INDEX IF NOT EXISTS idx_policies_spec ON policies (spec);
 
 CREATE TABLE IF NOT EXISTS compliance_events(
    id serial PRIMARY KEY,
