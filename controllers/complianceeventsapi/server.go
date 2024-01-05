@@ -5,16 +5,92 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"net/url"
+	"reflect"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/lib/pq"
 )
+
+// init dynamically parses the database columns of each struct type to create a mapping of user provided sort options
+// to the equivalent SQL column. ErrInvalidSortOption is also defined with the available sort options to choose from.
+func init() {
+	tableToStruct := map[string]any{
+		"clusters":          Cluster{},
+		"compliance_events": EventDetails{},
+		"parent_policies":   ParentPolicy{},
+		"policies":          Policy{},
+	}
+
+	tableNameToJSONName := map[string]string{
+		"clusters":          "cluster",
+		"compliance_events": "event",
+		"parent_policies":   "parent_policy",
+		"policies":          "policy",
+	}
+
+	// ID is a special case since it's displayed at the top-level in the JSON but is actually in the compliance_events
+	// table.
+	sortOptionsToSQL = map[string]string{"id": "compliance_events.id"}
+	sortOptionsKeys := []string{"id"}
+
+	for tableName, tableStruct := range tableToStruct {
+		structType := reflect.TypeOf(tableStruct)
+		for i := 0; i < structType.NumField(); i++ {
+			structField := structType.Field(i)
+
+			jsonField := structField.Tag.Get("json")
+			if jsonField == "" || jsonField == "-" {
+				continue
+			}
+
+			// This removes additional text in tag such as capturing `spec` from `json:"spec,omitempty"`.
+			jsonField = strings.SplitN(jsonField, ",", 2)[0]
+
+			dbColumn := structField.Tag.Get("db")
+			if dbColumn == "" {
+				continue
+			}
+
+			// Skip JSONB columns as sortable options
+			if tableName == "policies" && dbColumn == "spec" {
+				continue
+			}
+
+			if tableName == "compliance_events" && dbColumn == "metadata" {
+				continue
+			}
+
+			sortOption := fmt.Sprintf("%s.%s", tableNameToJSONName[tableName], jsonField)
+
+			sortOptionsKeys = append(sortOptionsKeys, sortOption)
+
+			sortOptionsToSQL[sortOption] = fmt.Sprintf("%s.%s", tableName, dbColumn)
+		}
+	}
+
+	sort.Strings(sortOptionsKeys)
+
+	ErrInvalidSortOption = fmt.Errorf(
+		"an invalid sort option was provided, choose from: %s", strings.Join(sortOptionsKeys, ", "),
+	)
+}
 
 var (
 	clusterKeyCache      sync.Map
 	parentPolicyKeyCache sync.Map
 	policyKeyCache       sync.Map
+	sortOptionsToSQL     map[string]string
+	ErrInvalidSortOption error
+	ErrInvalidQueryArg   = errors.New("invalid query argument")
 )
 
 type complianceAPIServer struct {
@@ -52,12 +128,28 @@ func (s *complianceAPIServer) Start(dbURL string) error {
 
 	// register handlers here
 	mux.HandleFunc("/api/v1/compliance-events", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
 		switch r.Method {
+		case http.MethodGet:
+			getComplianceEvents(db, w, r)
 		case http.MethodPost:
 			postComplianceEvent(db, w, r)
 		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			writeErrMsgJSON(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
+	})
+
+	mux.HandleFunc("/api/v1/compliance-events/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.Method != http.MethodGet {
+			writeErrMsgJSON(w, "Method not allowed", http.StatusMethodNotAllowed)
+
+			return
+		}
+
+		getSingleComplianceEvent(db, w, r)
 	})
 
 	go func() {
@@ -90,6 +182,357 @@ func (s *complianceAPIServer) Stop() error {
 	s.isRunning = false
 
 	return nil
+}
+
+// splitQueryValue will parse a string and split on unescaped commas. Empty values are discarded.
+func splitQueryValue(value string) []string {
+	values := []string{}
+
+	var currentVal string
+	var previousChar rune
+
+	for _, char := range value {
+		if char == ',' {
+			if previousChar == '\\' {
+				// This comma was escaped, so remove the escape character and keep the comma. Runes are used in case
+				// unicode characters are present in currentVal.
+				runeCurrentVal := []rune(currentVal)
+				currentVal = string(runeCurrentVal[:len(runeCurrentVal)-1]) + ","
+			} else {
+				// The comma was not escaped so we encountered a new value.
+				if currentVal != "" {
+					values = append(values, currentVal)
+				}
+
+				currentVal = ""
+			}
+		} else {
+			// A non-special character was encountered so just append the character.
+			currentVal += string(char)
+		}
+
+		previousChar = char
+	}
+
+	if currentVal != "" {
+		values = append(values, currentVal)
+	}
+
+	return values
+}
+
+// parseQueryArgs will parse the HTTP request's query arguments and convert them to a usable format for constructing
+// the SQL query. All defaults are set and any invalid query arguments result in an error being returned.
+func parseQueryArgs(queryArgs url.Values) (*queryOptions, error) {
+	parsed := &queryOptions{}
+
+	perPageStr := queryArgs.Get("per_page")
+
+	if perPageStr == "" {
+		parsed.PerPage = 20
+	} else {
+		var err error
+
+		parsed.PerPage, err = strconv.ParseUint(perPageStr, 10, 64)
+		if err != nil || parsed.PerPage == 0 || parsed.PerPage > 100 {
+			return nil, fmt.Errorf("%w: per_page must be a value between 1 and 100", ErrInvalidQueryArg)
+		}
+	}
+
+	pageStr := queryArgs.Get("page")
+
+	if pageStr == "" {
+		parsed.Page = 1
+	} else {
+		var err error
+
+		parsed.Page, err = strconv.ParseUint(pageStr, 10, 64)
+		if err != nil || parsed.Page == 0 {
+			return nil, fmt.Errorf("%w: page must be a positive integer", ErrInvalidQueryArg)
+		}
+	}
+
+	sortArgs := splitQueryValue(queryArgs.Get("sort"))
+
+	if len(sortArgs) == 0 {
+		parsed.Sort = []string{"compliance_events.timestamp"}
+	} else {
+		sortSQL := []string{}
+
+		for _, sortArg := range sortArgs {
+			sortOption, ok := sortOptionsToSQL[sortArg]
+			if !ok {
+				return nil, ErrInvalidSortOption
+			}
+
+			sortSQL = append(sortSQL, sortOption)
+		}
+
+		parsed.Sort = sortSQL
+	}
+
+	directionArg := queryArgs.Get("direction")
+	if directionArg == "" || directionArg == "desc" {
+		parsed.Direction = "DESC"
+	} else if directionArg == "asc" {
+		parsed.Direction = "ASC"
+	} else {
+		return nil, fmt.Errorf("%w: direction must be one of: asc, desc", ErrInvalidQueryArg)
+	}
+
+	if queryArgs.Get("include_spec") != "" {
+		return nil, fmt.Errorf("%w: include_spec is a flag and does not accept a value", ErrInvalidQueryArg)
+	}
+
+	parsed.IncludeSpec = queryArgs.Has("include_spec")
+
+	return parsed, nil
+}
+
+// generateGetComplianceEventsQuery will return a SELECT query with results ready to be parsed by
+// scanIntoComplianceEvent. The caller is responsible for adding filters to the query.
+func generateGetComplianceEventsQuery(includeSpec bool) string {
+	selectArgs := []string{
+		"compliance_events.id",
+		"compliance_events.compliance",
+		"compliance_events.message",
+		"compliance_events.metadata",
+		"compliance_events.reported_by",
+		"compliance_events.timestamp",
+		"clusters.cluster_id",
+		"clusters.name",
+		"parent_policies.id",
+		"parent_policies.name",
+		"parent_policies.namespace",
+		"parent_policies.categories",
+		"parent_policies.controls",
+		"parent_policies.standards",
+		"policies.id",
+		"policies.api_group",
+		"policies.kind",
+		"policies.name",
+		"policies.namespace",
+		"policies.severity",
+	}
+
+	if includeSpec {
+		selectArgs = append(selectArgs, "policies.spec")
+	}
+
+	return fmt.Sprintf(`SELECT %s
+FROM
+  compliance_events
+  LEFT JOIN clusters ON compliance_events.cluster_id = clusters.id
+  LEFT JOIN parent_policies ON compliance_events.parent_policy_id = parent_policies.id
+  LEFT JOIN policies ON compliance_events.policy_id = policies.id`,
+		strings.Join(selectArgs, ", "),
+	)
+}
+
+type Scannable interface {
+	Scan(dest ...any) error
+}
+
+// scanIntoComplianceEvent will scan the row result from the SELECT query generated by generateGetComplianceEventsQuery
+// into a ComplianceEvent object.
+func scanIntoComplianceEvent(rows Scannable, includeSpec bool) (*ComplianceEvent, error) {
+	ce := ComplianceEvent{
+		Cluster:      Cluster{},
+		Event:        EventDetails{},
+		ParentPolicy: nil,
+		Policy:       Policy{},
+	}
+
+	ppID := sql.NullInt32{}
+	ppName := sql.NullString{}
+	ppNamespace := sql.NullString{}
+	ppCategories := pq.StringArray{}
+	ppControls := pq.StringArray{}
+	ppStandards := pq.StringArray{}
+
+	scanArgs := []any{
+		&ce.EventID,
+		&ce.Event.Compliance,
+		&ce.Event.Message,
+		&ce.Event.Metadata,
+		&ce.Event.ReportedBy,
+		&ce.Event.Timestamp,
+		&ce.Cluster.ClusterID,
+		&ce.Cluster.Name,
+		&ppID,
+		&ppName,
+		&ppNamespace,
+		&ppCategories,
+		&ppControls,
+		&ppStandards,
+		&ce.Policy.KeyID,
+		&ce.Policy.APIGroup,
+		&ce.Policy.Kind,
+		&ce.Policy.Name,
+		&ce.Policy.Namespace,
+		&ce.Policy.Severity,
+	}
+
+	if includeSpec {
+		scanArgs = append(scanArgs, &ce.Policy.Spec)
+	}
+
+	err := rows.Scan(scanArgs...)
+	if err != nil {
+		return nil, err
+	}
+
+	// The parent policy is optional but when it's set, the name is guaranteed to be set.
+	if ppName.String != "" {
+		ce.ParentPolicy = &ParentPolicy{
+			KeyID:      ppID.Int32,
+			Name:       ppName.String,
+			Namespace:  ppNamespace.String,
+			Categories: ppCategories,
+			Controls:   ppControls,
+			Standards:  ppStandards,
+		}
+	}
+
+	return &ce, nil
+}
+
+// getSingleComplianceEvent handles the GET API endpoint for a single compliance event by ID.
+func getSingleComplianceEvent(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+	eventIDStr := strings.TrimPrefix(r.URL.Path, "/api/v1/compliance-events/")
+
+	eventID, err := strconv.ParseUint(eventIDStr, 10, 64)
+	if err != nil {
+		writeErrMsgJSON(w, "The provided compliance event ID is invalid", http.StatusBadRequest)
+
+		return
+	}
+
+	query := fmt.Sprintf("%s\nWHERE compliance_events.id = $1;", generateGetComplianceEventsQuery(true))
+
+	row := db.QueryRowContext(r.Context(), query, eventID)
+	if row.Err() != nil {
+		log.Error(err, "Failed to query for the compliance event", "eventID", eventID)
+		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
+
+		return
+	}
+
+	complianceEvent, err := scanIntoComplianceEvent(row, true)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeErrMsgJSON(w, "The requested compliance event was not found", http.StatusNotFound)
+
+			return
+		}
+
+		log.Error(err, "Failed to unmarshal the database results")
+		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
+
+		return
+	}
+
+	jsonResp, err := json.Marshal(complianceEvent)
+	if err != nil {
+		log.Error(err, "Failed marshal the compliance event", "eventID", eventID)
+		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
+
+		return
+	}
+
+	if _, err = w.Write(jsonResp); err != nil {
+		log.Error(err, "Error writing success response")
+	}
+}
+
+// getComplianceEvents handles the list API endpoint for compliance events.
+func getComplianceEvents(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+	queryArgs, err := parseQueryArgs(r.URL.Query())
+	if err != nil {
+		writeErrMsgJSON(w, err.Error(), http.StatusBadRequest)
+
+		return
+	}
+
+	query := fmt.Sprintf(`%s
+ORDER BY %s %s
+LIMIT %d
+OFFSET %d ROWS;`,
+		generateGetComplianceEventsQuery(queryArgs.IncludeSpec),
+		strings.Join(queryArgs.Sort, ", "),
+		queryArgs.Direction,
+		queryArgs.PerPage,
+		(queryArgs.Page-1)*queryArgs.PerPage,
+	)
+
+	rows, err := db.QueryContext(r.Context(), query)
+	if err == nil {
+		err = rows.Err()
+	}
+
+	defer rows.Close()
+
+	if err != nil {
+		log.Error(err, "Failed to query for compliance events")
+		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
+
+		return
+	}
+
+	complianceEvents := make([]ComplianceEvent, 0, queryArgs.PerPage)
+
+	for rows.Next() {
+		ce, err := scanIntoComplianceEvent(rows, queryArgs.IncludeSpec)
+		if err != nil {
+			log.Error(err, "Failed to unmarshal the database results")
+			writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
+
+			return
+		}
+
+		complianceEvents = append(complianceEvents, *ce)
+	}
+
+	row := db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM compliance_events;`)
+	if row.Err() != nil {
+		log.Error(row.Err(), "Failed to get the count of compliance events")
+		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
+
+		return
+	}
+
+	var total uint64
+
+	if err := row.Scan(&total); err != nil {
+		log.Error(row.Err(), "Got an invalid response when getting the count of compliance events")
+		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
+
+		return
+	}
+
+	pages := math.Ceil(float64(total) / float64(queryArgs.PerPage))
+
+	response := ListResponse{
+		Data: complianceEvents,
+		Metadata: metadata{
+			Page:    queryArgs.Page,
+			Pages:   uint64(pages),
+			PerPage: queryArgs.PerPage,
+			Total:   total,
+		},
+	}
+
+	jsonResp, err := json.Marshal(response)
+	if err != nil {
+		log.Error(err, "Failed to marshal the response")
+		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
+
+		return
+	}
+
+	if _, err = w.Write(jsonResp); err != nil {
+		log.Error(err, "Error writing success response")
+	}
 }
 
 func postComplianceEvent(db *sql.DB, w http.ResponseWriter, r *http.Request) {
@@ -139,12 +582,6 @@ func postComplianceEvent(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 
 	policyFK, err := getPolicyForeignKey(r.Context(), db, reqEvent.Policy)
 	if err != nil {
-		if errors.Is(err, errRequiredFieldNotProvided) {
-			writeErrMsgJSON(w, err.Error(), http.StatusBadRequest)
-
-			return
-		}
-
 		log.Error(err, "error getting policy foreign key")
 		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
 

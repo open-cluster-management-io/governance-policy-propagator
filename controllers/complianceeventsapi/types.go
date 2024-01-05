@@ -24,6 +24,26 @@ type dbRow interface {
 	SelectQuery(returnedColumns ...string) (string, []any)
 }
 
+type metadata struct {
+	Page    uint64 `json:"page"`
+	Pages   uint64 `json:"pages"`
+	PerPage uint64 `json:"per_page"` //nolint:tagliatelle
+	Total   uint64 `json:"total"`
+}
+
+type ListResponse struct {
+	Data     []ComplianceEvent `json:"data"`
+	Metadata metadata          `json:"metadata"`
+}
+
+type queryOptions struct {
+	Direction   string
+	IncludeSpec bool
+	Page        uint64
+	PerPage     uint64
+	Sort        []string
+}
+
 type ComplianceEvent struct {
 	EventID      int32         `json:"id"`
 	Cluster      Cluster       `json:"cluster"`
