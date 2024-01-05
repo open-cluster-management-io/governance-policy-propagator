@@ -6,10 +6,12 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -281,6 +283,91 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 				Expect(count).To(Equal(1))
 			})
+
+			It("Should return the compliance event from the API", func(ctx context.Context) {
+				respJSON, err := listEvents(ctx)
+				Expect(err).ToNot(HaveOccurred())
+
+				complianceEvent := map[string]any{
+					"cluster": map[string]any{
+						"cluster_id": "test1-cluster1-fake-uuid-1",
+						"name":       "cluster1",
+					},
+					"event": map[string]any{
+						"compliance":  "NonCompliant",
+						"message":     "configmaps [etcd] not found in namespace default",
+						"metadata":    map[string]any{"test": true},
+						"reported_by": "optional-test",
+						"timestamp":   "2023-01-01T01:01:01.111Z",
+					},
+					"id": float64(1),
+					"parent_policy": map[string]any{
+						"categories": []any{"cat-1", "cat-2"},
+						"controls":   []any{"ctrl-1"},
+						"id":         float64(1),
+						"name":       "etcd-encryption1",
+						"namespace":  "policies",
+						"standards":  []any{"stand-1"},
+					},
+					"policy": map[string]any{
+						"apiGroup":  "policy.open-cluster-management.io",
+						"id":        float64(1),
+						"kind":      "ConfigurationPolicy",
+						"name":      "etcd-encryption1",
+						"namespace": "local-cluster",
+						"severity":  "low",
+					},
+				}
+
+				expected := map[string]any{
+					"data": []any{complianceEvent},
+					"metadata": map[string]any{
+						"page":     float64(1),
+						"pages":    float64(1),
+						"per_page": float64(20),
+						"total":    float64(1),
+					},
+				}
+
+				Expect(respJSON).To(Equal(expected))
+
+				// Get just the single compliance event
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, eventsEndpoint+"/1", nil)
+				Expect(err).ToNot(HaveOccurred())
+
+				resp, err := httpClient.Do(req)
+				Expect(err).ToNot(HaveOccurred())
+
+				defer resp.Body.Close()
+
+				body, err := io.ReadAll(resp.Body)
+				Expect(err).ToNot(HaveOccurred())
+
+				respJSON = map[string]any{}
+
+				err = json.Unmarshal(body, &respJSON)
+				Expect(err).ToNot(HaveOccurred())
+
+				complianceEvent["policy"].(map[string]any)["spec"] = map[string]any{
+					"severity": "low",
+					"test":     "one",
+				}
+
+				Expect(respJSON).To(Equal(complianceEvent))
+			})
+
+			It("Should return the compliance event with the spec from the API", func(ctx context.Context) {
+				respJSON, err := listEvents(ctx, "include_spec")
+				Expect(err).ToNot(HaveOccurred())
+
+				data := respJSON["data"].([]any)
+				Expect(data).To(HaveLen(1))
+
+				spec := data[0].(map[string]any)["policy"].(map[string]any)["spec"]
+				expected := map[string]any{"test": "one", "severity": "low"}
+
+				Expect(spec).To(Equal(expected))
+			})
 		})
 
 		Describe("POST two minimally-valid events on different clusters and policies", func() {
@@ -412,7 +499,372 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			})
 		})
 
-		Describe("POST two events on the same cluster and policy", func() {
+		Describe("API pagination", func() {
+			It("Should have correct default pagination", func(ctx context.Context) {
+				respJSON, err := listEvents(ctx)
+				Expect(err).ToNot(HaveOccurred())
+
+				metadata := respJSON["metadata"].(map[string]interface{})
+				Expect(metadata["page"]).To(BeEquivalentTo(1))
+				Expect(metadata["pages"]).To(BeEquivalentTo(1))
+				Expect(metadata["per_page"]).To(BeEquivalentTo(20))
+				Expect(metadata["total"]).To(BeEquivalentTo(3))
+
+				data := respJSON["data"].([]any)
+				Expect(data).To(HaveLen(3))
+			})
+			It("Should have accept page=2", func(ctx context.Context) {
+				respJSON, err := listEvents(ctx, "page=2")
+				Expect(err).ToNot(HaveOccurred())
+
+				metadata := respJSON["metadata"].(map[string]interface{})
+				Expect(metadata["page"]).To(BeEquivalentTo(2))
+				Expect(metadata["pages"]).To(BeEquivalentTo(1))
+				Expect(metadata["per_page"]).To(BeEquivalentTo(20))
+				Expect(metadata["total"]).To(BeEquivalentTo(3))
+
+				data := respJSON["data"].([]any)
+				Expect(data).To(BeEmpty())
+			})
+
+			It("Should accept per_page=2 and page=2", func(ctx context.Context) {
+				respJSON, err := listEvents(ctx, "per_page=2", "page=2")
+				Expect(err).ToNot(HaveOccurred())
+
+				metadata := respJSON["metadata"].(map[string]interface{})
+				Expect(metadata["page"]).To(BeEquivalentTo(2))
+				Expect(metadata["pages"]).To(BeEquivalentTo(2))
+				Expect(metadata["per_page"]).To(BeEquivalentTo(2))
+				Expect(metadata["total"]).To(BeEquivalentTo(3))
+
+				data := respJSON["data"].([]any)
+				Expect(data).To(HaveLen(1))
+				// The default sort is descending order by event timestamp, so the last event in the pagination is
+				// the first event.
+				Expect(data[0].(map[string]any)["id"]).To(BeEquivalentTo(1))
+			})
+
+			It("Should not accept page=150", func(ctx context.Context) {
+				// Too many per_page
+				_, err := listEvents(ctx, "per_page=150", "page=2")
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(ContainSubstring("per_page must be a value between 1 and 100")))
+			})
+
+			It("Should not accept per_page=-5", func(ctx context.Context) {
+				// Too little per_page
+				_, err := listEvents(ctx, "per_page=-5", "page=2")
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(ContainSubstring("per_page must be a value between 1 and 100")))
+			})
+
+			It("Should not accept page=-5", func(ctx context.Context) {
+				// Too little per_page
+				_, err := listEvents(ctx, "page=-5")
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(ContainSubstring("page must be a positive integer")))
+			})
+		})
+
+		DescribeTable("API sorting",
+			func(ctx context.Context, queryArgs []string, expectedIDs []float64) {
+				respJSON, err := listEvents(ctx, queryArgs...)
+				Expect(err).ToNot(HaveOccurred())
+
+				data, ok := respJSON["data"].([]any)
+				Expect(ok).To(BeTrue())
+				Expect(data).To(HaveLen(3))
+
+				actualIDs := make([]float64, 0, 3)
+
+				for _, event := range data {
+					actualIDs = append(actualIDs, event.(map[string]any)["id"].(float64))
+				}
+
+				Expect(actualIDs).To(Equal(expectedIDs))
+			},
+			Entry(
+				"Sort descending by cluster.cluster_id",
+				[]string{"sort=cluster.cluster_id", "direction=desc"},
+				[]float64{3, 2, 1},
+			),
+			Entry(
+				"Sort ascending by cluster.cluster_id",
+				[]string{"sort=cluster.cluster_id", "direction=asc"},
+				[]float64{1, 2, 3},
+			),
+			Entry(
+				"Sort descending by cluster.name",
+				[]string{"sort=cluster.name", "direction=desc"},
+				[]float64{3, 2, 1},
+			),
+			Entry(
+				"Sort ascending by cluster.name",
+				[]string{"sort=cluster.name", "direction=asc"},
+				[]float64{1, 2, 3},
+			),
+			Entry(
+				"Sort descending by event.compliance",
+				[]string{"sort=event.compliance", "direction=desc"},
+				[]float64{2, 1, 3},
+			),
+			Entry(
+				"Sort ascending by event.compliance",
+				[]string{"sort=event.compliance", "direction=asc"},
+				[]float64{3, 1, 2},
+			),
+			Entry(
+				"Sort descending by event.message",
+				[]string{"sort=event.message", "direction=desc"},
+				[]float64{1, 2, 3},
+			),
+			Entry(
+				"Sort ascending by event.message",
+				[]string{"sort=event.message", "direction=asc"},
+				[]float64{3, 1, 2},
+			),
+			Entry(
+				"Sort descending by event.reported_by",
+				[]string{"sort=event.reported_by", "direction=desc"},
+				[]float64{3, 2, 1},
+			),
+			Entry(
+				"Sort ascending by event.reported_by",
+				[]string{"sort=event.reported_by", "direction=asc"},
+				[]float64{1, 2, 3},
+			),
+			Entry(
+				"Sort descending by event.timestamp (default)",
+				[]string{},
+				[]float64{3, 2, 1},
+			),
+			Entry(
+				"Sort descending by event.timestamp",
+				[]string{"sort=event.timestamp", "direction=desc"},
+				[]float64{3, 2, 1},
+			),
+			Entry(
+				"Sort ascending by event.timestamp",
+				[]string{"sort=event.timestamp", "direction=asc"},
+				[]float64{1, 2, 3},
+			),
+			Entry(
+				"Sort descending by parent_policy.categories",
+				[]string{"sort=parent_policy.categories", "direction=desc"},
+				[]float64{2, 3, 1},
+			),
+			Entry(
+				"Sort ascending by parent_policy.categories",
+				[]string{"sort=parent_policy.categories", "direction=asc"},
+				[]float64{1, 2, 3},
+			),
+			Entry(
+				"Sort descending by parent_policy.controls",
+				[]string{"sort=parent_policy.controls", "direction=desc"},
+				[]float64{2, 3, 1},
+			),
+			Entry(
+				"Sort ascending by parent_policy.controls",
+				[]string{"sort=parent_policy.controls", "direction=asc"},
+				[]float64{1, 2, 3},
+			),
+			Entry(
+				"Sort descending by parent_policy.id",
+				[]string{"sort=parent_policy.id", "direction=desc"},
+				[]float64{2, 3, 1},
+			),
+			Entry(
+				"Sort ascending by parent_policy.id",
+				[]string{"sort=parent_policy.id", "direction=asc"},
+				[]float64{1, 2, 3},
+			),
+			Entry(
+				"Sort descending by parent_policy.name",
+				[]string{"sort=parent_policy.name", "direction=desc"},
+				[]float64{2, 3, 1},
+			),
+			Entry(
+				"Sort ascending by parent_policy.name",
+				[]string{"sort=parent_policy.name", "direction=asc"},
+				[]float64{1, 2, 3},
+			),
+			Entry(
+				"Sort descending by parent_policy.namespace",
+				[]string{"sort=parent_policy.namespace", "direction=desc"},
+				[]float64{2, 3, 1},
+			),
+			Entry(
+				"Sort ascending by parent_policy.namespace",
+				[]string{"sort=parent_policy.namespace", "direction=asc"},
+				[]float64{1, 2, 3},
+			),
+			Entry(
+				"Sort descending by parent_policy.standards",
+				[]string{"sort=parent_policy.standards", "direction=desc"},
+				[]float64{2, 3, 1},
+			),
+			Entry(
+				"Sort ascending by parent_policy.standards",
+				[]string{"sort=parent_policy.standards", "direction=asc"},
+				[]float64{1, 2, 3},
+			),
+			Entry(
+				"Sort descending by policy.apiGroup",
+				[]string{"sort=policy.apiGroup", "direction=desc"},
+				[]float64{1, 2, 3},
+			),
+			Entry(
+				"Sort ascending by policy.apiGroup",
+				[]string{"sort=policy.apiGroup", "direction=asc"},
+				[]float64{1, 2, 3},
+			),
+			Entry(
+				"Sort descending by policy.id",
+				[]string{"sort=policy.id", "direction=desc"},
+				[]float64{3, 2, 1},
+			),
+			Entry(
+				"Sort ascending by policy.id",
+				[]string{"sort=policy.id", "direction=asc"},
+				[]float64{1, 2, 3},
+			),
+			Entry(
+				"Sort descending by policy.kind",
+				[]string{"sort=policy.kind", "direction=desc"},
+				[]float64{1, 2, 3},
+			),
+			Entry(
+				"Sort ascending by policy.kind",
+				[]string{"sort=policy.kind", "direction=asc"},
+				[]float64{1, 2, 3},
+			),
+			Entry(
+				"Sort descending by policy.name",
+				[]string{"sort=policy.name", "direction=desc"},
+				[]float64{2, 3, 1},
+			),
+			Entry(
+				"Sort ascending by policy.name",
+				[]string{"sort=policy.name", "direction=asc"},
+				[]float64{1, 2, 3},
+			),
+			Entry(
+				"Sort descending by policy.namespace",
+				[]string{"sort=policy.namespace", "direction=desc"},
+				[]float64{2, 3, 1},
+			),
+			Entry(
+				"Sort ascending by policy.namespace",
+				[]string{"sort=policy.namespace", "direction=asc"},
+				[]float64{1, 2, 3},
+			),
+			Entry(
+				"Sort descending by policy.severity",
+				[]string{"sort=policy.severity", "direction=desc"},
+				[]float64{2, 3, 1},
+			),
+			Entry(
+				"Sort ascending by policy.severity",
+				[]string{"sort=policy.severity", "direction=asc"},
+				[]float64{1, 2, 3},
+			),
+			Entry(
+				"Sort descending by parent_policy.id and policy.id",
+				[]string{"sort=parent_policy.id,policy.id", "direction=asc"},
+				[]float64{1, 2, 3},
+			),
+			Entry(
+				"Sort descending by id",
+				[]string{"sort=id", "direction=desc"},
+				[]float64{3, 2, 1},
+			),
+			Entry(
+				"Sort ascending by id",
+				[]string{"sort=id", "direction=asc"},
+				[]float64{1, 2, 3},
+			),
+		)
+
+		Describe("Invalid event ID", func() {
+			It("Compliance event is not found", func(ctx context.Context) {
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, eventsEndpoint+"/1231291", nil)
+				Expect(err).ToNot(HaveOccurred())
+
+				resp, err := httpClient.Do(req)
+				Expect(err).ToNot(HaveOccurred())
+
+				defer resp.Body.Close()
+
+				Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
+
+				body, err := io.ReadAll(resp.Body)
+				Expect(err).ToNot(HaveOccurred())
+
+				respJSON := map[string]any{}
+
+				err = json.Unmarshal(body, &respJSON)
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(respJSON["message"].(string)).To(Equal("The requested compliance event was not found"))
+			})
+
+			It("Compliance event ID is invalid", func(ctx context.Context) {
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, eventsEndpoint+"/sql-injections-lose", nil)
+				Expect(err).ToNot(HaveOccurred())
+
+				resp, err := httpClient.Do(req)
+				Expect(err).ToNot(HaveOccurred())
+
+				defer resp.Body.Close()
+
+				Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+
+				body, err := io.ReadAll(resp.Body)
+				Expect(err).ToNot(HaveOccurred())
+
+				respJSON := map[string]any{}
+
+				err = json.Unmarshal(body, &respJSON)
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(respJSON["message"].(string)).To(Equal("The provided compliance event ID is invalid"))
+			})
+		})
+
+		Describe("Invalid sort options", func() {
+			It("An invalid sort of sort=my-laundry", func(ctx context.Context) {
+				_, err := listEvents(ctx, "sort=my-laundry")
+				Expect(err).To(HaveOccurred())
+				expected := "an invalid sort option was provided, choose from: cluster.cluster_id, cluster.name, " +
+					"event.compliance, event.message, event.reported_by, event.timestamp, id, " +
+					"parent_policy.categories, parent_policy.controls, parent_policy.id, parent_policy.name, " +
+					"parent_policy.namespace, parent_policy.standards, policy.apiGroup, policy.id, policy.kind, " +
+					"policy.name, policy.namespace, policy.severity"
+				Expect(err).To(MatchError(ContainSubstring(expected)))
+			})
+
+			It("An invalid sort direction", func(ctx context.Context) {
+				_, err := listEvents(ctx, "direction=up")
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(ContainSubstring("direction must be one of: asc, desc")))
+			})
+		})
+
+		Describe("Invalid query arguments", func() {
+			It("An invalid include_spec=yes-please", func(ctx context.Context) {
+				_, err := listEvents(ctx, "include_spec=yes-please")
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(ContainSubstring("include_spec is a flag and does not accept a value")))
+			})
+
+			It("An invalid sort direction", func(ctx context.Context) {
+				_, err := listEvents(ctx, "direction=up")
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(ContainSubstring("direction must be one of: asc, desc")))
+			})
+		})
+
+		Describe("POST three events on the same cluster and policy", func() {
 			// payload1 defines most things, and should cause the cluster, parent, and policy to be created.
 			payload1 := []byte(`{
 				"cluster": {
@@ -459,10 +911,39 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 				}
 			}`)
 
+			// payload3 redefines most things, and should cause the cluster, parent, and policy to be reused from the
+			// cache.
+			payload3 := []byte(`{
+				"cluster": {
+					"name": "cluster4",
+					"cluster_id": "test3-cluster4-fake-uuid-4"
+				},
+				"parent_policy": {
+					"name": "common-parent",
+					"namespace": "policies",
+					"categories": ["cat-3", "cat-4"],
+					"controls": ["ctrl-2"],
+					"standards": ["stand-2"]
+				},
+				"policy": {
+					"apiGroup": "policy.open-cluster-management.io",
+					"kind": "ConfigurationPolicy",
+					"name": "common",
+					"spec": {"test": "three", "severity": "low"},
+					"severity": "low"
+				},
+				"event": {
+					"compliance": "NonCompliant",
+					"message": "configmaps [common] not found in namespace default",
+					"timestamp": "2023-05-05T05:05:05.555Z"
+				}
+			}`)
+
 			BeforeAll(func(ctx context.Context) {
 				By("POST the events")
 				Eventually(postEvent(ctx, payload1), "5s", "1s").ShouldNot(HaveOccurred())
 				Eventually(postEvent(ctx, payload2), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload3), "5s", "1s").ShouldNot(HaveOccurred())
 			})
 
 			It("Should have only created one cluster in the table", func() {
@@ -540,12 +1021,12 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 				Expect(specs[0]).To(BeEquivalentTo(map[string]any{"test": "three", "severity": "low"}))
 			})
 
-			It("Should have created both events in a table", func() {
+			It("Should have created three events in a table", func() {
 				rows, err := db.Query("SELECT * FROM compliance_events WHERE message = $1",
 					"configmaps [common] not found in namespace default")
 				Expect(err).ToNot(HaveOccurred())
 
-				timestamps := make([]string, 0)
+				timestamps := make([]string, 0, 3)
 				for rows.Next() {
 					var (
 						id             int
@@ -575,6 +1056,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 				Expect(timestamps).To(ConsistOf(
 					"2023-03-03T03:03:03.333Z",
 					"2023-04-04T04:04:04.444Z",
+					"2023-05-05T05:05:05.555Z",
 				))
 			})
 		})
@@ -911,6 +1393,47 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 				}`)), "5s", "1s").Should(MatchError(ContainSubstring("Got non-201 status code 400")))
 			})
 
+			It("should require the parent policy to have fields when specified", func(ctx context.Context) {
+				Eventually(postEvent(ctx, []byte(`{
+					"cluster": {
+						"name": "validity-test",
+						"cluster_id": "test-validity-fake-uuid"
+					},
+					"parent_policy": {},
+					"policy": {
+						"apiGroup": "policy.open-cluster-management.io",
+						"kind": "ConfigurationPolicy",
+						"name": "validity",
+						"spec": {"test": "validity", "severity": "low"},
+						"severity": "low"
+					},
+					"event": {
+						"compliance": "Compliant",
+						"message": "configmaps [valid] valid in namespace valid",
+						"timestamp": "2023-09-09T09:09:09.999Z"
+					}
+				}`)), "5s", "1s").Should(MatchError(ContainSubstring("Got non-201 status code 400")))
+			})
+
+			It("should require the policy to be defined", func(ctx context.Context) {
+				Eventually(postEvent(ctx, []byte(`{
+					"cluster": {
+						"name": "validity-test",
+						"cluster_id": "test-validity-fake-uuid"
+					},
+					"parent_policy": {
+						"name": "validity-parent",
+						"namespace": "policies"
+					},
+					"policy": {},
+					"event": {
+						"compliance": "Compliant",
+						"message": "configmaps [valid] valid in namespace valid",
+						"timestamp": "2023-09-09T09:09:09.999Z"
+					}
+				}`)), "5s", "1s").Should(MatchError(ContainSubstring("Got non-201 status code 400")))
+			})
+
 			It("should require the input to be valid JSON", func(ctx context.Context) {
 				Eventually(postEvent(ctx, []byte(`{
 					foo: bar: baz
@@ -1068,4 +1591,42 @@ func postEvent(ctx context.Context, payload []byte) error {
 	}
 
 	return errors.Join(errs...)
+}
+
+func listEvents(ctx context.Context, queryArgs ...string) (map[string]any, error) {
+	url := eventsEndpoint
+
+	if len(queryArgs) > 0 {
+		url += "?" + strings.Join(queryArgs, "&")
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	respJSON := map[string]any{}
+
+	err = json.Unmarshal(body, &respJSON)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return respJSON, fmt.Errorf("Got non-200 status code %v; response: %q", resp.StatusCode, string(body))
+	}
+
+	return respJSON, nil
 }
