@@ -851,6 +851,18 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 		})
 
 		Describe("Invalid query arguments", func() {
+			It("An invalid query argument", func(ctx context.Context) {
+				_, err := listEvents(ctx, "make_it_compliant=please")
+				expected := "an invalid query argument was provided, choose from: cluster.cluster_id, cluster.name, " +
+					"direction, event.compliance, event.message, event.message_includes, event.message_like, " +
+					"event.reported_by, event.timestamp, event.timestamp_after, event.timestamp_before, id, " +
+					"include_spec, page, parent_policy.categories, parent_policy.controls, parent_policy.id, " +
+					"parent_policy.name, parent_policy.namespace, parent_policy.standards, per_page, " +
+					"policy.apiGroup, policy.id, policy.kind, policy.name, policy.namespace, policy.severity, sort"
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(ContainSubstring(expected)))
+			})
+
 			It("An invalid include_spec=yes-please", func(ctx context.Context) {
 				_, err := listEvents(ctx, "include_spec=yes-please")
 				Expect(err).To(HaveOccurred())
@@ -1483,6 +1495,198 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 				)))
 			})
 		})
+
+		DescribeTable("API filtering",
+			func(ctx context.Context, queryArgs []string, expectedIDs []float64) {
+				respJSON, err := listEvents(ctx, queryArgs...)
+				Expect(err).ToNot(HaveOccurred())
+
+				data, ok := respJSON["data"].([]any)
+				Expect(ok).To(BeTrue())
+
+				actualIDs := []float64{}
+
+				for _, event := range data {
+					actualIDs = append(actualIDs, event.(map[string]any)["id"].(float64))
+				}
+
+				Expect(actualIDs).To(Equal(expectedIDs))
+			},
+			Entry(
+				"Filter by cluster.cluster_id",
+				[]string{"cluster.cluster_id=test1-cluster1-fake-uuid-1,test6-cluster6-fake-uuid-6"},
+				[]float64{11, 10, 1},
+			),
+			Entry(
+				"Filter by cluster.name",
+				[]string{"cluster.name=cluster1,cluster6"},
+				[]float64{11, 10, 1},
+			),
+			Entry(
+				"Filter by event.compliance",
+				[]string{"event.compliance=Compliant"},
+				[]float64{9, 8, 7, 3, 11, 10},
+			),
+			Entry(
+				"Filter by event.message",
+				[]string{"event.message=configmaps%20%5Bcommon%5D%20not%20found%20in%20namespace%20default"},
+				[]float64{6, 5, 4},
+			),
+			Entry(
+				"Filter by event.message_includes",
+				[]string{"event.message_includes=etcd"},
+				[]float64{2, 3, 1},
+			),
+			Entry(
+				"Filter by event.message_includes and ensure special characters are escaped",
+				[]string{"event.message_includes=co_m%25n"},
+				[]float64{},
+			),
+			Entry(
+				"Filter by event.message_like",
+				[]string{"event.message_like=configmaps%20%5B%25common%25%5D%25"},
+				[]float64{9, 8, 6, 7, 5, 4, 11, 10},
+			),
+			Entry(
+				"Filter by event.timestamp",
+				[]string{"event.timestamp=2023-01-01T01:01:01.111Z"},
+				[]float64{1},
+			),
+			Entry(
+				"Filter by event.timestamp_after",
+				[]string{"event.timestamp_after=2023-04-01T01:01:01.111Z"},
+				[]float64{9, 8, 7, 6, 5},
+			),
+			Entry(
+				"Filter by event.timestamp_before",
+				[]string{"event.timestamp_before=2023-04-01T01:01:01.111Z"},
+				[]float64{4, 3, 2, 11, 10, 1},
+			),
+			Entry(
+				"Filter by event.timestamp_after and event.timestamp_before",
+				[]string{
+					"event.timestamp_after=2023-01-01T01:01:01.111Z", "event.timestamp_before=2023-04-01T01:01:01.111Z",
+				},
+				[]float64{4, 2, 3, 11, 10},
+			),
+			Entry(
+				"Filter by parent_policy.categories",
+				[]string{"parent_policy.categories=cat-1,cat-3"},
+				[]float64{6, 5, 4, 1},
+			),
+			Entry(
+				"Filter by parent_policy.categories is null",
+				[]string{"parent_policy.categories"},
+				[]float64{9, 8, 7, 2, 3, 11, 10},
+			),
+			Entry(
+				"Filter by parent_policy.controls",
+				[]string{"parent_policy.controls=ctrl-2"},
+				[]float64{6, 5, 4},
+			),
+			Entry(
+				"Filter by parent_policy.controls is null",
+				[]string{"parent_policy.controls"},
+				[]float64{9, 8, 7, 2, 3, 11, 10},
+			),
+			Entry(
+				"Filter by parent_policy.id",
+				[]string{"parent_policy.id=2"},
+				[]float64{6, 5, 4},
+			),
+			Entry(
+				"Filter by parent_policy.name",
+				[]string{"parent_policy.name=etcd-encryption1"},
+				[]float64{1},
+			),
+			Entry(
+				"Filter by parent_policy.namespace",
+				[]string{"parent_policy.namespace=policies"},
+				[]float64{9, 8, 6, 7, 5, 4, 11, 10, 1},
+			),
+			Entry(
+				"Filter by parent_policy.standards",
+				[]string{"parent_policy.standards=stand-2"},
+				[]float64{6, 5, 4},
+			),
+			Entry(
+				"Filter by parent_policy.standards is null",
+				[]string{"parent_policy.standards"},
+				[]float64{9, 8, 2, 3, 11, 10},
+			),
+			Entry(
+				"Filter by policy.apiGroup",
+				[]string{"policy.apiGroup=policy.open-cluster-management.io"},
+				[]float64{9, 8, 6, 7, 5, 4, 3, 2, 11, 10, 1},
+			),
+			Entry(
+				"Filter by policy.apiGroup no results",
+				[]string{"policy.apiGroup=does-not-exist"},
+				[]float64{},
+			),
+			Entry(
+				"Filter by policy.id",
+				[]string{"policy.id=4"},
+				[]float64{6, 5, 4},
+			),
+			Entry(
+				"Filter by policy.kind",
+				[]string{"policy.kind=ConfigurationPolicy"},
+				[]float64{9, 8, 6, 7, 5, 4, 3, 2, 11, 10, 1},
+			),
+			Entry(
+				"Filter by policy.kind no results",
+				[]string{"policy.kind=something-else"},
+				[]float64{},
+			),
+			Entry(
+				"Filter by policy.name",
+				[]string{"policy.name=common-b"},
+				[]float64{11, 10},
+			),
+			Entry(
+				"Filter by policy.namespace",
+				[]string{"policy.namespace=default"},
+				[]float64{10},
+			),
+			Entry(
+				"Filter by policy.namespace is null",
+				[]string{"policy.namespace"},
+				[]float64{9, 8, 6, 7, 5, 4, 2, 3, 11},
+			),
+			Entry(
+				"Filter by policy.severity",
+				[]string{"policy.severity=low"},
+				[]float64{9, 8, 6, 7, 5, 4, 11, 10, 1},
+			),
+			Entry(
+				"Filter by policy.severity is null",
+				[]string{"policy.severity"},
+				[]float64{2, 3},
+			),
+		)
+
+		DescribeTable("Invalid API filtering",
+			func(ctx context.Context, queryArgs []string, expectedErrMsg string) {
+				_, err := listEvents(ctx, queryArgs...)
+				Expect(err).To(MatchError(ContainSubstring(expectedErrMsg)))
+			},
+			Entry(
+				"Filter by empty event.timestamp_before is invalid",
+				[]string{"event.timestamp_before"},
+				"invalid query argument: event.timestamp_before must have a value",
+			),
+			Entry(
+				"Filter by invalid event.timestamp_before",
+				[]string{"event.timestamp_before=1993"},
+				"invalid query argument: event.timestamp_before must be in the format of RFC 3339",
+			),
+			Entry(
+				"Filter by invalid event.timestamp_after",
+				[]string{"event.timestamp_after=1993"},
+				"invalid query argument: event.timestamp_after must be in the format of RFC 3339",
+			),
+		)
 	})
 })
 

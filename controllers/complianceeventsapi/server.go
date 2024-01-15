@@ -20,8 +20,9 @@ import (
 	"github.com/lib/pq"
 )
 
-// init dynamically parses the database columns of each struct type to create a mapping of user provided sort options
-// to the equivalent SQL column. ErrInvalidSortOption is also defined with the available sort options to choose from.
+// init dynamically parses the database columns of each struct type to create a mapping of user provided sort/filter
+// options to the equivalent SQL column. ErrInvalidSortOption, ErrInvalidQueryArg, and validQueryArgs are also defined
+// with the available sort/query options to choose from.
 func init() {
 	tableToStruct := map[string]any{
 		"clusters":          Cluster{},
@@ -39,7 +40,7 @@ func init() {
 
 	// ID is a special case since it's displayed at the top-level in the JSON but is actually in the compliance_events
 	// table.
-	sortOptionsToSQL = map[string]string{"id": "compliance_events.id"}
+	queryOptionsToSQL = map[string]string{"id": "compliance_events.id"}
 	sortOptionsKeys := []string{"id"}
 
 	for tableName, tableStruct := range tableToStruct {
@@ -69,11 +70,12 @@ func init() {
 				continue
 			}
 
-			sortOption := fmt.Sprintf("%s.%s", tableNameToJSONName[tableName], jsonField)
+			queryOption := fmt.Sprintf("%s.%s", tableNameToJSONName[tableName], jsonField)
 
-			sortOptionsKeys = append(sortOptionsKeys, sortOption)
+			sortOptionsKeys = append(sortOptionsKeys, queryOption)
+			validQueryArgs = append(validQueryArgs, queryOption)
 
-			sortOptionsToSQL[sortOption] = fmt.Sprintf("%s.%s", tableName, dbColumn)
+			queryOptionsToSQL[queryOption] = fmt.Sprintf("%s.%s", tableName, dbColumn)
 		}
 	}
 
@@ -82,15 +84,41 @@ func init() {
 	ErrInvalidSortOption = fmt.Errorf(
 		"an invalid sort option was provided, choose from: %s", strings.Join(sortOptionsKeys, ", "),
 	)
+
+	validQueryArgs = []string{
+		"direction",
+		"event.message_includes",
+		"event.message_like",
+		"event.timestamp_after",
+		"event.timestamp_before",
+		"include_spec",
+		"page",
+		"per_page",
+		"sort",
+	}
+
+	validQueryArgs = append(
+		validQueryArgs,
+		// sortOptionsKeys are all filterable columns.
+		sortOptionsKeys...,
+	)
+
+	sort.Strings(validQueryArgs)
+
+	ErrInvalidQueryArg = fmt.Errorf(
+		"an invalid query argument was provided, choose from: %s", strings.Join(validQueryArgs, ", "),
+	)
 }
 
 var (
-	clusterKeyCache      sync.Map
-	parentPolicyKeyCache sync.Map
-	policyKeyCache       sync.Map
-	sortOptionsToSQL     map[string]string
-	ErrInvalidSortOption error
-	ErrInvalidQueryArg   = errors.New("invalid query argument")
+	clusterKeyCache         sync.Map
+	parentPolicyKeyCache    sync.Map
+	policyKeyCache          sync.Map
+	queryOptionsToSQL       map[string]string
+	validQueryArgs          []string
+	ErrInvalidSortOption    error
+	ErrInvalidQueryArgValue = errors.New("invalid query argument")
+	ErrInvalidQueryArg      error
 )
 
 type complianceAPIServer struct {
@@ -224,67 +252,122 @@ func splitQueryValue(value string) []string {
 // parseQueryArgs will parse the HTTP request's query arguments and convert them to a usable format for constructing
 // the SQL query. All defaults are set and any invalid query arguments result in an error being returned.
 func parseQueryArgs(queryArgs url.Values) (*queryOptions, error) {
-	parsed := &queryOptions{}
-
-	perPageStr := queryArgs.Get("per_page")
-
-	if perPageStr == "" {
-		parsed.PerPage = 20
-	} else {
-		var err error
-
-		parsed.PerPage, err = strconv.ParseUint(perPageStr, 10, 64)
-		if err != nil || parsed.PerPage == 0 || parsed.PerPage > 100 {
-			return nil, fmt.Errorf("%w: per_page must be a value between 1 and 100", ErrInvalidQueryArg)
-		}
+	parsed := &queryOptions{
+		Direction:    "desc",
+		Page:         1,
+		PerPage:      20,
+		Sort:         []string{"compliance_events.timestamp"},
+		ArrayFilters: map[string][]string{},
+		Filters:      map[string][]string{},
+		NullFilters:  []string{},
 	}
 
-	pageStr := queryArgs.Get("page")
+	for arg := range queryArgs {
+		valid := false
 
-	if pageStr == "" {
-		parsed.Page = 1
-	} else {
-		var err error
+		for _, validQueryArg := range validQueryArgs {
+			if arg == validQueryArg {
+				valid = true
 
-		parsed.Page, err = strconv.ParseUint(pageStr, 10, 64)
-		if err != nil || parsed.Page == 0 {
-			return nil, fmt.Errorf("%w: page must be a positive integer", ErrInvalidQueryArg)
+				break
+			}
 		}
-	}
 
-	sortArgs := splitQueryValue(queryArgs.Get("sort"))
+		if !valid {
+			return nil, ErrInvalidQueryArg
+		}
 
-	if len(sortArgs) == 0 {
-		parsed.Sort = []string{"compliance_events.timestamp"}
-	} else {
-		sortSQL := []string{}
+		sqlName, hasSQLName := queryOptionsToSQL[arg]
 
-		for _, sortArg := range sortArgs {
-			sortOption, ok := sortOptionsToSQL[sortArg]
-			if !ok {
-				return nil, ErrInvalidSortOption
+		value := queryArgs.Get(arg)
+		if value == "" && arg != "include_spec" {
+			// Only support null filters if it's a SQL column
+			if !hasSQLName {
+				return nil, fmt.Errorf("%w: %s must have a value", ErrInvalidQueryArgValue, arg)
 			}
 
-			sortSQL = append(sortSQL, sortOption)
+			parsed.NullFilters = append(parsed.NullFilters, sqlName)
+
+			continue
 		}
 
-		parsed.Sort = sortSQL
-	}
+		switch arg {
+		case "direction":
+			if value == "desc" {
+				parsed.Direction = "DESC"
+			} else if value == "asc" {
+				parsed.Direction = "ASC"
+			} else {
+				return nil, fmt.Errorf("%w: direction must be one of: asc, desc", ErrInvalidQueryArg)
+			}
+		case "include_spec":
+			if value != "" {
+				return nil, fmt.Errorf("%w: include_spec is a flag and does not accept a value", ErrInvalidQueryArg)
+			}
 
-	directionArg := queryArgs.Get("direction")
-	if directionArg == "" || directionArg == "desc" {
-		parsed.Direction = "DESC"
-	} else if directionArg == "asc" {
-		parsed.Direction = "ASC"
-	} else {
-		return nil, fmt.Errorf("%w: direction must be one of: asc, desc", ErrInvalidQueryArg)
-	}
+			parsed.IncludeSpec = true
+		case "page":
+			var err error
 
-	if queryArgs.Get("include_spec") != "" {
-		return nil, fmt.Errorf("%w: include_spec is a flag and does not accept a value", ErrInvalidQueryArg)
-	}
+			parsed.Page, err = strconv.ParseUint(value, 10, 64)
+			if err != nil || parsed.Page == 0 {
+				return nil, fmt.Errorf("%w: page must be a positive integer", ErrInvalidQueryArg)
+			}
+		case "per_page":
+			var err error
 
-	parsed.IncludeSpec = queryArgs.Has("include_spec")
+			parsed.PerPage, err = strconv.ParseUint(value, 10, 64)
+			if err != nil || parsed.PerPage == 0 || parsed.PerPage > 100 {
+				return nil, fmt.Errorf("%w: per_page must be a value between 1 and 100", ErrInvalidQueryArg)
+			}
+		case "sort":
+			sortArgs := splitQueryValue(value)
+
+			sortSQL := []string{}
+
+			for _, sortArg := range sortArgs {
+				sortOption, ok := queryOptionsToSQL[sortArg]
+				if !ok {
+					return nil, ErrInvalidSortOption
+				}
+
+				sortSQL = append(sortSQL, sortOption)
+			}
+
+			parsed.Sort = sortSQL
+		case "parent_policy.categories", "parent_policy.controls", "parent_policy.standards":
+			parsed.ArrayFilters[sqlName] = splitQueryValue(value)
+		case "event.message_includes":
+			// Escape the SQL LIKE operators because we aren't exposing that functionality.
+			escapedVal := strings.ReplaceAll(value, "%", `\%`)
+			escapedVal = strings.ReplaceAll(escapedVal, "_", `\_`)
+			// Add wildcards at the beginning and end of the search keyword for substring matching.
+			parsed.MessageIncludes = "%" + escapedVal + "%"
+		case "event.message_like":
+			parsed.MessageLike = value
+		case "event.timestamp_before":
+			var err error
+
+			parsed.TimestampBefore, err = time.Parse(time.RFC3339, value)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"%w: event.timestamp_before must be in the format of RFC 3339", ErrInvalidQueryArgValue,
+				)
+			}
+		case "event.timestamp_after":
+			var err error
+
+			parsed.TimestampAfter, err = time.Parse(time.RFC3339, value)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"%w: event.timestamp_after must be in the format of RFC 3339", ErrInvalidQueryArgValue,
+				)
+			}
+		default:
+			// Standard string filtering
+			parsed.Filters[sqlName] = splitQueryValue(value)
+		}
+	}
 
 	return parsed, nil
 }
@@ -445,6 +528,90 @@ func getSingleComplianceEvent(db *sql.DB, w http.ResponseWriter, r *http.Request
 	}
 }
 
+// getWhereClause will convert the input queryOptions to a WHERE statement and return the filter values for a prepared
+// statement.
+func getWhereClause(options *queryOptions) (string, []any) {
+	filterSQL := []string{}
+	filterValues := []any{}
+
+	for sqlColumn, values := range options.Filters {
+		if len(values) == 0 {
+			continue
+		}
+
+		for i, value := range values {
+			filterValues = append(filterValues, value)
+			// For example: compliance_events.name=$1
+			filter := fmt.Sprintf("%s=$%d", sqlColumn, len(filterValues))
+			if i == 0 {
+				filterSQL = append(filterSQL, "("+filter)
+			} else {
+				filterSQL[len(filterSQL)-1] += " OR " + filter
+			}
+		}
+
+		filterSQL[len(filterSQL)-1] += ")"
+	}
+
+	for sqlColumn, values := range options.ArrayFilters {
+		if len(values) == 0 {
+			continue
+		}
+
+		for i, value := range values {
+			filterValues = append(filterValues, value)
+
+			// For example: $1=ANY(parent_policies.categories)
+			filter := fmt.Sprintf("$%d=ANY(%s)", len(filterValues), sqlColumn)
+			if i == 0 {
+				filterSQL = append(filterSQL, "("+filter)
+			} else {
+				filterSQL[len(filterSQL)-1] += " OR " + filter
+			}
+		}
+
+		filterSQL[len(filterSQL)-1] += ")"
+	}
+
+	for _, sqlColumn := range options.NullFilters {
+		filterSQL = append(filterSQL, fmt.Sprintf("%s IS NULL", sqlColumn))
+	}
+
+	if options.MessageIncludes != "" {
+		filterValues = append(filterValues, options.MessageIncludes)
+
+		filterSQL = append(filterSQL, fmt.Sprintf("compliance_events.message LIKE $%d", len(filterValues)))
+	}
+
+	if options.MessageLike != "" {
+		filterValues = append(filterValues, options.MessageLike)
+
+		filterSQL = append(filterSQL, fmt.Sprintf("compliance_events.message LIKE $%d", len(filterValues)))
+	}
+
+	if !options.TimestampAfter.IsZero() {
+		filterValues = append(filterValues, options.TimestampAfter)
+
+		filterSQL = append(filterSQL, fmt.Sprintf("compliance_events.timestamp > $%d", len(filterValues)))
+	}
+
+	if !options.TimestampBefore.IsZero() {
+		filterValues = append(filterValues, options.TimestampBefore)
+
+		filterSQL = append(filterSQL, fmt.Sprintf("compliance_events.timestamp < $%d", len(filterValues)))
+	}
+
+	var whereClause string
+
+	if len(filterSQL) > 0 {
+		// For example:
+		// WHERE (policy.name=$1) AND ($2=ANY(parent_policies.categories) OR $3=ANY(parent_policies.categories))
+		whereClause = "\nWHERE " + strings.Join(filterSQL, " AND ")
+	}
+
+	return whereClause, filterValues
+}
+
 // getComplianceEvents handles the list API endpoint for compliance events.
 func getComplianceEvents(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 	queryArgs, err := parseQueryArgs(r.URL.Query())
@@ -454,23 +621,35 @@ func getComplianceEvents(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := fmt.Sprintf(`%s
+	// Note that the where clause could be an empty string if not filters were passed in the query arguments.
+	whereClause, filterValues := getWhereClause(queryArgs)
+
+	// Example query:
+	//   SELECT compliance_events.id, compliance_events.compliance, ...
+	//     FROM compliance_events
+	//   LEFT JOIN clusters ON compliance_events.cluster_id = clusters.id
+	//   LEFT JOIN parent_policies ON compliance_events.parent_policy_id = parent_policies.id
+	//   LEFT JOIN policies ON compliance_events.policy_id = policies.id
+	//   WHERE (policies.name=$1 OR policies.name=$2) AND (policies.kind=$3)
+	//   ORDER BY compliance_events.timestamp desc
+	//   LIMIT 20
+	//   OFFSET 0 ROWS;
+	query := fmt.Sprintf(`%s%s
 ORDER BY %s %s
 LIMIT %d
 OFFSET %d ROWS;`,
 		generateGetComplianceEventsQuery(queryArgs.IncludeSpec),
+		whereClause,
 		strings.Join(queryArgs.Sort, ", "),
 		queryArgs.Direction,
 		queryArgs.PerPage,
 		(queryArgs.Page-1)*queryArgs.PerPage,
 	)
 
-	rows, err := db.QueryContext(r.Context(), query)
+	rows, err := db.QueryContext(r.Context(), query, filterValues...)
 	if err == nil {
 		err = rows.Err()
 	}
-
-	defer rows.Close()
 
 	if err != nil {
 		log.Error(err, "Failed to query for compliance events")
@@ -478,6 +657,8 @@ OFFSET %d ROWS;`,
 
 		return
 	}
+
+	defer rows.Close()
 
 	complianceEvents := make([]ComplianceEvent, 0, queryArgs.PerPage)
 
@@ -493,7 +674,12 @@ OFFSET %d ROWS;`,
 		complianceEvents = append(complianceEvents, *ce)
 	}
 
-	row := db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM compliance_events;`)
+	countQuery := `SELECT COUNT(*) FROM compliance_events
+LEFT JOIN clusters ON compliance_events.cluster_id = clusters.id
+LEFT JOIN parent_policies ON compliance_events.parent_policy_id = parent_policies.id
+LEFT JOIN policies ON compliance_events.policy_id = policies.id` + whereClause
+
+	row := db.QueryRowContext(r.Context(), countQuery, filterValues...)
 	if row.Err() != nil {
 		log.Error(row.Err(), "Failed to get the count of compliance events")
 		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
