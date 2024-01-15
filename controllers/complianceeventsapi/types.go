@@ -37,11 +37,18 @@ type ListResponse struct {
 }
 
 type queryOptions struct {
-	Direction   string
-	IncludeSpec bool
-	Page        uint64
-	PerPage     uint64
-	Sort        []string
+	ArrayFilters    map[string][]string
+	Direction       string
+	Filters         map[string][]string
+	IncludeSpec     bool
+	MessageIncludes string
+	MessageLike     string
+	NullFilters     []string
+	Page            uint64
+	PerPage         uint64
+	Sort            []string
+	TimestampAfter  time.Time
+	TimestampBefore time.Time
 }
 
 type ComplianceEvent struct {
