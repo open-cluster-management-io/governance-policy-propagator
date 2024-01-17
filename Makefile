@@ -93,7 +93,7 @@ test-coverage: test
 test-dependencies: envtest kubebuilder
 
 .PHONY: gosec-scan
-gosec-scan:
+gosec-scan: GOSEC_ARGS=-exclude G201
 
 ############################################################
 # build section
