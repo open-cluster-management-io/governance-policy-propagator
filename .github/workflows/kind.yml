@@ -191,7 +191,6 @@ jobs:
         working-directory: '.'
     runs-on: ubuntu-latest
     name: Test Coverage Verification
-    if: ${{ github.event_name == 'pull_request' }}
     needs: [unit-tests, kind-tests, policyautomation-tests]
 
     steps:
