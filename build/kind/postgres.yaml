@@ -23,6 +23,21 @@ spec:
       nodePort: 30543
   type: NodePort
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: open-cluster-management
+  labels:
+    app: postgres
+spec:
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -32,6 +47,7 @@ spec:
   dnsNames:
     - postgres-external.open-cluster-management.svc
     - postgres-external.open-cluster-management.svc.cluster.local
+    - postgres
     - localhost
   issuerRef:
     kind: Issuer
@@ -100,3 +116,20 @@ spec:
         - name: postgres-db
           emptyDir:
             sizeLimit: 250Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: compliance-api-external
+  namespace: open-cluster-management
+  labels:
+    app: compliance-api
+spec:
+  selector:
+    name: governance-policy-propagator
+  ports:
+    - name: compliance-api-external
+      port: 8384
+      targetPort: 8384
+      nodePort: 30838
+  type: NodePort

@@ -33,6 +33,7 @@ CONTROLLER_NAMESPACE ?= open-cluster-management
 # Handle KinD configuration
 CLUSTER_NAME ?= hub
 KIND_NAMESPACE ?= $(CONTROLLER_NAMESPACE)
+POSTGRES_HOST ?= localhost
 
 # Test coverage threshold
 export COVERAGE_MIN ?= 75
@@ -143,6 +144,7 @@ generate-operator-yaml: kustomize manifests
 ############################################################
 
 .PHONY: kind-bootstrap-cluster
+kind-bootstrap-cluster: POSTGRES_HOST=postgres
 kind-bootstrap-cluster: kind-bootstrap-cluster-dev webhook kind-deploy-controller install-resources
 
 .PHONY: kind-bootstrap-cluster-dev
@@ -169,7 +171,7 @@ postgres: cert-manager
 	kubectl -n $(KIND_NAMESPACE) create secret generic governance-policy-database \
 		--from-literal="user=grc" \
 		--from-literal="password=grc" \
-		--from-literal="host=localhost" \
+		--from-literal="host=$(POSTGRES_HOST)" \
 		--from-literal="dbname=ocm-compliance-history" \
 		--from-literal="ca=$$(kubectl -n $(KIND_NAMESPACE) get secret postgres-cert -o json | jq -r '.data["ca.crt"]' | base64 -d)"
 
@@ -192,11 +194,13 @@ kind-deploy-controller: manifests
 
 .PHONY: kind-deploy-controller-dev
 kind-deploy-controller-dev: kind-deploy-controller
-	@echo Pushing image to KinD cluster
-	kind load docker-image $(REGISTRY)/$(IMG):$(TAG) --name $(KIND_NAME)
 	@echo "Patch deployment image"
 	kubectl patch deployment $(IMG) -n $(KIND_NAMESPACE) -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"$(IMG)\",\"imagePullPolicy\":\"Never\"}]}}}}"
 	kubectl patch deployment $(IMG) -n $(KIND_NAMESPACE) -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"$(IMG)\",\"image\":\"$(REGISTRY)/$(IMG):$(TAG)\"}]}}}}"
+
+	@echo Pushing image to KinD cluster
+	kind load docker-image $(REGISTRY)/$(IMG):$(TAG) --name $(KIND_NAME)
+	kubectl rollout restart deployment/$(IMG) -n $(KIND_NAMESPACE)
 	kubectl rollout status -n $(KIND_NAMESPACE) deployment $(IMG) --timeout=180s
 
 # Specify KIND_VERSION to indicate the version tag of the KinD image
