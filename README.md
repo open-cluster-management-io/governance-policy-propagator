@@ -91,7 +91,6 @@ Create the KinD cluster and install Postgres with the following commands:
 
 ```bash
 make kind-bootstrap-cluster-dev
-make postgres
 ```
 
 You can connect to the Postgres server with the following command:
@@ -103,7 +102,7 @@ psql "host=localhost dbname=ocm-compliance-history user=grc password=grc"
 Run the Governance Policy Propagator with the following command:
 
 ```bash
-WATCH_NAMESPACE="" WATCH_NAMESPACE_COMPLIANCE_EVENTS_STORE="open-cluster-management" go run main.go --leader-elect=false --enable-compliance-events-store  --enable-webhooks=false
+WATCH_NAMESPACE="" WATCH_NAMESPACE_COMPLIANCE_EVENTS_STORE="open-cluster-management" go run main.go --leader-elect=false  --enable-webhooks=false
 ```
 
 ## References

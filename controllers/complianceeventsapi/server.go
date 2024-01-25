@@ -121,22 +121,20 @@ var (
 	ErrInvalidQueryArg      error
 )
 
-type complianceAPIServer struct {
-	Lock      *sync.Mutex
-	server    *http.Server
-	addr      string
-	isRunning bool
+type ComplianceAPIServer struct {
+	server *http.Server
+	addr   string
 }
 
-// Start starts the http server. If it is already running, it has no effect.
-func (s *complianceAPIServer) Start(dbURL string) error {
-	s.Lock.Lock()
-	defer s.Lock.Unlock()
-
-	if s.isRunning {
-		return nil
+func NewComplianceAPIServer(listenAddress string) *ComplianceAPIServer {
+	return &ComplianceAPIServer{
+		addr: listenAddress,
 	}
+}
 
+// Start starts the HTTP server and blocks until ctx is closed or there was an error starting the
+// HTTP server.
+func (s *ComplianceAPIServer) Start(ctx context.Context, serverContext *ComplianceServerCtx) error {
 	mux := http.NewServeMux()
 
 	s.server = &http.Server{
@@ -149,20 +147,24 @@ func (s *complianceAPIServer) Start(dbURL string) error {
 		IdleTimeout:  15 * time.Second,
 	}
 
-	db, err := sql.Open("postgres", dbURL)
-	if err != nil {
-		return err
-	}
-
 	// register handlers here
 	mux.HandleFunc("/api/v1/compliance-events", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
+		serverContext.Lock.RLock()
+		defer serverContext.Lock.RUnlock()
+
+		if serverContext.DB == nil || serverContext.DB.PingContext(r.Context()) != nil {
+			writeErrMsgJSON(w, "The database is unavailable", http.StatusInternalServerError)
+
+			return
+		}
+
 		switch r.Method {
 		case http.MethodGet:
-			getComplianceEvents(db, w, r)
+			getComplianceEvents(serverContext.DB, w, r)
 		case http.MethodPost:
-			postComplianceEvent(db, w, r)
+			postComplianceEvent(serverContext.DB, w, r)
 		default:
 			writeErrMsgJSON(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -171,45 +173,54 @@ func (s *complianceAPIServer) Start(dbURL string) error {
 	mux.HandleFunc("/api/v1/compliance-events/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
+		serverContext.Lock.RLock()
+		defer serverContext.Lock.RUnlock()
+
+		if serverContext.DB == nil || serverContext.DB.PingContext(r.Context()) != nil {
+			writeErrMsgJSON(w, "The database is unavailable", http.StatusInternalServerError)
+
+			return
+		}
+
 		if r.Method != http.MethodGet {
 			writeErrMsgJSON(w, "Method not allowed", http.StatusMethodNotAllowed)
 
 			return
 		}
 
-		getSingleComplianceEvent(db, w, r)
+		getSingleComplianceEvent(serverContext.DB, w, r)
 	})
 
+	listenAndServeErr := make(chan error)
+
 	go func() {
+		defer close(listenAndServeErr)
+
 		err := s.server.ListenAndServe()
 		if err != nil && err != http.ErrServerClosed {
-			log.Error(err, "Error starting compliance events api server")
+			listenAndServeErr <- err
 		}
 	}()
 
-	s.isRunning = true
+	select {
+	case <-ctx.Done():
+		err := s.server.Shutdown(context.Background())
+		if err != nil {
+			log.Error(err, "Failed to shutdown the compliance API server")
+		}
 
-	return nil
-}
+		return nil
+	case err, closed := <-listenAndServeErr:
+		if err != nil {
+			return err
+		}
 
-// Stop stops the http server. If it is not currently running, it has no effect.
-func (s *complianceAPIServer) Stop() error {
-	s.Lock.Lock()
-	defer s.Lock.Unlock()
+		if closed {
+			return errors.New("the compliance API server unexpectedly shutdown without an error")
+		}
 
-	if !s.isRunning {
 		return nil
 	}
-
-	if err := s.server.Shutdown(context.TODO()); err != nil {
-		log.Error(err, "Error stopping compliance events api server")
-
-		return err
-	}
-
-	s.isRunning = false
-
-	return nil
 }
 
 // splitQueryValue will parse a string and split on unescaped commas. Empty values are discarded.
@@ -825,7 +836,7 @@ func getParentPolicyForeignKey(ctx context.Context, db *sql.DB, parent ParentPol
 	}
 
 	// Check cache
-	parKey := parent.key()
+	parKey := parent.Key()
 
 	key, ok := parentPolicyKeyCache.Load(parKey)
 	if ok {
@@ -848,7 +859,7 @@ func getPolicyForeignKey(ctx context.Context, db *sql.DB, pol Policy) (int32, er
 	}
 
 	// Check cache
-	polKey := pol.key()
+	polKey := pol.Key()
 
 	key, ok := policyKeyCache.Load(polKey)
 	if ok {

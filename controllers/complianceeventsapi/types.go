@@ -12,6 +12,9 @@ import (
 	"time"
 
 	"github.com/lib/pq"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 )
 
 var (
@@ -332,8 +335,77 @@ func (p *ParentPolicy) GetOrCreate(ctx context.Context, db *sql.DB) error {
 	return getOrCreate(ctx, db, p)
 }
 
-func (p ParentPolicy) key() string {
-	return fmt.Sprintf("%s;%v;%v;%v", p.Name, p.Categories, p.Controls, p.Standards)
+func (p ParentPolicy) Key() string {
+	return fmt.Sprintf("%s;%s;%v;%v;%v", p.Namespace, p.Name, p.Categories, p.Controls, p.Standards)
+}
+
+func ParentPolicyFromPolicyObj(plc *policiesv1.Policy) ParentPolicy {
+	annotations := plc.GetAnnotations()
+	categories := []string{}
+
+	for _, category := range strings.Split(annotations["policy.open-cluster-management.io/categories"], ",") {
+		category = strings.TrimSpace(category)
+		if category != "" {
+			categories = append(categories, category)
+		}
+	}
+
+	controls := []string{}
+
+	for _, control := range strings.Split(annotations["policy.open-cluster-management.io/controls"], ",") {
+		control = strings.TrimSpace(control)
+		if control != "" {
+			controls = append(controls, control)
+		}
+	}
+
+	standards := []string{}
+
+	for _, standard := range strings.Split(annotations["policy.open-cluster-management.io/standards"], ",") {
+		standard = strings.TrimSpace(standard)
+		if standard != "" {
+			standards = append(standards, standard)
+		}
+	}
+
+	return ParentPolicy{
+		Name:       plc.Name,
+		Namespace:  plc.Namespace,
+		Categories: categories,
+		Controls:   controls,
+		Standards:  standards,
+	}
+}
+
+func PolicyFromUnstructured(obj unstructured.Unstructured) *Policy {
+	policy := &Policy{}
+
+	policy.APIGroup = obj.GetAPIVersion()
+	policy.Kind = obj.GetKind()
+	ns := obj.GetNamespace()
+
+	if ns != "" {
+		policy.Namespace = &ns
+	}
+
+	policy.Name = obj.GetName()
+
+	spec, ok, _ := unstructured.NestedStringMap(obj.Object, "spec")
+	if ok {
+		typedSpec := JSONMap{}
+
+		for key, val := range spec {
+			typedSpec[key] = val
+		}
+
+		policy.Spec = typedSpec
+	}
+
+	if severity, ok := spec["severity"]; ok {
+		policy.Severity = &severity
+	}
+
+	return policy
 }
 
 type Policy struct {
@@ -415,7 +487,7 @@ func (p *Policy) GetOrCreate(ctx context.Context, db *sql.DB) error {
 	return getOrCreate(ctx, db, p)
 }
 
-func (p *Policy) key() string {
+func (p *Policy) Key() string {
 	var namespace string
 
 	if p.Namespace != nil {

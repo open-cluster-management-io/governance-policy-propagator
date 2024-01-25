@@ -17,6 +17,7 @@ func TestRunMain(t *testing.T) {
 	os.Args = append(os.Args,
 		"--leader-elect=false",
 		"--enable-webhooks=false",
+		"--event-history-api-port=8385",
 	)
 
 	main()

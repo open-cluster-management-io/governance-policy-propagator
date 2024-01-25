@@ -146,7 +146,7 @@ generate-operator-yaml: kustomize manifests
 kind-bootstrap-cluster: kind-bootstrap-cluster-dev webhook kind-deploy-controller install-resources
 
 .PHONY: kind-bootstrap-cluster-dev
-kind-bootstrap-cluster-dev: kind-create-cluster install-crds kind-controller-kubeconfig
+kind-bootstrap-cluster-dev: kind-create-cluster install-crds kind-controller-kubeconfig postgres
 
 cert-manager:
 	@echo Installing cert-manager
@@ -242,7 +242,7 @@ install-resources:
 E2E_LABEL_FILTER = --label-filter="!webhook && !compliance-events-api && !policyautomation"
 .PHONY: e2e-test
 e2e-test: e2e-dependencies
-	$(GINKGO) -v --fail-fast $(E2E_TEST_ARGS) $(E2E_LABEL_FILTER) test/e2e
+	$(GINKGO) -v --fail-fast $(E2E_TEST_ARGS) $(E2E_LABEL_FILTER) test/e2e -- $(E2E_TEST_CODE_ARGS)
 
 .PHONY: e2e-test-webhook
 e2e-test-webhook: E2E_LABEL_FILTER = --label-filter="webhook"
@@ -280,6 +280,7 @@ e2e-stop-instrumented:
 
 .PHONY: e2e-test-coverage
 e2e-test-coverage: E2E_TEST_ARGS = --json-report=report_e2e.json --output-dir=.
+e2e-test-coverage: E2E_TEST_CODE_ARGS = --compliance-api-port=8385
 e2e-test-coverage: e2e-run-instrumented e2e-test e2e-stop-instrumented
 
 .PHONY: e2e-test-coverage-policyautomation

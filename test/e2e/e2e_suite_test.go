@@ -32,6 +32,7 @@ var (
 	clientHub             kubernetes.Interface
 	clientHubDynamic      dynamic.Interface
 	kubeconfigHub         string
+	complianceAPIPort     uint
 	gvrPolicy             schema.GroupVersionResource
 	gvrPolicyAutomation   schema.GroupVersionResource
 	gvrPolicySet          schema.GroupVersionResource
@@ -56,6 +57,13 @@ func init() {
 	klog.InitFlags(nil)
 	flag.StringVar(&kubeconfigHub, "kubeconfig_hub", "../../kubeconfig_hub_e2e",
 		"Location of the kubeconfig to use; defaults to current kubeconfig if set to an empty string")
+	flag.UintVar(
+		&complianceAPIPort,
+		"compliance-api-port",
+		8384,
+		"The port of the Compliance API port; override when running the API locally and with a running Kind cluster "+
+			"to avoid port conflicts",
+	)
 }
 
 var _ = BeforeSuite(func() {
