@@ -238,6 +238,18 @@ subjects:
   name: governance-policy-propagator
   namespace: open-cluster-management
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: governance-compliance-api
+spec:
+  ports:
+  - port: 8384
+    protocol: TCP
+    targetPort: 8384
+  selector:
+    name: governance-policy-propagator
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -263,6 +275,7 @@ spec:
         - --health-probe-bind-address=:8081
         - --metrics-bind-address=:8383
         - --leader-elect
+        - --event-history-api-host=0.0.0.0
         command:
         - governance-policy-propagator
         env:
@@ -284,6 +297,9 @@ spec:
         ports:
         - containerPort: 8383
           name: http
+          protocol: TCP
+        - containerPort: 8384
+          name: compliance-api
           protocol: TCP
         - containerPort: 9443
           name: webhook-http

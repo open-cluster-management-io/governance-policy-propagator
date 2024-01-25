@@ -158,7 +158,7 @@ func main() {
 		"The hostname that the event history API will listen on",
 	)
 	pflag.StringVar(
-		&eventHistoryAPIPort, "event-history-api-port", "5480",
+		&eventHistoryAPIPort, "event-history-api-port", "8384",
 		"The port that the event history API will listen on",
 	)
 

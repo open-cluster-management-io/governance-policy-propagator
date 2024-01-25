@@ -6,3 +6,5 @@ nodes:
   extraPortMappings:
   - containerPort: 30543
     hostPort: 5432
+  - containerPort: 30838
+    hostPort: 8384
