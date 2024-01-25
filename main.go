@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -20,12 +21,16 @@ import (
 	templates "github.com/stolostron/go-template-utils/v4/pkg/templates"
 	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
@@ -100,7 +105,6 @@ func main() {
 		policyStatusMaxConcurrency  uint
 		rootPolicyMaxConcurrency    uint
 		replPolicyMaxConcurrency    uint
-		enableComplianceEventsStore bool
 		enableWebhooks              bool
 		eventHistoryAPIHost         string
 		eventHistoryAPIPort         string
@@ -111,8 +115,6 @@ func main() {
 	pflag.BoolVar(&enableLeaderElection, "leader-elect", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	pflag.BoolVar(&enableComplianceEventsStore, "enable-compliance-events-store", false,
-		"Enable the compliance events store")
 	pflag.BoolVar(&enableWebhooks, "enable-webhooks", true,
 		"Enable the policy validating webhook")
 	pflag.UintVar(
@@ -340,18 +342,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&propagatorctrl.ReplicatedPolicyReconciler{
-		Propagator:       propagator,
-		ResourceVersions: replicatedResourceVersions,
-		DynamicWatcher:   dynamicWatcher,
-		TemplateResolver: templateResolver,
-	}).SetupWithManager(
-		mgr, replPolicyMaxConcurrency, dynamicWatcherSource, replicatedUpdatesSource, templatesSource,
-	); err != nil {
-		log.Error(err, "Unable to create the controller", "controller", "replicated-policy")
-		os.Exit(1)
-	}
-
 	if reportMetrics() {
 		if err = (&metricsctrl.MetricReconciler{
 			Client: mgr.GetClient(),
@@ -436,21 +426,198 @@ func main() {
 	// This is important to avoid adding watches before the dynamic watcher is ready
 	<-dynamicWatcher.Started()
 
+	log.V(1).Info("Starting the compliance events API and controller")
+
+	client := kubernetes.NewForConfigOrDie(mgr.GetConfig())
+
+	tempDir, err := os.MkdirTemp("", "compliance-events-store")
+	if err != nil {
+		log.Error(err, "Failed to create a temporary directory")
+		os.Exit(1)
+	}
+
+	defer func() {
+		err := os.RemoveAll(tempDir)
+		if err != nil {
+			log.Error(err, "Failed to clean up the temporary directory", "path", tempDir)
+		}
+	}()
+
+	complianceEventsNamespace, _ := os.LookupEnv(complianceeventsapi.WatchNamespaceEnvVar)
+	if complianceEventsNamespace == "" {
+		complianceEventsNamespace = "open-cluster-management"
+	}
+
+	wg := sync.WaitGroup{}
+
+	log.Info("Starting the compliance events API")
+
+	complianceServerCtx := startComplianceEventsAPI(
+		controllerCtx,
+		cfg,
+		client,
+		complianceEventsNamespace,
+		net.JoinHostPort(eventHistoryAPIHost, eventHistoryAPIPort),
+		&wg,
+		tempDir,
+		replicatedPolicyUpdates,
+	)
+
+	replicatedPolicyCtrler := &propagatorctrl.ReplicatedPolicyReconciler{
+		Propagator:          propagator,
+		ResourceVersions:    replicatedResourceVersions,
+		DynamicWatcher:      dynamicWatcher,
+		TemplateResolver:    templateResolver,
+		ComplianceServerCtx: complianceServerCtx,
+	}
+
+	if err = (replicatedPolicyCtrler).SetupWithManager(
+		mgr, replPolicyMaxConcurrency, dynamicWatcherSource, replicatedUpdatesSource, templatesSource,
+	); err != nil {
+		log.Error(err, "Unable to create the controller", "controller", "replicated-policy")
+		os.Exit(1)
+	}
+
 	log.Info("Starting manager")
 
-	historyAPIAddr := net.JoinHostPort(eventHistoryAPIHost, eventHistoryAPIPort)
+	wg.Add(1)
 
-	if enableComplianceEventsStore {
-		err = complianceeventsapi.StartManager(controllerCtx, cfg, enableLeaderElection, historyAPIAddr)
+	go func() {
+		if err := mgr.Start(controllerCtx); err != nil {
+			log.Error(err, "Problem running manager")
+			os.Exit(1)
+		}
+
+		wg.Done()
+	}()
+
+	wg.Wait()
+}
+
+func startComplianceEventsAPI(
+	ctx context.Context,
+	cfg *rest.Config,
+	client *kubernetes.Clientset,
+	controllerNamespace string,
+	complianceAPIAddr string,
+	wg *sync.WaitGroup,
+	tempDir string,
+	reconcileRequests chan<- event.GenericEvent,
+) *complianceeventsapi.ComplianceServerCtx {
+	var dbConnectionURL string
+
+	dbSecret, err := client.CoreV1().Secrets(controllerNamespace).Get(
+		ctx, complianceeventsapi.DBSecretName, metav1.GetOptions{},
+	)
+	if k8serrors.IsNotFound(err) {
+		log.Info(
+			"Could not start the compliance events API. To enable this functionality, ensure the Postgres "+
+				"connection secret is valid in the controller namespace.",
+			"secretName", complianceeventsapi.DBSecretName,
+			"namespace", controllerNamespace,
+		)
+	} else if err != nil {
+		log.Error(
+			err,
+			"Failed to determine if the secret was defined",
+			"secretName", complianceeventsapi.DBSecretName,
+			"namespace", controllerNamespace,
+		)
+
+		os.Exit(1)
+	} else {
+		var err error
+
+		dbConnectionURL, err = complianceeventsapi.ParseDBSecret(dbSecret, tempDir)
 		if err != nil {
-			log.Error(err, "Ignoring since this is technical preview")
+			log.Error(
+				err,
+				"Fix the connection details to enable the compliance events API feature",
+				"secret", complianceeventsapi.DBSecretName,
+				"namespace", controllerNamespace,
+			)
 		}
 	}
 
-	if err := mgr.Start(controllerCtx); err != nil {
-		log.Error(err, "Problem running manager")
+	complianceServerCtx, err := complianceeventsapi.NewComplianceServerCtx(dbConnectionURL)
+	if err == nil {
+		// If the migration failed, MigrateDB will log it and MonitorDatabaseConnection will fix it.
+		err := complianceServerCtx.MigrateDB(ctx, client, controllerNamespace)
+		if err != nil {
+			log.Info("Will periodically retry the migration until it is successful")
+		}
+	} else if !errors.Is(err, complianceeventsapi.ErrInvalidConnectionURL) {
+		log.Error(err, "Unexpected error")
+
 		os.Exit(1)
 	}
+
+	reconciler := complianceeventsapi.ComplianceDBSecretReconciler{
+		Client: client, ComplianceServerCtx: complianceServerCtx, TempDir: tempDir, ConnectionURL: dbConnectionURL,
+	}
+
+	dbSecretDynamicWatcher, err := k8sdepwatches.New(
+		cfg, &reconciler, &k8sdepwatches.Options{EnableCache: true},
+	)
+	if err != nil {
+		log.Error(err, "Failed to instantiate the dynamic watcher for the compliance events database secret reconciler")
+		os.Exit(1)
+	}
+
+	reconciler.DynamicWatcher = dbSecretDynamicWatcher
+
+	complianceAPI := complianceeventsapi.NewComplianceAPIServer(complianceAPIAddr)
+
+	wg.Add(1)
+
+	go func() {
+		if err := complianceAPI.Start(ctx, complianceServerCtx); err != nil {
+			log.Error(err, "Failed to start the compliance API server")
+
+			os.Exit(1)
+		}
+
+		wg.Done()
+	}()
+
+	wg.Add(1)
+
+	go func() {
+		err := dbSecretDynamicWatcher.Start(ctx)
+		if err != nil {
+			log.Error(
+				err,
+				"Unable to start the compliance events database secret watcher",
+				"controller", complianceeventsapi.ControllerName,
+			)
+			os.Exit(1)
+		}
+
+		wg.Done()
+	}()
+
+	<-dbSecretDynamicWatcher.Started()
+
+	go complianceeventsapi.MonitorDatabaseConnection(
+		ctx, complianceServerCtx, client, controllerNamespace, reconcileRequests,
+	)
+
+	watcherSecret := k8sdepwatches.ObjectIdentifier{
+		Version:   "v1",
+		Kind:      "Secret",
+		Namespace: controllerNamespace,
+		Name:      complianceeventsapi.DBSecretName,
+	}
+	if err := dbSecretDynamicWatcher.AddWatcher(watcherSecret, watcherSecret); err != nil {
+		log.Error(
+			err,
+			"Unable to start the compliance events database secret watcher",
+			"controller", complianceeventsapi.ControllerName,
+		)
+		os.Exit(1)
+	}
+
+	return complianceServerCtx
 }
 
 // reportMetrics returns a bool on whether to report GRC metrics from the propagator

@@ -102,11 +102,6 @@ func (r *RootPolicyReconciler) Reconcile(ctx context.Context, request ctrl.Reque
 //+kubebuilder:object:root=true
 //+kubebuilder:skip
 
-type GuttedObject struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-}
-
 // updateExistingReplicas lists all existing replicated policies for this root policy, and sends
 // events for each of them to the replicated policy reconciler. This will trigger updates on those
 // replicated policies, for example when the root policy spec changes, or when the replicated
@@ -125,7 +120,7 @@ func (r *RootPolicyReconciler) updateExistingReplicas(ctx context.Context, rootP
 	}
 
 	for _, replicated := range policyList.Items {
-		simpleObj := &GuttedObject{
+		simpleObj := &common.GuttedObject{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       replicated.Kind,
 				APIVersion: replicated.APIVersion,

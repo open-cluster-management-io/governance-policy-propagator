@@ -107,7 +107,6 @@ jobs:
 
     - name: E2E Tests for Compliance Events API
       run: |
-        make postgres
         KUBECONFIG=${PWD}/kubeconfig_hub make e2e-test-coverage-compliance-events-api
 
     - name: Upload Compliance Events API Test Coverage

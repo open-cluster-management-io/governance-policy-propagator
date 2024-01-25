@@ -67,7 +67,7 @@ func (r *RootPolicyReconciler) cleanUpOrphanedRplPolicies(
 		}
 
 		// not found in allDecisions, orphan, send an event for it to delete itself
-		simpleObj := &GuttedObject{
+		simpleObj := &common.GuttedObject{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       policiesv1.Kind,
 				APIVersion: policiesv1.GroupVersion.String(),
@@ -127,7 +127,7 @@ func (r *RootPolicyReconciler) handleRootPolicy(ctx context.Context, instance *p
 	log.Info("Sending reconcile events to replicated policies", "decisionsCount", len(decisions))
 
 	for decision := range decisions {
-		simpleObj := &GuttedObject{
+		simpleObj := &common.GuttedObject{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       policiesv1.Kind,
 				APIVersion: policiesv1.GroupVersion.String(),

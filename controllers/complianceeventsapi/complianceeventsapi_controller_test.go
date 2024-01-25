@@ -28,7 +28,7 @@ func TestParseDBSecret(t *testing.T) {
 					"connectionURL": []byte("postgresql://grc:grc@localhost/db?sslmode=disable"),
 				},
 			},
-			expected: "postgresql://grc:grc@localhost/db?sslmode=disable",
+			expected: "postgresql://grc:grc@localhost/db?sslmode=disable&connect_timeout=5",
 		},
 		{
 			name: "connectionURL-ssl-ca",
@@ -38,7 +38,16 @@ func TestParseDBSecret(t *testing.T) {
 					"connectionURL": []byte("postgresql://grc:grc@localhost/db?sslmode=verify-full"),
 				},
 			},
-			expected: "postgresql://grc:grc@localhost/db?sslmode=verify-full",
+			expected: "postgresql://grc:grc@localhost/db?sslmode=verify-full&connect_timeout=5",
+		},
+		{
+			name: "connectionURL-custom-connect_timeout",
+			secret: corev1.Secret{
+				Data: map[string][]byte{
+					"connectionURL": []byte("postgresql://grc:grc@localhost/db?connect_timeout=30"),
+				},
+			},
+			expected: "postgresql://grc:grc@localhost/db?connect_timeout=30",
 		},
 		{
 			name: "separate-with-defaults",
@@ -50,7 +59,7 @@ func TestParseDBSecret(t *testing.T) {
 					"dbname":   []byte("db"),
 				},
 			},
-			expected: "postgresql://grc:grc@localhost:5432/db?sslmode=verify-full",
+			expected: "postgresql://grc:grc@localhost:5432/db?sslmode=verify-full&connect_timeout=5",
 		},
 		{
 			name: "separate-no-defaults",
@@ -64,7 +73,7 @@ func TestParseDBSecret(t *testing.T) {
 					"sslmode":  []byte("disable"),
 				},
 			},
-			expected: "postgresql://grc:grc@localhost:1234/db?sslmode=disable",
+			expected: "postgresql://grc:grc@localhost:1234/db?sslmode=disable&connect_timeout=5",
 		},
 		{
 			name: "separate-with-ca",
@@ -77,7 +86,7 @@ func TestParseDBSecret(t *testing.T) {
 					"ca":       []byte(caContent),
 				},
 			},
-			expected: "postgresql://grc:grc@localhost:5432/db?sslmode=verify-full",
+			expected: "postgresql://grc:grc@localhost:5432/db?sslmode=verify-full&connect_timeout=5",
 		},
 	}
 
@@ -96,7 +105,7 @@ func TestParseDBSecret(t *testing.T) {
 
 				defer os.RemoveAll(tempDir)
 
-				connectionURL, err := parseDBSecret(&test.secret, tempDir)
+				connectionURL, err := ParseDBSecret(&test.secret, tempDir)
 				g.Expect(err).ToNot(HaveOccurred())
 
 				caPath := path.Join(tempDir, "db-ca.crt")
@@ -187,7 +196,7 @@ func TestParseDBSecretErrors(t *testing.T) {
 				t.Parallel()
 
 				g := NewWithT(t)
-				_, err := parseDBSecret(&test.secret, "")
+				_, err := ParseDBSecret(&test.secret, "")
 				g.Expect(err).To(MatchError(ErrInvalidDBSecret))
 				g.Expect(err.Error()).To(ContainSubstring(test.expectedSubStr))
 			},
