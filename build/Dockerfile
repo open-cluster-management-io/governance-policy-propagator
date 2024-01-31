@@ -1,7 +1,7 @@
 # Stage 1: Use image builder to build the target binaries
 # Copyright Contributors to the Open Cluster Management project
 
-FROM registry.ci.openshift.org/stolostron/builder:go1.20-linux AS builder
+FROM registry.ci.openshift.org/stolostron/builder:go1.21-linux AS builder
 
 ENV COMPONENT=governance-policy-propagator
 ENV REPO_PATH=/go/src/github.com/open-cluster-management/${COMPONENT}
