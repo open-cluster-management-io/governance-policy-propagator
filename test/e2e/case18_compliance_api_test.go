@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/tls"
 	"database/sql"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1725,6 +1726,211 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 				"invalid query argument: event.timestamp_after must be in the format of RFC 3339",
 			),
 		)
+
+		Describe("Test the /api/v1/reports/compliance-events endpoint", func() {
+			It("should send CSV file in http response", func(ctx context.Context) {
+				endpoints := "http://localhost:8385/api/v1/reports/compliance-events"
+
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoints, nil)
+				Expect(err).ShouldNot(HaveOccurred())
+
+				resp, err := httpClient.Do(req)
+				Expect(err).ShouldNot(HaveOccurred())
+
+				defer resp.Body.Close()
+
+				By("Content-type should be CSV")
+				Expect(resp.Header.Get("Content-Type")).Should(Equal("text/csv"))
+
+				csvReader := csv.NewReader(resp.Body)
+
+				records, err := csvReader.ReadAll()
+				Expect(err).ShouldNot(HaveOccurred())
+
+				Expect(len(records)).Should(BeNumerically(">", 10))
+
+				By("First line should be the titles")
+				Expect(records[0]).Should(ContainElements([]string{
+					"compliance_events_id",
+					"compliance_events_compliance",
+					"compliance_events_message",
+					"compliance_events_metadata",
+					"compliance_events_reported_by",
+					"compliance_events_timestamp",
+					"clusters_cluster_id",
+					"clusters_name",
+					"parent_policies_id",
+					"parent_policies_name",
+					"parent_policies_namespace",
+					"parent_policies_categories",
+					"parent_policies_controls",
+					"parent_policies_standards",
+					"policies_id",
+					"policies_api_group",
+					"policies_kind",
+					"policies_name",
+					"policies_namespace",
+					"policies_severity",
+				}))
+
+				By("All line should have 20 columns")
+				for _, r := range records {
+					Expect(r).Should(HaveLen(20))
+				}
+			})
+
+			DescribeTable("Should filter CSV file",
+				func(ctx context.Context, queryArgs []string, expectedLine int) {
+					endpoints := "http://localhost:8385/api/v1/reports/compliance-events"
+
+					endpoints += "?" + strings.Join(queryArgs, "&")
+
+					req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoints, nil)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					resp, err := httpClient.Do(req)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					defer resp.Body.Close()
+
+					csvReader := csv.NewReader(resp.Body)
+					records, err := csvReader.ReadAll()
+					Expect(err).ShouldNot(HaveOccurred())
+
+					// The first element is title
+					Expect(records).Should(HaveLen(expectedLine))
+				},
+				Entry(
+					"Filter by cluster.cluster_id",
+					[]string{"cluster.cluster_id=test1-cluster1-fake-uuid-1,test6-cluster6-fake-uuid-6"},
+					// titles + actual data
+					4,
+				),
+				Entry(
+					"Filter by cluster.name",
+					[]string{"cluster.name=cluster1,cluster6"},
+					4,
+				),
+				Entry(
+					"Filter by event.compliance",
+					[]string{"event.compliance=Compliant"},
+					7,
+				),
+				Entry(
+					"Filter by event.message",
+					[]string{"event.message=configmaps%20%5Bcommon%5D%20not%20found%20in%20namespace%20default"},
+					4,
+				),
+				Entry(
+					"Filter by event.message_includes",
+					[]string{"event.message_includes=etcd"},
+					4,
+				),
+				Entry(
+					"Filter by event.message_like",
+					[]string{"event.message_like=configmaps%20%5B%25common%25%5D%25"},
+					9,
+				),
+				Entry(
+					"Filter by event.timestamp",
+					[]string{"event.timestamp=2023-01-01T01:01:01.111Z"},
+					2,
+				),
+				Entry(
+					"Filter by event.timestamp_after",
+					[]string{"event.timestamp_after=2023-04-01T01:01:01.111Z"},
+					6,
+				),
+				Entry(
+					"Filter by event.timestamp_before",
+					[]string{"event.timestamp_before=2023-04-01T01:01:01.111Z"},
+					7,
+				),
+				Entry(
+					"Filter by event.timestamp_after and event.timestamp_before",
+					[]string{
+						"event.timestamp_after=2023-01-01T01:01:01.111Z",
+						"event.timestamp_before=2023-04-01T01:01:01.111Z",
+					},
+					6,
+				),
+				Entry(
+					"Filter by parent_policy.categories",
+					[]string{"parent_policy.categories=cat-1,cat-3"},
+					5,
+				),
+				Entry(
+					"Filter by parent_policy.controls",
+					[]string{"parent_policy.controls=ctrl-2"},
+					4,
+				),
+				Entry(
+					"Filter by parent_policy.id",
+					[]string{"parent_policy.id=2"},
+					4,
+				),
+				Entry(
+					"Filter by parent_policy.name",
+					[]string{"parent_policy.name=etcd-encryption1"},
+					2,
+				),
+				Entry(
+					"Filter by parent_policy.namespace",
+					[]string{"parent_policy.namespace=policies"},
+					10,
+				),
+				Entry(
+					"Filter by parent_policy.standards",
+					[]string{"parent_policy.standards=stand-2"},
+					4,
+				),
+				Entry(
+					"Filter by policy.apiGroup",
+					[]string{"policy.apiGroup=policy.open-cluster-management.io"},
+					12,
+				),
+				Entry(
+					"Filter by policy.apiGroup no results",
+					[]string{"policy.apiGroup=does-not-exist"},
+					1,
+				),
+				Entry(
+					"Filter by policy.id",
+					[]string{"policy.id=4"},
+					4,
+				),
+				Entry(
+					"Filter by policy.kind",
+					[]string{"policy.kind=ConfigurationPolicy"},
+					12,
+				),
+				Entry(
+					"Filter by policy.kind no results",
+					[]string{"policy.kind=something-else"},
+					1,
+				),
+				Entry(
+					"Filter by policy.name",
+					[]string{"policy.name=common-b"},
+					3,
+				),
+				Entry(
+					"Filter by policy.namespace",
+					[]string{"policy.namespace=default"},
+					2,
+				),
+				Entry(
+					"Filter by policy.severity",
+					[]string{"policy.severity=low"},
+					10,
+				),
+				Entry(
+					"Filter by policy.severity is null",
+					[]string{"policy.severity"},
+					3,
+				),
+			)
+		})
 	})
 
 	Describe("Duplicate compliance event", func() {
