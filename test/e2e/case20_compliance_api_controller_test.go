@@ -204,6 +204,10 @@ func bringDownDBConnection(ctx context.Context) {
 		)
 		g.Expect(err).ToNot(HaveOccurred())
 
+		// Set auth token
+		token := getToken(ctx, "open-cluster-management", "governance-policy-propagator")
+		req.Header.Set("Authorization", "Bearer "+token)
+
 		resp, err := httpClient.Do(req)
 		if err != nil {
 			return

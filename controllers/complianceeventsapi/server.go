@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -128,6 +129,8 @@ var (
 	ErrInvalidQueryArgValue = errors.New("invalid query argument")
 	ErrInvalidQueryArg      error
 	ErrNotAuthorized        = errors.New("not authorized")
+	// The user has no access to any managed cluster
+	ErrNoAccess = errors.New("the user has no access")
 )
 
 type ComplianceAPIServer struct {
@@ -235,7 +238,16 @@ func (s *ComplianceAPIServer) Start(ctx context.Context, serverContext *Complian
 
 		switch r.Method {
 		case http.MethodGet:
-			getComplianceEvents(serverContext.DB, w, r)
+			// To verify each request independently
+			userConfig, err := getUserKubeConfig(s.cfg, r)
+			if err != nil {
+				if errors.Is(err, ErrNotAuthorized) {
+					writeErrMsgJSON(w, "The Authorization header is not set", http.StatusForbidden)
+				}
+
+				return
+			}
+			getComplianceEvents(serverContext.DB, w, r, userConfig)
 		case http.MethodPost:
 			postComplianceEvent(serverContext.DB, s.cfg, authenticatedClient, authenticator, w, r)
 		default:
@@ -261,12 +273,32 @@ func (s *ComplianceAPIServer) Start(ctx context.Context, serverContext *Complian
 			return
 		}
 
-		getSingleComplianceEvent(serverContext.DB, w, r)
+		// To verify each request independently
+		userConfig, err := getUserKubeConfig(s.cfg, r)
+		if err != nil {
+			if errors.Is(err, ErrNotAuthorized) {
+				writeErrMsgJSON(w, "The Authorization header is not set", http.StatusForbidden)
+			}
+
+			return
+		}
+
+		getSingleComplianceEvent(serverContext.DB, w, r, userConfig)
 	})
 
 	mux.HandleFunc("/api/v1/reports/compliance-events", func(w http.ResponseWriter, r *http.Request) {
 		// This header is for error writings
 		w.Header().Set("Content-Type", "application/json")
+
+		// To verify each request independently
+		userConfig, err := getUserKubeConfig(s.cfg, r)
+		if err != nil {
+			if errors.Is(err, ErrNotAuthorized) {
+				writeErrMsgJSON(w, "The Authorization header is not set", http.StatusForbidden)
+			}
+
+			return
+		}
 
 		if r.Method != http.MethodGet {
 			writeErrMsgJSON(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -274,7 +306,7 @@ func (s *ComplianceAPIServer) Start(ctx context.Context, serverContext *Complian
 			return
 		}
 
-		getComplianceEventsCSV(serverContext.DB, w, r)
+		getComplianceEventsCSV(serverContext.DB, w, r, userConfig)
 	})
 
 	serveErr := make(chan error)
@@ -348,7 +380,9 @@ func splitQueryValue(value string) []string {
 
 // parseQueryArgs will parse the HTTP request's query arguments and convert them to a usable format for constructing
 // the SQL query. All defaults are set and any invalid query arguments result in an error being returned.
-func parseQueryArgs(queryArgs url.Values, isCSV bool) (*queryOptions, error) {
+func parseQueryArgs(ctx context.Context, queryArgs url.Values, db *sql.DB,
+	userConfig *rest.Config, isCSV bool,
+) (*queryOptions, error) {
 	parsed := &queryOptions{
 		Direction:    "desc",
 		Page:         1,
@@ -469,6 +503,95 @@ func parseQueryArgs(queryArgs url.Values, isCSV bool) (*queryOptions, error) {
 			// Standard string filtering
 			parsed.Filters[sqlName] = splitQueryValue(value)
 		}
+	}
+
+	parsed, err := setAuthorizedClusters(ctx, db, parsed, userConfig)
+	if err != nil {
+		// ErrNoAccess needs queryOptions
+		return parsed, err
+	}
+
+	return parsed, nil
+}
+
+// setAuthorizedClusters verifies that if a cluster filter is provided,
+// the user has access to this filter. If no cluster filter is provided,
+// it sets the cluster filter to all managed clusters the user has access to.
+// If the user has no access, then ErrNoAccess is returned.
+func setAuthorizedClusters(ctx context.Context, db *sql.DB, parsed *queryOptions,
+	userConfig *rest.Config,
+) (*queryOptions, error) {
+	unAuthorizedClusters := []string{}
+
+	// Get all managedCluster rules
+	allRules, err := getManagedClusterRules(userConfig, nil)
+	if err != nil {
+		return parsed, err
+	}
+
+	if slices.Contains(allRules["*"], "get") || slices.Contains(allRules["*"], "*") {
+		return parsed, nil
+	}
+
+	tempClusterIDs := parsed.Filters["clusters.cluster_id"]
+	clusterIDs := make([]string, len(tempClusterIDs))
+
+	// Deep copy parsed.Filters["clusters.cluster_id"]
+	copy(clusterIDs, tempClusterIDs)
+
+	// Reset clusters.cluster_id
+	parsed.Filters["clusters.cluster_id"] = []string{}
+	// Convert id to name
+	for _, id := range clusterIDs {
+		clusterName, err := getClusterNameFromID(ctx, db, id)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				// Filter out invalid cluster IDs from the query
+				continue
+			}
+
+			log.Error(err, "Failed to get cluster name from cluster ID", "ID", id)
+
+			return parsed, err
+		}
+
+		if !getAccessByClusterName(allRules, clusterName) {
+			unAuthorizedClusters = append(unAuthorizedClusters, id)
+		} else {
+			parsed.Filters["clusters.cluster_id"] = append(parsed.Filters["clusters.cluster_id"], id)
+		}
+	}
+
+	parsedClusterNames := parsed.Filters["clusters.name"]
+	for _, clusterName := range parsedClusterNames {
+		if !getAccessByClusterName(allRules, clusterName) {
+			unAuthorizedClusters = append(unAuthorizedClusters, clusterName)
+		}
+	}
+
+	// There is no cluster.id or clusterName arg from the url query
+	// In other words, the user requests all they have access to.
+	if len(clusterIDs) == 0 && len(parsedClusterNames) == 0 {
+		starRules, ok := allRules["*"]
+		if ok && slices.Contains(starRules, "get") || slices.Contains(starRules, "*") {
+			return parsed, nil
+		}
+
+		for mcName := range allRules {
+			// Should have "GET" auth for all managedCluster
+			if getAccessByClusterName(allRules, mcName) {
+				parsed.Filters["clusters.name"] = append(parsed.Filters["clusters.name"], mcName)
+			}
+		}
+
+		if len(parsed.Filters["clusters.name"]) == 0 {
+			return parsed, ErrNoAccess
+		}
+	}
+
+	if len(unAuthorizedClusters) > 0 {
+		return parsed, fmt.Errorf("%w: the following cluster filters are not authorized: %s",
+			ErrNotAuthorized, strings.Join(unAuthorizedClusters, ", "))
 	}
 
 	return parsed, nil
@@ -599,7 +722,9 @@ func scanIntoComplianceEvent(rows Scannable, includeSpec bool) (*ComplianceEvent
 }
 
 // getSingleComplianceEvent handles the GET API endpoint for a single compliance event by ID.
-func getSingleComplianceEvent(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+func getSingleComplianceEvent(db *sql.DB, w http.ResponseWriter,
+	r *http.Request, config *rest.Config,
+) {
 	eventIDStr := strings.TrimPrefix(r.URL.Path, "/api/v1/compliance-events/")
 
 	eventID, err := strconv.ParseUint(eventIDStr, 10, 64)
@@ -613,7 +738,7 @@ func getSingleComplianceEvent(db *sql.DB, w http.ResponseWriter, r *http.Request
 
 	row := db.QueryRowContext(r.Context(), query, eventID)
 	if row.Err() != nil {
-		log.Error(err, "Failed to query for the compliance event", "eventID", eventID)
+		log.Error(row.Err(), "Failed to query for the compliance event", "eventID", eventID)
 		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
 
 		return
@@ -633,6 +758,22 @@ func getSingleComplianceEvent(db *sql.DB, w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Check auth for managedCluster GET verb
+	isAllowed, err := canGetManagedCluster(config, complianceEvent.Cluster.Name)
+	if err != nil {
+		log.Error(err, `Failed to get the "get" authorization for the cluster`,
+			"cluster", complianceEvent.Cluster.Name)
+		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
+
+		return
+	}
+
+	if !isAllowed {
+		writeErrMsgJSON(w, "Forbidden", http.StatusForbidden)
+
+		return
+	}
+
 	jsonResp, err := json.Marshal(complianceEvent)
 	if err != nil {
 		log.Error(err, "Failed marshal the compliance event", "eventID", eventID)
@@ -644,6 +785,17 @@ func getSingleComplianceEvent(db *sql.DB, w http.ResponseWriter, r *http.Request
 	if _, err = w.Write(jsonResp); err != nil {
 		log.Error(err, "Error writing success response")
 	}
+}
+
+func getClusterNameFromID(ctx context.Context, db *sql.DB, clusterID string) (name string, err error) {
+	err = db.QueryRowContext(ctx,
+		`SELECT name FROM clusters WHERE cluster_id = $1`, clusterID,
+	).Scan(&name)
+	if err != nil {
+		return "", err
+	}
+
+	return name, nil
 }
 
 // getWhereClause will convert the input queryOptions to a WHERE statement and return the filter values for a prepared
@@ -731,10 +883,52 @@ func getWhereClause(options *queryOptions) (string, []any) {
 }
 
 // getComplianceEvents handles the list API endpoint for compliance events.
-func getComplianceEvents(db *sql.DB, w http.ResponseWriter, r *http.Request) {
-	queryArgs, err := parseQueryArgs(r.URL.Query(), false)
+func getComplianceEvents(db *sql.DB, w http.ResponseWriter,
+	r *http.Request, userConfig *rest.Config,
+) {
+	queryArgs, err := parseQueryArgs(r.Context(), r.URL.Query(), db, userConfig, false)
 	if err != nil {
-		writeErrMsgJSON(w, err.Error(), http.StatusBadRequest)
+		if errors.Is(err, ErrNotAuthorized) {
+			writeErrMsgJSON(w, err.Error(), http.StatusForbidden)
+
+			return
+		}
+
+		if errors.Is(err, ErrNoAccess) {
+			response := ListResponse{
+				Data: []ComplianceEvent{},
+				Metadata: metadata{
+					Page:    queryArgs.Page,
+					Pages:   0,
+					PerPage: queryArgs.PerPage,
+					Total:   0,
+				},
+			}
+
+			jsonResp, err := json.Marshal(response)
+			if err != nil {
+				log.Error(err, "Failed to marshal an empty response")
+				writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
+
+				return
+			}
+
+			if _, err = w.Write(jsonResp); err != nil {
+				log.Error(err, "Error writing empty response")
+				writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
+			}
+
+			return
+		}
+
+		if errors.Is(err, ErrInvalidQueryArg) || errors.Is(err, ErrInvalidQueryArgValue) ||
+			errors.Is(err, ErrInvalidSortOption) {
+			writeErrMsgJSON(w, err.Error(), http.StatusBadRequest)
+
+			return
+		}
+
+		writeErrMsgJSON(w, err.Error(), http.StatusInternalServerError)
 
 		return
 	}
@@ -810,6 +1004,9 @@ LEFT JOIN policies ON compliance_events.policy_id = policies.id` + whereClause /
 
 	if _, err = w.Write(jsonResp); err != nil {
 		log.Error(err, "Error writing success response")
+		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
+
+		return
 	}
 }
 
@@ -962,10 +1159,51 @@ func getComplianceEventsQuery(whereClause string, queryArgs *queryOptions) strin
 	)
 }
 
-func getComplianceEventsCSV(db *sql.DB, w http.ResponseWriter, r *http.Request) {
-	queryArgs, err := parseQueryArgs(r.URL.Query(), true)
-	if err != nil {
-		writeErrMsgJSON(w, err.Error(), http.StatusBadRequest)
+func setCSVResponseHeaders(w http.ResponseWriter) {
+	w.Header().Set("Content-Disposition", "attachment; filename=reports.csv")
+	w.Header().Set("Content-Type", "text/csv")
+	// It's going to be divided into chunks. if the user don't get it all at once,
+	// the user can receive one by one in the meantime
+	w.Header().Set("Transfer-Encoding", "chunked")
+}
+
+func getComplianceEventsCSV(db *sql.DB, w http.ResponseWriter, r *http.Request,
+	userConfig *rest.Config,
+) {
+	var writer *csv.Writer
+
+	queryArgs, queryArgsErr := parseQueryArgs(r.Context(), r.URL.Query(), db, userConfig, true)
+	if queryArgs != nil {
+		headers := getCsvHeader(queryArgs.IncludeSpec)
+
+		writer = csv.NewWriter(w)
+
+		err := writer.Write(headers)
+		if err != nil {
+			log.Error(err, "Failed to write csv header")
+			writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
+
+			return
+		}
+	}
+
+	if queryArgsErr != nil {
+		if errors.Is(queryArgsErr, ErrNoAccess) {
+			setCSVResponseHeaders(w)
+
+			writer.Flush()
+
+			return
+		}
+
+		if errors.Is(queryArgsErr, ErrInvalidQueryArg) || errors.Is(queryArgsErr, ErrInvalidQueryArgValue) ||
+			errors.Is(queryArgsErr, ErrInvalidSortOption) {
+			writeErrMsgJSON(w, queryArgsErr.Error(), http.StatusBadRequest)
+
+			return
+		}
+
+		writeErrMsgJSON(w, queryArgsErr.Error(), http.StatusInternalServerError)
 
 		return
 	}
@@ -989,18 +1227,6 @@ func getComplianceEventsCSV(db *sql.DB, w http.ResponseWriter, r *http.Request) 
 
 	defer rows.Close()
 
-	headers := getCsvHeader(queryArgs.IncludeSpec)
-
-	writer := csv.NewWriter(w)
-
-	err = writer.Write(headers)
-	if err != nil {
-		log.Error(err, "Failed to write csv header")
-		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
-
-		return
-	}
-
 	for rows.Next() {
 		ce, err := scanIntoComplianceEvent(rows, queryArgs.IncludeSpec)
 		if err != nil {
@@ -1021,11 +1247,7 @@ func getComplianceEventsCSV(db *sql.DB, w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	w.Header().Set("Content-Disposition", "attachment; filename=reports.csv")
-	w.Header().Set("Content-Type", "text/csv")
-	// It's going to be divided into chunks. if the user don't get it all at once,
-	// the user can receive one by one in the meantime
-	w.Header().Set("Transfer-Encoding", "chunked")
+	setCSVResponseHeaders(w)
 
 	writer.Flush()
 }

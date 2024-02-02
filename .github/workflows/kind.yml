@@ -78,6 +78,11 @@ jobs:
     - name: Checkout Governance Policy Propagator
       uses: actions/checkout@v4
 
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+
     - name: Create K8s KinD Cluster - ${{ matrix.kind }}
       env:
         KIND_VERSION: ${{ matrix.kind }}
@@ -148,6 +153,12 @@ jobs:
     steps:
     - name: Checkout Governance Policy Propagator
       uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      id: go
+      with:
+        go-version-file: go.mod
 
     - name: Create K8s KinD Cluster - ${{ matrix.kind }}
       env:

@@ -238,6 +238,9 @@ install-resources:
 	kubectl create ns managed1
 	kubectl create ns managed2
 	kubectl create ns managed3
+	kubectl create ns managed4
+	kubectl create ns managed5
+	kubectl create ns managed6
 	@echo deploying roles and service account
 	kubectl apply -k deploy/rbac -n $(KIND_NAMESPACE)
 	kubectl apply -f deploy/manager/service-account.yaml -n $(KIND_NAMESPACE)
@@ -245,6 +248,9 @@ install-resources:
 	kubectl apply -f test/resources/managed1-cluster.yaml
 	kubectl apply -f test/resources/managed2-cluster.yaml
 	kubectl apply -f test/resources/managed3-cluster.yaml
+	kubectl apply -f test/resources/managed4-cluster.yaml
+	kubectl apply -f test/resources/managed5-cluster.yaml
+	kubectl apply -f test/resources/managed6-cluster.yaml
 	@echo setting a Hub cluster DNS name
 	kubectl apply -f test/resources/case5_policy_automation/cluster-dns.yaml
 
