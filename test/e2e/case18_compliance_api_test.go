@@ -19,11 +19,14 @@ import (
 	"github.com/lib/pq"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"open-cluster-management.io/governance-policy-propagator/controllers/complianceeventsapi"
+	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
 const eventsEndpoint = "http://localhost:8385/api/v1/compliance-events"
@@ -34,6 +37,17 @@ var httpClient = http.Client{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	},
 }
+
+var (
+	token         string
+	wrongSAToken  string
+	subsetSAToken string
+)
+
+const (
+	wrongSAYaml  = "../resources/case18_compliance_api_test/wrong_service_account.yaml"
+	subsetSAYaml = "../resources/case18_compliance_api_test/subset_service_account.yaml"
+)
 
 func getTableNames(db *sql.DB) ([]string, error) {
 	tableNameRows, err := db.Query("SELECT tablename FROM pg_tables WHERE schemaname = current_schema()")
@@ -130,6 +144,14 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 		})
 
 		Expect(err).ToNot(HaveOccurred())
+
+		By("Add a new wrong-service account")
+		utils.Kubectl("apply", "-f", wrongSAYaml, "--kubeconfig="+kubeconfigHub)
+		utils.Kubectl("apply", "-f", subsetSAYaml, "--kubeconfig="+kubeconfigHub)
+
+		token = k8sConfig.BearerToken
+		wrongSAToken = getToken(ctx, "default", "wrong-sa")
+		subsetSAToken = getToken(ctx, "default", "subset-sa")
 	})
 
 	Describe("Test the database migrations", func() {
@@ -152,8 +174,8 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 		Describe("POST one valid event with including all the optional fields", func() {
 			payload := []byte(`{
 				"cluster": {
-					"name": "cluster1",
-					"cluster_id": "test1-cluster1-fake-uuid-1"
+					"name": "managed1",
+					"cluster_id": "test1-managed1-fake-uuid-1"
 				},
 				"parent_policy": {
 					"name": "etcd-encryption1",
@@ -181,11 +203,11 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 			BeforeAll(func(ctx context.Context) {
 				By("POST the event")
-				Eventually(postEvent(ctx, payload, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload, token), "5s", "1s").ShouldNot(HaveOccurred())
 			})
 
 			It("Should have created the cluster in a table", func() {
-				rows, err := db.Query("SELECT * FROM clusters WHERE cluster_id = $1", "test1-cluster1-fake-uuid-1")
+				rows, err := db.Query("SELECT * FROM clusters WHERE cluster_id = $1", "test1-managed1-fake-uuid-1")
 				Expect(err).ToNot(HaveOccurred())
 
 				count := 0
@@ -199,7 +221,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).NotTo(Equal(0))
-					Expect(name).To(Equal("cluster1"))
+					Expect(name).To(Equal("managed1"))
 					count++
 				}
 
@@ -312,13 +334,13 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			})
 
 			It("Should return the compliance event from the API", func(ctx context.Context) {
-				respJSON, err := listEvents(ctx)
+				respJSON, err := listEvents(ctx, token)
 				Expect(err).ToNot(HaveOccurred())
 
 				complianceEvent := map[string]any{
 					"cluster": map[string]any{
-						"cluster_id": "test1-cluster1-fake-uuid-1",
-						"name":       "cluster1",
+						"cluster_id": "test1-managed1-fake-uuid-1",
+						"name":       "managed1",
 					},
 					"event": map[string]any{
 						"compliance":  "NonCompliant",
@@ -362,6 +384,9 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 				req, err := http.NewRequestWithContext(ctx, http.MethodGet, eventsEndpoint+"/1", nil)
 				Expect(err).ToNot(HaveOccurred())
 
+				// Set auth token
+				req.Header.Set("Authorization", "Bearer "+token)
+
 				resp, err := httpClient.Do(req)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -384,7 +409,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			})
 
 			It("Should return the compliance event with the spec from the API", func(ctx context.Context) {
-				respJSON, err := listEvents(ctx, "include_spec")
+				respJSON, err := listEvents(ctx, token, "include_spec")
 				Expect(err).ToNot(HaveOccurred())
 
 				data := respJSON["data"].([]any)
@@ -400,8 +425,8 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 		Describe("POST two minimally-valid events on different clusters and policies", func() {
 			payload1 := []byte(`{
 				"cluster": {
-					"name": "cluster2",
-					"cluster_id": "test2-cluster2-fake-uuid-2"
+					"name": "managed2",
+					"cluster_id": "test2-managed2-fake-uuid-2"
 				},
 				"policy": {
 					"apiGroup": "policy.open-cluster-management.io",
@@ -418,8 +443,8 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 			payload2 := []byte(`{
 				"cluster": {
-					"name": "cluster3",
-					"cluster_id": "test2-cluster3-fake-uuid-3"
+					"name": "managed3",
+					"cluster_id": "test2-managed3-fake-uuid-3"
 				},
 				"policy": {
 					"apiGroup": "policy.open-cluster-management.io",
@@ -436,8 +461,8 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 			BeforeAll(func(ctx context.Context) {
 				By("POST the events")
-				Eventually(postEvent(ctx, payload1, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
-				Eventually(postEvent(ctx, payload2, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload1, token), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload2, token), "5s", "1s").ShouldNot(HaveOccurred())
 			})
 
 			It("Should have created both clusters in a table", func() {
@@ -458,7 +483,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 					clusternames = append(clusternames, name)
 				}
 
-				Expect(clusternames).To(ContainElements("cluster2", "cluster3"))
+				Expect(clusternames).To(ContainElements("managed2", "managed3"))
 			})
 
 			It("Should have created two policies in a table despite having the same name", func() {
@@ -528,7 +553,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 		Describe("API pagination", func() {
 			It("Should have correct default pagination", func(ctx context.Context) {
-				respJSON, err := listEvents(ctx)
+				respJSON, err := listEvents(ctx, token)
 				Expect(err).ToNot(HaveOccurred())
 
 				metadata := respJSON["metadata"].(map[string]interface{})
@@ -541,7 +566,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 				Expect(data).To(HaveLen(3))
 			})
 			It("Should have accept page=2", func(ctx context.Context) {
-				respJSON, err := listEvents(ctx, "page=2")
+				respJSON, err := listEvents(ctx, token, "page=2")
 				Expect(err).ToNot(HaveOccurred())
 
 				metadata := respJSON["metadata"].(map[string]interface{})
@@ -555,7 +580,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			})
 
 			It("Should accept per_page=2 and page=2", func(ctx context.Context) {
-				respJSON, err := listEvents(ctx, "per_page=2", "page=2")
+				respJSON, err := listEvents(ctx, token, "per_page=2", "page=2")
 				Expect(err).ToNot(HaveOccurred())
 
 				metadata := respJSON["metadata"].(map[string]interface{})
@@ -573,21 +598,21 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 			It("Should not accept page=150", func(ctx context.Context) {
 				// Too many per_page
-				_, err := listEvents(ctx, "per_page=150", "page=2")
+				_, err := listEvents(ctx, token, "per_page=150", "page=2")
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError(ContainSubstring("per_page must be a value between 1 and 100")))
 			})
 
 			It("Should not accept per_page=-5", func(ctx context.Context) {
 				// Too little per_page
-				_, err := listEvents(ctx, "per_page=-5", "page=2")
+				_, err := listEvents(ctx, token, "per_page=-5", "page=2")
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError(ContainSubstring("per_page must be a value between 1 and 100")))
 			})
 
 			It("Should not accept page=-5", func(ctx context.Context) {
 				// Too little per_page
-				_, err := listEvents(ctx, "page=-5")
+				_, err := listEvents(ctx, token, "page=-5")
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError(ContainSubstring("page must be a positive integer")))
 			})
@@ -595,7 +620,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 		DescribeTable("API sorting",
 			func(ctx context.Context, queryArgs []string, expectedIDs []float64) {
-				respJSON, err := listEvents(ctx, queryArgs...)
+				respJSON, err := listEvents(ctx, token, queryArgs...)
 				Expect(err).ToNot(HaveOccurred())
 
 				data, ok := respJSON["data"].([]any)
@@ -817,6 +842,9 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 				req, err := http.NewRequestWithContext(ctx, http.MethodGet, eventsEndpoint+"/1231291", nil)
 				Expect(err).ToNot(HaveOccurred())
 
+				// Set auth token
+				req.Header.Set("Authorization", "Bearer "+token)
+
 				resp, err := httpClient.Do(req)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -839,6 +867,9 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 				req, err := http.NewRequestWithContext(ctx, http.MethodGet, eventsEndpoint+"/sql-injections-lose", nil)
 				Expect(err).ToNot(HaveOccurred())
 
+				// Set auth token
+				req.Header.Set("Authorization", "Bearer "+token)
+
 				resp, err := httpClient.Do(req)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -860,7 +891,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 		Describe("Invalid sort options", func() {
 			It("An invalid sort of sort=my-laundry", func(ctx context.Context) {
-				_, err := listEvents(ctx, "sort=my-laundry")
+				_, err := listEvents(ctx, token, "sort=my-laundry")
 				Expect(err).To(HaveOccurred())
 				expected := "an invalid sort option was provided, choose from: cluster.cluster_id, cluster.name, " +
 					"event.compliance, event.message, event.reported_by, event.timestamp, id, " +
@@ -871,7 +902,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			})
 
 			It("An invalid sort direction", func(ctx context.Context) {
-				_, err := listEvents(ctx, "direction=up")
+				_, err := listEvents(ctx, token, "direction=up")
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError(ContainSubstring("direction must be one of: asc, desc")))
 			})
@@ -879,7 +910,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 		Describe("Invalid query arguments", func() {
 			It("An invalid query argument", func(ctx context.Context) {
-				_, err := listEvents(ctx, "make_it_compliant=please")
+				_, err := listEvents(ctx, token, "make_it_compliant=please")
 				expected := "an invalid query argument was provided, choose from: cluster.cluster_id, cluster.name, " +
 					"direction, event.compliance, event.message, event.message_includes, event.message_like, " +
 					"event.reported_by, event.timestamp, event.timestamp_after, event.timestamp_before, id, " +
@@ -891,13 +922,13 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			})
 
 			It("An invalid include_spec=yes-please", func(ctx context.Context) {
-				_, err := listEvents(ctx, "include_spec=yes-please")
+				_, err := listEvents(ctx, token, "include_spec=yes-please")
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError(ContainSubstring("include_spec is a flag and does not accept a value")))
 			})
 
 			It("An invalid sort direction", func(ctx context.Context) {
-				_, err := listEvents(ctx, "direction=up")
+				_, err := listEvents(ctx, token, "direction=up")
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError(ContainSubstring("direction must be one of: asc, desc")))
 			})
@@ -907,8 +938,8 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			// payload1 defines most things, and should cause the cluster, parent, and policy to be created.
 			payload1 := []byte(`{
 				"cluster": {
-					"name": "cluster4",
-					"cluster_id": "test3-cluster4-fake-uuid-4"
+					"name": "managed4",
+					"cluster_id": "test3-managed4-fake-uuid-4"
 				},
 				"parent_policy": {
 					"name": "common-parent",
@@ -934,8 +965,8 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			// payload2 just uses the ids for the policy and parent_policy.
 			payload2 := []byte(`{
 				"cluster": {
-					"name": "cluster4",
-					"cluster_id": "test3-cluster4-fake-uuid-4"
+					"name": "managed4",
+					"cluster_id": "test3-managed4-fake-uuid-4"
 				},
 				"parent_policy": {
 					"id": 2
@@ -954,8 +985,8 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			// cache.
 			payload3 := []byte(`{
 				"cluster": {
-					"name": "cluster4",
-					"cluster_id": "test3-cluster4-fake-uuid-4"
+					"name": "managed4",
+					"cluster_id": "test3-managed4-fake-uuid-4"
 				},
 				"parent_policy": {
 					"name": "common-parent",
@@ -980,13 +1011,13 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 			BeforeAll(func(ctx context.Context) {
 				By("POST the events")
-				Eventually(postEvent(ctx, payload1, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
-				Eventually(postEvent(ctx, payload2, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
-				Eventually(postEvent(ctx, payload3, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload1, token), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload2, token), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload3, token), "5s", "1s").ShouldNot(HaveOccurred())
 			})
 
 			It("Should have only created one cluster in the table", func() {
-				rows, err := db.Query("SELECT * FROM clusters WHERE name = $1", "cluster4")
+				rows, err := db.Query("SELECT * FROM clusters WHERE name = $1", "managed4")
 				Expect(err).ToNot(HaveOccurred())
 
 				count := 0
@@ -1104,8 +1135,8 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			// payload1 defines most things, and should cause the cluster, parent, and policy to be created.
 			payload1 := []byte(`{
 				"cluster": {
-					"name": "cluster5",
-					"cluster_id": "test5-cluster5-fake-uuid-5"
+					"name": "managed5",
+					"cluster_id": "test5-managed5-fake-uuid-5"
 				},
 				"parent_policy": {
 					"name": "parent-a",
@@ -1130,8 +1161,8 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			// which should create a new parent policy
 			payload2 := []byte(`{
 				"cluster": {
-					"name": "cluster5",
-					"cluster_id": "test5-cluster5-fake-uuid-5"
+					"name": "managed5",
+					"cluster_id": "test5-managed5-fake-uuid-5"
 				},
 				"parent_policy": {
 					"name": "parent-a",
@@ -1155,8 +1186,8 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			// which should be the same as not specifying it at all (payload2)
 			payload3 := []byte(`{
 				"cluster": {
-					"name": "cluster5",
-					"cluster_id": "test5-cluster5-fake-uuid-5"
+					"name": "managed5",
+					"cluster_id": "test5-managed5-fake-uuid-5"
 				},
 				"parent_policy": {
 					"name": "parent-a",
@@ -1179,9 +1210,9 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 			BeforeAll(func(ctx context.Context) {
 				By("POST the events")
-				Eventually(postEvent(ctx, payload1, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
-				Eventually(postEvent(ctx, payload2, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
-				Eventually(postEvent(ctx, payload3, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload1, token), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload2, token), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload3, token), "5s", "1s").ShouldNot(HaveOccurred())
 			})
 
 			It("Should have created two parent policies", func() {
@@ -1245,8 +1276,8 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			// payload1 should cause the cluster, parent, and policy to be created.
 			payload1 := []byte(`{
 				"cluster": {
-					"name": "cluster6",
-					"cluster_id": "test6-cluster6-fake-uuid-6"
+					"name": "managed6",
+					"cluster_id": "test6-managed6-fake-uuid-6"
 				},
 				"parent_policy": {
 					"name": "parent-b",
@@ -1270,8 +1301,8 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			// payload2 skips the namespace, which should create a new policy
 			payload2 := []byte(`{
 				"cluster": {
-					"name": "cluster6",
-					"cluster_id": "test6-cluster6-fake-uuid-6"
+					"name": "managed6",
+					"cluster_id": "test6-managed6-fake-uuid-6"
 				},
 				"parent_policy": {
 					"name": "parent-b",
@@ -1293,8 +1324,8 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 			BeforeAll(func(ctx context.Context) {
 				By("POST the events")
-				Eventually(postEvent(ctx, payload1, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
-				Eventually(postEvent(ctx, payload2, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload1, token), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload2, token), "5s", "1s").ShouldNot(HaveOccurred())
 			})
 
 			It("Should have created one parent policy", func() {
@@ -1381,7 +1412,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						"message": "configmaps [valid] valid in namespace valid",
 						"timestamp": "2023-09-09T09:09:09.999Z"
 					}
-				}`), k8sConfig.BearerToken), "5s", "1s").Should(
+				}`), token), "5s", "1s").Should(
 					MatchError(ContainSubstring("Got non-201 status code 400")),
 				)
 			})
@@ -1407,7 +1438,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						"message": "configmaps [valid] valid in namespace valid",
 						"timestamp": "2023-09-09T09:09:09.999Z"
 					}
-				}`), k8sConfig.BearerToken), "5s", "1s").Should(
+				}`), token), "5s", "1s").Should(
 					MatchError(ContainSubstring("Got non-201 status code 400")),
 				)
 			})
@@ -1433,7 +1464,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						"compliance": "Compliant",
 						"message": "configmaps [valid] valid in namespace valid"
 					}
-				}`), k8sConfig.BearerToken), "5s", "1s").Should(
+				}`), token), "5s", "1s").Should(
 					MatchError(ContainSubstring("Got non-201 status code 400")),
 				)
 			})
@@ -1457,7 +1488,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						"message": "configmaps [valid] valid in namespace valid",
 						"timestamp": "2023-09-09T09:09:09.999Z"
 					}
-				}`), k8sConfig.BearerToken), "5s", "1s").Should(
+				}`), token), "5s", "1s").Should(
 					MatchError(ContainSubstring("Got non-201 status code 400")),
 				)
 			})
@@ -1478,7 +1509,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						"message": "configmaps [valid] valid in namespace valid",
 						"timestamp": "2023-09-09T09:09:09.999Z"
 					}
-				}`), k8sConfig.BearerToken), "5s", "1s").Should(
+				}`), token), "5s", "1s").Should(
 					MatchError(ContainSubstring("Got non-201 status code 400")),
 				)
 			})
@@ -1507,7 +1538,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						"message": "configmaps [valid] valid in namespace valid",
 						"timestamp": "2023-09-09T09:09:09.999Z"
 					}
-				}`), k8sConfig.BearerToken), "5s", "1s").Should(
+				}`), token), "5s", "1s").Should(
 					MatchError(ContainSubstring("Got non-201 status code 400")),
 				)
 			})
@@ -1529,7 +1560,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						"message": "configmaps [valid] valid in namespace valid",
 						"timestamp": "2023-09-09T09:09:09.999Z"
 					}
-				}`), k8sConfig.BearerToken), "5s", "1s").Should(MatchError(ContainSubstring(
+				}`), token), "5s", "1s").Should(MatchError(ContainSubstring(
 					`invalid input: parent_policy.id not found\\ninvalid input: policy.id not found`,
 				)))
 			})
@@ -1537,7 +1568,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 		DescribeTable("API filtering",
 			func(ctx context.Context, queryArgs []string, expectedIDs []float64) {
-				respJSON, err := listEvents(ctx, queryArgs...)
+				respJSON, err := listEvents(ctx, token, queryArgs...)
 				Expect(err).ToNot(HaveOccurred())
 
 				data, ok := respJSON["data"].([]any)
@@ -1553,12 +1584,12 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			},
 			Entry(
 				"Filter by cluster.cluster_id",
-				[]string{"cluster.cluster_id=test1-cluster1-fake-uuid-1,test6-cluster6-fake-uuid-6"},
+				[]string{"cluster.cluster_id=test1-managed1-fake-uuid-1,test6-managed6-fake-uuid-6"},
 				[]float64{11, 10, 1},
 			),
 			Entry(
 				"Filter by cluster.name",
-				[]string{"cluster.name=cluster1,cluster6"},
+				[]string{"cluster.name=managed1,managed6"},
 				[]float64{11, 10, 1},
 			),
 			Entry(
@@ -1707,7 +1738,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 		DescribeTable("Invalid API filtering",
 			func(ctx context.Context, queryArgs []string, expectedErrMsg string) {
-				_, err := listEvents(ctx, queryArgs...)
+				_, err := listEvents(ctx, token, queryArgs...)
 				Expect(err).To(MatchError(ContainSubstring(expectedErrMsg)))
 			},
 			Entry(
@@ -1728,11 +1759,12 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 		)
 
 		Describe("Test the /api/v1/reports/compliance-events endpoint", func() {
+			csvEndpoints := "http://localhost:8385/api/v1/reports/compliance-events"
 			It("should send CSV file in http response", func(ctx context.Context) {
-				endpoints := "http://localhost:8385/api/v1/reports/compliance-events"
-
-				req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoints, nil)
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, csvEndpoints, nil)
 				Expect(err).ShouldNot(HaveOccurred())
+
+				req.Header.Set("Authorization", "Bearer "+token)
 
 				resp, err := httpClient.Do(req)
 				Expect(err).ShouldNot(HaveOccurred())
@@ -1778,15 +1810,66 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 					Expect(r).Should(HaveLen(20))
 				}
 			})
+			It("Should return only header when SA does not have any GET verb to managedCluster",
+				func(ctx context.Context) {
+					req, err := http.NewRequestWithContext(ctx, http.MethodGet, csvEndpoints, nil)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					req.Header.Set("Content-Type", "application/json")
+					// Set auth token
+					req.Header.Set("Authorization", "Bearer "+wrongSAToken)
+
+					resp, err := httpClient.Do(req)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					defer resp.Body.Close()
+
+					By("Content-type should be CSV")
+					Expect(resp.Header.Get("Content-Type")).Should(Equal("text/csv"))
+
+					csvReader := csv.NewReader(resp.Body)
+
+					records, err := csvReader.ReadAll()
+					Expect(err).ShouldNot(HaveOccurred())
+
+					By("Should return only header")
+					Expect(records).Should(HaveLen(1))
+
+					Expect(records[0]).Should(ContainElements([]string{
+						"compliance_events_id",
+						"compliance_events_compliance",
+						"compliance_events_message",
+						"compliance_events_metadata",
+						"compliance_events_reported_by",
+						"compliance_events_timestamp",
+						"clusters_cluster_id",
+						"clusters_name",
+						"parent_policies_id",
+						"parent_policies_name",
+						"parent_policies_namespace",
+						"parent_policies_categories",
+						"parent_policies_controls",
+						"parent_policies_standards",
+						"policies_id",
+						"policies_api_group",
+						"policies_kind",
+						"policies_name",
+						"policies_namespace",
+						"policies_severity",
+					}))
+				})
 
 			DescribeTable("Should filter CSV file",
 				func(ctx context.Context, queryArgs []string, expectedLine int) {
-					endpoints := "http://localhost:8385/api/v1/reports/compliance-events"
+					endpoints := csvEndpoints
 
 					endpoints += "?" + strings.Join(queryArgs, "&")
 
 					req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoints, nil)
 					Expect(err).ShouldNot(HaveOccurred())
+
+					// Set auth token
+					req.Header.Set("Authorization", "Bearer "+token)
 
 					resp, err := httpClient.Do(req)
 					Expect(err).ShouldNot(HaveOccurred())
@@ -1802,13 +1885,13 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 				},
 				Entry(
 					"Filter by cluster.cluster_id",
-					[]string{"cluster.cluster_id=test1-cluster1-fake-uuid-1,test6-cluster6-fake-uuid-6"},
+					[]string{"cluster.cluster_id=test1-managed1-fake-uuid-1,test6-managed6-fake-uuid-6"},
 					// titles + actual data
 					4,
 				),
 				Entry(
 					"Filter by cluster.name",
-					[]string{"cluster.name=cluster1,cluster6"},
+					[]string{"cluster.name=managed1,managed6"},
 					4,
 				),
 				Entry(
@@ -1936,8 +2019,8 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 	Describe("Duplicate compliance event", func() {
 		payload1 := []byte(`{
 			"cluster": {
-				"name": "cluster2",
-				"cluster_id": "test2-cluster2-fake-uuid-2"
+				"name": "managed2",
+				"cluster_id": "test2-managed2-fake-uuid-2"
 			},
 			"policy": {
 				"apiGroup": "policy.open-cluster-management.io",
@@ -1954,12 +2037,192 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 		BeforeAll(func(ctx context.Context) {
 			By("POST the initial event")
-			Eventually(postEvent(ctx, payload1, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
+			Eventually(postEvent(ctx, payload1, token), "5s", "1s").ShouldNot(HaveOccurred())
 		})
 
 		It("Should fail when posting the same compliance event", func(ctx context.Context) {
-			err := postEvent(ctx, payload1, k8sConfig.BearerToken)
+			err := postEvent(ctx, payload1, token)
 			Expect(err).To(MatchError(ContainSubstring("The compliance event already exists")))
+		})
+	})
+
+	Describe("Test authorization", func() {
+		Describe("Test method Get", func() {
+			It("Should return StatusForbidden when it is empty token", func(ctx context.Context) {
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, eventsEndpoint+"/1", nil)
+				Expect(err).ToNot(HaveOccurred())
+
+				req.Header.Set("Content-Type", "application/json")
+				res, err := httpClient.Do(req)
+
+				Expect(res.StatusCode).Should(Equal(http.StatusForbidden))
+				Expect(err).ShouldNot(HaveOccurred())
+
+				req, err = http.NewRequestWithContext(ctx, http.MethodGet, eventsEndpoint, nil)
+				Expect(err).ToNot(HaveOccurred())
+
+				req.Header.Set("Content-Type", "application/json")
+				res, err = httpClient.Do(req)
+
+				Expect(res.StatusCode).Should(Equal(http.StatusForbidden))
+				Expect(err).ShouldNot(HaveOccurred())
+			})
+			It("Should return empty data when SA does not have any GET verb to managedCluster",
+				func(ctx context.Context) {
+					req, err := http.NewRequestWithContext(ctx, http.MethodGet, eventsEndpoint, nil)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					req.Header.Set("Content-Type", "application/json")
+					// Set auth token
+					req.Header.Set("Authorization", "Bearer "+wrongSAToken)
+
+					resp, err := httpClient.Do(req)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					defer resp.Body.Close()
+
+					body, err := io.ReadAll(resp.Body)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					respJSON := map[string]any{}
+
+					err = json.Unmarshal(body, &respJSON)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					rows, ok := respJSON["data"].([]interface{})
+					Expect(ok).To(BeTrue())
+
+					By("Should return 0 rows")
+					Expect(rows).Should(BeEmpty())
+				})
+			It("Should return a forbidden error when SA has only managed1 auth",
+				func(ctx context.Context) {
+					argument := "cluster.name=managed1,managed2,managed3"
+
+					By("governance-policy-propagator SA Should be able to access all")
+
+					respJSON, err := listEvents(ctx, token, argument)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					data, ok := respJSON["data"].([]any)
+					Expect(ok).Should(BeTrue())
+
+					By("Should include at least managed2 or managed3")
+					hasVariousClusters := false
+					for _, d := range data {
+						complianceEvent, ok := d.(map[string]interface{})
+						Expect(ok).To(BeTrue())
+
+						name, ok := complianceEvent["cluster"].(map[string]interface{})["name"].(string)
+						Expect(ok).To(BeTrue())
+
+						if name == "managed2" || name == "managed3" {
+							hasVariousClusters = true
+
+							break
+						}
+					}
+					Expect(hasVariousClusters).Should(BeTrue())
+
+					req, err := http.NewRequestWithContext(ctx, http.MethodGet, eventsEndpoint+"?"+argument, nil)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					req.Header.Set("Content-Type", "application/json")
+					// Set auth token
+					req.Header.Set("Authorization", "Bearer "+subsetSAToken)
+
+					resp, err := httpClient.Do(req)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					defer resp.Body.Close()
+
+					body, err := io.ReadAll(resp.Body)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					respJSON = map[string]any{}
+
+					err = json.Unmarshal(body, &respJSON)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					message, ok := respJSON["message"].(string)
+					Expect(ok).To(BeTrue())
+
+					Expect(message).
+						Should(Equal("not authorized: the following cluster filters are not authorized: " +
+							"managed2, managed3"))
+
+					Expect(resp.StatusCode).Should(Equal(http.StatusForbidden))
+					Expect(err).ShouldNot(HaveOccurred())
+				})
+			It("Should return a forbidden error when only unauthorized ID are passed as id",
+				func(ctx context.Context) {
+					argument := "cluster.cluster_id=wrong-id,test1-managed1-fake-uuid-1,test2-managed2-fake-uuid-2"
+
+					req, err := http.NewRequestWithContext(ctx, http.MethodGet, eventsEndpoint+"?"+argument, nil)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					req.Header.Set("Content-Type", "application/json")
+					// Set auth token
+					req.Header.Set("Authorization", "Bearer "+subsetSAToken)
+
+					resp, err := httpClient.Do(req)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					defer resp.Body.Close()
+
+					body, err := io.ReadAll(resp.Body)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					respJSON := map[string]any{}
+
+					err = json.Unmarshal(body, &respJSON)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					message, ok := respJSON["message"].(string)
+					Expect(ok).To(BeTrue())
+
+					By("The error message should include test2-managed2-fake-uuid-2 except managed1")
+					Expect(message).
+						Should(Equal(
+							"not authorized: the following cluster filters are not authorized: " +
+								"test2-managed2-fake-uuid-2"))
+
+					Expect(resp.StatusCode).Should(Equal(http.StatusForbidden))
+					Expect(err).ShouldNot(HaveOccurred())
+				})
+			It("Should return managed1 with subset SA when the query is empty",
+				func(ctx context.Context) {
+					req, err := http.NewRequestWithContext(ctx, http.MethodGet, eventsEndpoint, nil)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					req.Header.Set("Content-Type", "application/json")
+					// Set auth token
+					req.Header.Set("Authorization", "Bearer "+subsetSAToken)
+
+					resp, err := httpClient.Do(req)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					defer resp.Body.Close()
+
+					body, err := io.ReadAll(resp.Body)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					respJSON := map[string]any{}
+
+					err = json.Unmarshal(body, &respJSON)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					rows, ok := respJSON["data"].([]interface{})
+					Expect(ok).To(BeTrue())
+
+					By("Should return only managed1")
+					Expect(rows).Should(HaveLen(1))
+
+					id, ok := rows[0].(map[string]interface{})["id"].(float64)
+					Expect(ok).To(BeTrue())
+
+					Expect(int(id)).Should(Equal(1))
+				})
 		})
 	})
 })
@@ -2072,7 +2335,7 @@ func postEvent(ctx context.Context, payload []byte, token string) error {
 	return errors.Join(errs...)
 }
 
-func listEvents(ctx context.Context, queryArgs ...string) (map[string]any, error) {
+func listEvents(ctx context.Context, token string, queryArgs ...string) (map[string]any, error) {
 	url := eventsEndpoint
 
 	if len(queryArgs) > 0 {
@@ -2083,6 +2346,9 @@ func listEvents(ctx context.Context, queryArgs ...string) (map[string]any, error
 	if err != nil {
 		return nil, err
 	}
+
+	// Set auth token
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -2108,4 +2374,24 @@ func listEvents(ctx context.Context, queryArgs ...string) (map[string]any, error
 	}
 
 	return respJSON, nil
+}
+
+func getToken(ctx context.Context, ns, saName string) string {
+	secret := &v1.Secret{}
+	var err error
+
+	Eventually(func(g Gomega) error {
+		secret, err = clientHub.CoreV1().Secrets(ns).
+			Get(ctx, saName, metav1.GetOptions{})
+
+		_, ok := secret.Data["token"]
+		g.Expect(ok).Should(BeTrue())
+
+		return err
+	}).ShouldNot(HaveOccurred())
+
+	_, ok := secret.Data["token"]
+	Expect(ok).Should(BeTrue())
+
+	return string(secret.Data["token"])
 }

@@ -7,38 +7,66 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 
+	"github.com/stolostron/rbac-api-utils/pkg/rbac"
 	authzv1 "k8s.io/api/authorization/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	apiserverx509 "k8s.io/apiserver/pkg/authentication/request/x509"
 	"k8s.io/apiserver/pkg/server/dynamiccertificates"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
 
+func getManagedClusterRules(userChangedConfig *rest.Config, managedClusterNames []string,
+) (map[string][]string, error) {
+	kclient, err := kubernetes.NewForConfig(userChangedConfig)
+	if err != nil {
+		log.Error(err, "Failed to create a Kubernetes client with the user token")
+
+		return nil, err
+	}
+
+	managedClusterGR := schema.GroupResource{
+		Group:    "cluster.open-cluster-management.io",
+		Resource: "managedclusters",
+	}
+
+	// key is managedClusterName and value is verbs.
+	// ex: {"managed1": ["get"], "managed2": ["list","create"], "managed3": []}
+	return rbac.GetResourceAccess(kclient, managedClusterGR, managedClusterNames, "")
+}
+
+func canGetManagedCluster(userChangedConfig *rest.Config, managedClusterName string,
+) (bool, error) {
+	allRules, err := getManagedClusterRules(userChangedConfig, []string{managedClusterName})
+	if err != nil {
+		return false, err
+	}
+
+	return getAccessByClusterName(allRules, managedClusterName), nil
+}
+
+func getAccessByClusterName(allManagedClusterRules map[string][]string, clusterName string) bool {
+	starRules, ok := allManagedClusterRules["*"]
+	if ok && slices.Contains(starRules, "get") || slices.Contains(starRules, "*") {
+		return true
+	}
+
+	rules, ok := allManagedClusterRules[clusterName]
+	if ok && slices.Contains(rules, "get") || slices.Contains(rules, "*") {
+		return true
+	}
+
+	return false
+}
+
 // parseToken will return the token string in the Authorization header.
 func parseToken(req *http.Request) string {
 	return strings.TrimSpace(strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer"))
-}
-
-// getClientFromToken will generate a Kubernetes client using the input config and token. No authentication data from
-// the input config is used in the generated client.
-func getClientFromToken(cfg *rest.Config, token string) (*kubernetes.Clientset, error) {
-	userConfig := &rest.Config{
-		Host:    cfg.Host,
-		APIPath: cfg.APIPath,
-		TLSClientConfig: rest.TLSClientConfig{
-			CAFile:     cfg.TLSClientConfig.CAFile,
-			CAData:     cfg.TLSClientConfig.CAData,
-			ServerName: cfg.TLSClientConfig.ServerName,
-			Insecure:   cfg.TLSClientConfig.Insecure,
-		},
-		BearerToken: token,
-	}
-
-	return kubernetes.NewForConfig(userConfig)
 }
 
 // canRecordComplianceEvent will perform certificate or token authentication and perform a subject access review to
@@ -104,12 +132,12 @@ func canRecordComplianceEvent(
 		return review.Status.Allowed, nil
 	}
 
-	token := parseToken(req)
-	if token == "" {
-		return false, ErrNotAuthorized
+	userConfig, err := getUserKubeConfig(cfg, req)
+	if err != nil {
+		return false, err
 	}
 
-	userClient, err := getClientFromToken(cfg, token)
+	userClient, err := kubernetes.NewForConfig(userConfig)
 	if err != nil {
 		return false, err
 	}
@@ -135,7 +163,7 @@ func canRecordComplianceEvent(
 		log.V(0).Info(
 			"The user is not authorized to record a compliance event",
 			"cluster", clusterName,
-			"user", getTokenUsername(token),
+			"user", getTokenUsername(userConfig.BearerToken),
 		)
 	}
 
@@ -188,4 +216,26 @@ func getCertAuthenticator(clientAuthCAs []byte) (*apiserverx509.Authenticator, e
 	authenticator := apiserverx509.NewDynamic(p.VerifyOptions, apiserverx509.CommonNameUserConversion)
 
 	return authenticator, nil
+}
+
+func getUserKubeConfig(config *rest.Config, r *http.Request) (*rest.Config, error) {
+	userConfig := &rest.Config{
+		Host:    config.Host,
+		APIPath: config.APIPath,
+		TLSClientConfig: rest.TLSClientConfig{
+			CAFile:     config.TLSClientConfig.CAFile,
+			CAData:     config.TLSClientConfig.CAData,
+			ServerName: config.TLSClientConfig.ServerName,
+			// For testing
+			Insecure: config.TLSClientConfig.Insecure,
+		},
+	}
+
+	userConfig.BearerToken = parseToken(r)
+
+	if userConfig.BearerToken == "" {
+		return nil, ErrNotAuthorized
+	}
+
+	return userConfig, nil
 }
