@@ -72,8 +72,13 @@ CREATE TABLE IF NOT EXISTS compliance_events(
 	  REFERENCES parent_policies(id),
    CONSTRAINT fk_cluster_id
       FOREIGN KEY(cluster_id) 
-	  REFERENCES clusters(id)
+	  REFERENCES clusters(id),
+   UNIQUE (cluster_id, policy_id, parent_policy_id, compliance, message, timestamp)
 );
+
+-- This is required until we only support Postgres 15+ to utilize NULLS NOT DISTINCT.
+-- Partial indexes with 1 nullable unique field provided (e.g. A, B)
+CREATE UNIQUE INDEX IF NOT EXISTS compliance_events_null1 ON compliance_events (cluster_id, policy_id, compliance, message, timestamp) WHERE parent_policy_id IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_compliance_events_compliance ON compliance_events (compliance);
 CREATE INDEX IF NOT EXISTS idx_compliance_events_timestamp ON compliance_events (timestamp);

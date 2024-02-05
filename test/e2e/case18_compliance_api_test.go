@@ -1706,6 +1706,36 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			),
 		)
 	})
+
+	Describe("Duplicate compliance event", func() {
+		payload1 := []byte(`{
+			"cluster": {
+				"name": "cluster2",
+				"cluster_id": "test2-cluster2-fake-uuid-2"
+			},
+			"policy": {
+				"apiGroup": "policy.open-cluster-management.io",
+				"kind": "ConfigurationPolicy",
+				"name": "duplicate-test",
+				"spec": {"test": "two"}
+			},
+			"event": {
+				"compliance": "NonCompliant",
+				"message": "configmaps [etcd] not found in namespace default",
+				"timestamp": "2023-02-02T02:02:02.222Z"
+			}
+		}`)
+
+		BeforeAll(func(ctx context.Context) {
+			By("POST the initial event")
+			Eventually(postEvent(ctx, payload1), "5s", "1s").ShouldNot(HaveOccurred())
+		})
+
+		It("Should fail when posting the same compliance event", func(ctx context.Context) {
+			err := postEvent(ctx, payload1)
+			Expect(err).To(MatchError(ContainSubstring("The compliance event already exists")))
+		})
+	})
 })
 
 var _ = Describe("Test query generation", Label("compliance-events-api"), func() {

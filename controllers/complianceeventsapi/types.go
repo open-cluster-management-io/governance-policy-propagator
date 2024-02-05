@@ -20,6 +20,7 @@ import (
 var (
 	errRequiredFieldNotProvided = errors.New("required field not provided")
 	errInvalidInput             = errors.New("invalid input")
+	errDuplicateComplianceEvent = errors.New("the compliance event already exists")
 )
 
 type dbRow interface {
@@ -142,10 +143,18 @@ func (ce *ComplianceEvent) Create(ctx context.Context, db *sql.DB) error {
 
 	insertQuery, insertArgs := ce.Event.InsertQuery()
 
-	row := db.QueryRowContext(ctx, insertQuery+" RETURNING id", insertArgs...) //nolint:execinquery
+	row := db.QueryRowContext( //nolint:execinquery
+		ctx, insertQuery+" ON CONFLICT DO NOTHING RETURNING id", insertArgs...,
+	)
 
 	err := row.Scan(&ce.Event.KeyID)
 	if err != nil {
+		// If this is true, then we know we encountered a conflict. This is simpler than parsing the unique constraint
+		// error.
+		if errors.Is(err, sql.ErrNoRows) {
+			return errDuplicateComplianceEvent
+		}
+
 		return err
 	}
 

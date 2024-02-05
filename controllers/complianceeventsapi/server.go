@@ -783,6 +783,12 @@ func postComplianceEvent(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 
 	err = reqEvent.Create(r.Context(), db)
 	if err != nil {
+		if errors.Is(err, errDuplicateComplianceEvent) {
+			writeErrMsgJSON(w, "The compliance event already exists", http.StatusConflict)
+
+			return
+		}
+
 		log.Error(err, "error inserting compliance event")
 		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
 
