@@ -171,7 +171,7 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 	}
 
 	// an empty decision means the policy should not be replicated
-	if decision.Cluster.ClusterName == "" {
+	if decision.Cluster == "" {
 		if replicatedExists {
 			inClusterNS, err := common.IsInClusterNamespace(ctx, r.Client, request.Namespace)
 			if err != nil {
@@ -291,8 +291,8 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 		}
 
 		r.Recorder.Event(rootPolicy, "Normal", "PolicyPropagation",
-			fmt.Sprintf("Policy %s/%s was propagated to cluster %s/%s", rootPolicy.GetNamespace(),
-				rootPolicy.GetName(), decision.Cluster.ClusterName, decision.Cluster.ClusterNamespace))
+			fmt.Sprintf("Policy %s/%s was propagated to cluster %s", rootPolicy.GetNamespace(),
+				rootPolicy.GetName(), decision.Cluster))
 
 		version.resourceVersion = desiredReplicatedPolicy.GetResourceVersion()
 
@@ -318,8 +318,8 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 		}
 
 		r.Recorder.Event(rootPolicy, "Normal", "PolicyPropagation",
-			fmt.Sprintf("Policy %s/%s was updated for cluster %s/%s", rootPolicy.GetNamespace(),
-				rootPolicy.GetName(), decision.Cluster.ClusterName, decision.Cluster.ClusterNamespace))
+			fmt.Sprintf("Policy %s/%s was updated for cluster %s", rootPolicy.GetNamespace(),
+				rootPolicy.GetName(), decision.Cluster))
 
 		log.Info("Replicated policy updated")
 	} else {
@@ -633,10 +633,7 @@ func (r *ReplicatedPolicyReconciler) singleClusterDecision(
 	ctx context.Context, rootPlc *policiesv1.Policy, clusterName string,
 ) (decision clusterDecision, err error) {
 	positiveDecision := clusterDecision{
-		Cluster: appsv1.PlacementDecision{
-			ClusterName:      clusterName,
-			ClusterNamespace: clusterName,
-		},
+		Cluster: clusterName,
 	}
 
 	pbList := &policiesv1.PlacementBindingList{}

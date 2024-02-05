@@ -21,7 +21,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/client-go/tools/record"
-	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
@@ -48,7 +47,7 @@ type Propagator struct {
 // clusterDecision contains a single decision where the replicated policy
 // should be processed and any overrides to the root policy
 type clusterDecision struct {
-	Cluster         appsv1.PlacementDecision
+	Cluster         string
 	PolicyOverrides policiesv1.BindingOverrides
 }
 
@@ -199,12 +198,12 @@ func addManagedClusterLabels(clusterName string) func(templates.CachingQueryAPI,
 // annotation is deleted from the replicated policies and not propagated to the cluster namespaces.
 func (r *ReplicatedPolicyReconciler) processTemplates(
 	ctx context.Context,
-	replicatedPlc *policiesv1.Policy, decision appsv1.PlacementDecision, rootPlc *policiesv1.Policy,
+	replicatedPlc *policiesv1.Policy, clusterName string, rootPlc *policiesv1.Policy,
 ) error {
 	log := log.WithValues(
 		"policyName", rootPlc.GetName(),
 		"policyNamespace", rootPlc.GetNamespace(),
-		"cluster", decision.ClusterName,
+		"cluster", clusterName,
 	)
 	log.V(1).Info("Processing templates")
 
@@ -238,7 +237,7 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 			{
 				Group: "cluster.open-cluster-management.io",
 				Kind:  "ManagedCluster",
-				Name:  decision.ClusterName,
+				Name:  clusterName,
 			},
 		},
 		DisableAutoCacheCleanUp: true,
@@ -288,11 +287,11 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 
 		log.V(1).Info("Found an object definition with templates")
 
-		templateContext := templateCtx{ManagedClusterName: decision.ClusterName}
+		templateContext := templateCtx{ManagedClusterName: clusterName}
 
 		if strings.Contains(string(policyT.ObjectDefinition.Raw), "ManagedClusterLabels") {
 			templateResolverOptions.ContextTransformers = append(
-				templateResolverOptions.ContextTransformers, addManagedClusterLabels(decision.ClusterName),
+				templateResolverOptions.ContextTransformers, addManagedClusterLabels(clusterName),
 			)
 		}
 
@@ -302,7 +301,7 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 		if usesEncryption && !templateResolverOptions.EncryptionEnabled {
 			log.V(1).Info("Found an object definition requiring encryption. Handling encryption keys.")
 			// Get/generate the encryption key
-			encryptionKey, err := r.getEncryptionKey(ctx, decision.ClusterName)
+			encryptionKey, err := r.getEncryptionKey(ctx, clusterName)
 			if err != nil {
 				log.Error(err, "Failed to get/generate the policy encryption key")
 
@@ -311,7 +310,7 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 
 			// Get/generate the initialization vector
 			initializationVector, err := r.getInitializationVector(
-				rootPlc.GetName(), decision.ClusterName, annotations,
+				rootPlc.GetName(), clusterName, annotations,
 			)
 			if err != nil {
 				log.Error(err, "Failed to get initialization vector")
@@ -348,9 +347,8 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 				"Warning",
 				"PolicyPropagation",
 				fmt.Sprintf(
-					"Failed to resolve templates for cluster %s/%s: %s",
-					decision.ClusterNamespace,
-					decision.ClusterName,
+					"Failed to resolve templates for cluster %s: %s",
+					clusterName,
 					tplErr.Error(),
 				),
 			)

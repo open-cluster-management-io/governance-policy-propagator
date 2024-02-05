@@ -209,11 +209,12 @@ func HasValidPlacementRef(pb *policiesv1.PlacementBinding) bool {
 // the PlacementBinding
 func GetDecisions(
 	ctx context.Context, c client.Client, pb *policiesv1.PlacementBinding,
-) ([]appsv1.PlacementDecision, error) {
+) ([]string, error) {
 	if !HasValidPlacementRef(pb) {
 		return nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Name, pb.Namespace)
 	}
 
+	clusterDecisions := make([]string, 0)
 	refNN := types.NamespacedName{
 		Namespace: pb.GetNamespace(),
 		Name:      pb.PlacementRef.Name,
@@ -243,26 +244,25 @@ func GetDecisions(
 			return nil, fmt.Errorf("failed to list the PlacementDecisions for '%v', %w", pb.PlacementRef.Name, err)
 		}
 
-		decisions := make([]appsv1.PlacementDecision, 0)
-
 		for _, item := range list.Items {
 			for _, cluster := range item.Status.Decisions {
-				decisions = append(decisions, appsv1.PlacementDecision{
-					ClusterName:      cluster.ClusterName,
-					ClusterNamespace: cluster.ClusterName,
-				})
+				clusterDecisions = append(clusterDecisions, cluster.ClusterName)
 			}
 		}
 
-		return decisions, nil
+		return clusterDecisions, nil
 	case "PlacementRule":
 		plr := &appsv1.PlacementRule{}
 		if err := c.Get(ctx, refNN, plr); err != nil && !k8serrors.IsNotFound(err) {
 			return nil, fmt.Errorf("failed to get PlacementRule '%v': %w", pb.PlacementRef.Name, err)
 		}
 
+		for _, cluster := range plr.Status.Decisions {
+			clusterDecisions = append(clusterDecisions, cluster.ClusterName)
+		}
+
 		// if the PlacementRule was not found, the decisions will be empty
-		return plr.Status.Decisions, nil
+		return clusterDecisions, nil
 	}
 
 	return nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Name, pb.Namespace)
@@ -308,10 +308,10 @@ func GetRepPoliciesInPlacementBinding(
 	result := make([]reconcile.Request, 0, len(rootPolicyRequest)*len(decisions))
 
 	for _, rp := range rootPolicyRequest {
-		for _, pd := range decisions {
+		for _, clusterName := range decisions {
 			result = append(result, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      rp.Namespace + "." + rp.Name,
-				Namespace: pd.ClusterName,
+				Namespace: clusterName,
 			}})
 		}
 	}
