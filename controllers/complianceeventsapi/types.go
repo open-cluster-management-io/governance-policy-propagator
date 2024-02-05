@@ -225,10 +225,15 @@ func (e EventDetails) Validate() error {
 		errs = append(errs, fmt.Errorf("%w: event.compliance", errRequiredFieldNotProvided))
 	} else {
 		switch e.Compliance {
-		case "Compliant", "NonCompliant":
+		case "Compliant", "NonCompliant", "Disabled", "Pending":
 		default:
-			errs = append(errs, fmt.Errorf("%w: event.compliance should be Compliant or NonCompliant, got %v",
-				errInvalidInput, e.Compliance))
+			errs = append(
+				errs,
+				fmt.Errorf(
+					"%w: event.compliance should be Compliant, NonCompliant, Disabled, or Pending got %v",
+					errInvalidInput, e.Compliance,
+				),
+			)
 		}
 	}
 

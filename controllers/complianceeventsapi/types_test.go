@@ -40,7 +40,7 @@ func TestEventDetailsValidation(t *testing.T) {
 		},
 		"bad compliance": {
 			EventDetails{Compliance: "bad", Message: "hello", Timestamp: time.Now()},
-			"should be Compliant or NonCompliant",
+			"should be Compliant, NonCompliant, Disabled, or Pending got bad",
 		},
 		"no message": {
 			EventDetails{Compliance: "Compliant", Timestamp: time.Now()},
