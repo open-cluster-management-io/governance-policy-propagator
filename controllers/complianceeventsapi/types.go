@@ -78,17 +78,11 @@ func (ce ComplianceEvent) Validate(ctx context.Context, db *sql.DB) error {
 				ctx, `SELECT EXISTS(SELECT * FROM parent_policies WHERE id=$1);`, ce.ParentPolicy.KeyID,
 			)
 
-			if row.Err() != nil {
-				log.Error(row.Err(), "Failed to query for the existence of the parent policy ID")
-
-				return errors.New("failed to determine if parent_policy.id is valid")
-			}
-
 			var exists bool
 
 			err := row.Scan(&exists)
 			if err != nil {
-				log.Error(row.Err(), "Failed to scan for the existence of the parent policy ID")
+				log.Error(err, "Failed to query for the existence of the parent policy ID")
 
 				return errors.New("failed to determine if parent_policy.id is valid")
 			}
@@ -110,17 +104,12 @@ func (ce ComplianceEvent) Validate(ctx context.Context, db *sql.DB) error {
 
 	if ce.Policy.KeyID != 0 {
 		row := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT * FROM policies WHERE id=$1);`, ce.Policy.KeyID)
-		if row.Err() != nil {
-			log.Error(row.Err(), "Failed to query for the existence of the policy ID")
-
-			return errors.New("failed to determine if policy.id is valid")
-		}
 
 		var exists bool
 
 		err := row.Scan(&exists)
 		if err != nil {
-			log.Error(row.Err(), "Failed to scan for the existence of the policy ID")
+			log.Error(err, "Failed to query for the existence of the policy ID")
 
 			return errors.New("failed to determine if policy.id is valid")
 		}
@@ -154,9 +143,6 @@ func (ce *ComplianceEvent) Create(ctx context.Context, db *sql.DB) error {
 	insertQuery, insertArgs := ce.Event.InsertQuery()
 
 	row := db.QueryRowContext(ctx, insertQuery+" RETURNING id", insertArgs...) //nolint:execinquery
-	if row.Err() != nil {
-		return row.Err()
-	}
 
 	err := row.Scan(&ce.Event.KeyID)
 	if err != nil {
@@ -539,9 +525,6 @@ func getOrCreate(ctx context.Context, db *sql.DB, obj dbRow) error {
 
 	// On inserts, it returns the primary key value (e.g. id). If it already exists, nothing is returned.
 	row := db.QueryRowContext(ctx, fmt.Sprintf(`%s ON CONFLICT DO NOTHING RETURNING "id"`, insertQuery), insertArgs...)
-	if row.Err() != nil {
-		return row.Err()
-	}
 
 	var primaryKey int32
 
@@ -553,9 +536,6 @@ func getOrCreate(ctx context.Context, db *sql.DB, obj dbRow) error {
 		selectQuery, selectArgs := obj.SelectQuery("id")
 
 		row = db.QueryRowContext(ctx, selectQuery, selectArgs...)
-		if row.Err() != nil {
-			return row.Err()
-		}
 
 		err = row.Scan(&primaryKey)
 		if err != nil {

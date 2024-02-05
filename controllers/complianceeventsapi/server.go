@@ -691,17 +691,11 @@ LEFT JOIN parent_policies ON compliance_events.parent_policy_id = parent_policie
 LEFT JOIN policies ON compliance_events.policy_id = policies.id` + whereClause
 
 	row := db.QueryRowContext(r.Context(), countQuery, filterValues...)
-	if row.Err() != nil {
-		log.Error(row.Err(), "Failed to get the count of compliance events")
-		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
-
-		return
-	}
 
 	var total uint64
 
 	if err := row.Scan(&total); err != nil {
-		log.Error(row.Err(), "Got an invalid response when getting the count of compliance events")
+		log.Error(err, "Failed to get the count of compliance events")
 		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
 
 		return
