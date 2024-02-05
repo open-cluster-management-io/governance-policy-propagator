@@ -412,7 +412,6 @@ func (r *PolicyAutomationReconciler) Reconcile(
 					string(policyv1beta1.Once),
 					violationContext,
 				)
-
 				if err != nil {
 					log.Error(err, "Failed to create the Ansible job")
 
@@ -523,7 +522,6 @@ func (r *PolicyAutomationReconciler) Reconcile(
 					string(policyv1beta1.EveryEvent),
 					violationContext,
 				)
-
 				if err != nil {
 					log.Error(err, "Failed to create the Ansible job")
 
