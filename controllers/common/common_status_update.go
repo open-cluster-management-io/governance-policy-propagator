@@ -68,7 +68,7 @@ func RootStatusUpdate(ctx context.Context, c client.Client, rootPolicy *policies
 // a required lookup fails.
 func GetPolicyPlacementDecisions(ctx context.Context, c client.Client,
 	instance *policiesv1.Policy, pb *policiesv1.PlacementBinding,
-) (decisions []appsv1.PlacementDecision, placements []*policiesv1.Placement, err error) {
+) (clusterDecisions []string, placements []*policiesv1.Placement, err error) {
 	if !HasValidPlacementRef(pb) {
 		return nil, nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Name, pb.Namespace)
 	}
@@ -146,9 +146,9 @@ func GetPolicyPlacementDecisions(ctx context.Context, c client.Client,
 		return nil, placements, nil
 	}
 
-	decisions, err = GetDecisions(ctx, c, pb)
+	clusterDecisions, err = GetDecisions(ctx, c, pb)
 
-	return decisions, placements, err
+	return clusterDecisions, placements, err
 }
 
 type DecisionSet map[string]bool
@@ -196,8 +196,8 @@ func GetClusterDecisions(
 		}
 
 		// Decisions are all unique
-		for _, plcDecision := range plcDecisions {
-			decisions[plcDecision.ClusterName] = true
+		for _, clusterName := range plcDecisions {
+			decisions[clusterName] = true
 		}
 
 		placements = append(placements, plcPlacements...)
@@ -222,12 +222,12 @@ func GetClusterDecisions(
 		}
 
 		// Decisions are all unique
-		for _, plcDecision := range plcDecisions {
-			if _, ok := decisions[plcDecision.ClusterName]; ok {
+		for _, clusterName := range plcDecisions {
+			if _, ok := decisions[clusterName]; ok {
 				foundInDecisions = true
 			}
 
-			decisions[plcDecision.ClusterName] = true
+			decisions[clusterName] = true
 		}
 
 		if foundInDecisions {
@@ -265,18 +265,18 @@ func CalculatePerClusterStatus(
 	var lookupErr error // save until end, to attempt all lookups
 
 	// Update the status based on the processed decisions
-	for dec := range decisions {
+	for clusterName := range decisions {
 		replicatedPolicy := &policiesv1.Policy{}
 		key := types.NamespacedName{
-			Namespace: dec, Name: rootPolicy.Namespace + "." + rootPolicy.Name,
+			Namespace: clusterName, Name: rootPolicy.Namespace + "." + rootPolicy.Name,
 		}
 
 		err := c.Get(ctx, key, replicatedPolicy)
 		if err != nil {
 			if k8serrors.IsNotFound(err) {
 				status = append(status, &policiesv1.CompliancePerClusterStatus{
-					ClusterName:      dec,
-					ClusterNamespace: dec,
+					ClusterName:      clusterName,
+					ClusterNamespace: clusterName,
 				})
 
 				continue
@@ -287,8 +287,8 @@ func CalculatePerClusterStatus(
 
 		status = append(status, &policiesv1.CompliancePerClusterStatus{
 			ComplianceState:  replicatedPolicy.Status.ComplianceState,
-			ClusterName:      dec,
-			ClusterNamespace: dec,
+			ClusterName:      clusterName,
+			ClusterNamespace: clusterName,
 		})
 	}
 

@@ -189,15 +189,13 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 					log.V(1).Info("Error getting placement binding " + pbName)
 				}
 
-				var decisions []appsv1.PlacementDecision
-				decisions, err = common.GetDecisions(ctx, r.Client, pb)
+				var clusterDecisions []string
+				clusterDecisions, err = common.GetDecisions(ctx, r.Client, pb)
 				if err != nil {
 					log.Error(err, "Error getting placement decisions for binding "+pbName)
 				}
 
-				for _, decision := range decisions {
-					clusters = append(clusters, decision.ClusterName)
-				}
+				clusters = append(clusters, clusterDecisions...)
 			}
 
 			// aggregate compliance state

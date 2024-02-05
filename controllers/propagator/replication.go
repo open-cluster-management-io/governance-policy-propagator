@@ -40,7 +40,7 @@ func equivalentReplicatedPolicies(plc1 *policiesv1.Policy, plc2 *policiesv1.Poli
 func (r *ReplicatedPolicyReconciler) buildReplicatedPolicy(ctx context.Context,
 	root *policiesv1.Policy, clusterDec clusterDecision,
 ) (*policiesv1.Policy, error) {
-	decision := clusterDec.Cluster
+	clusterName := clusterDec.Cluster
 	replicatedName := common.FullNameForPolicy(root)
 
 	// Create the copy this way to avoid copying the root policy's status which can be quite large in large
@@ -50,7 +50,7 @@ func (r *ReplicatedPolicyReconciler) buildReplicatedPolicy(ctx context.Context,
 	root.ObjectMeta.DeepCopyInto(&replicated.ObjectMeta)
 	root.Spec.DeepCopyInto(&replicated.Spec)
 	replicated.SetName(replicatedName)
-	replicated.SetNamespace(decision.ClusterNamespace)
+	replicated.SetNamespace(clusterName)
 	replicated.SetResourceVersion("")
 	replicated.SetFinalizers(nil)
 	replicated.SetOwnerReferences(nil)
@@ -71,8 +71,8 @@ func (r *ReplicatedPolicyReconciler) buildReplicatedPolicy(ctx context.Context,
 	}
 
 	// Extra labels on replicated policies
-	labels[common.ClusterNameLabel] = decision.ClusterName
-	labels[common.ClusterNamespaceLabel] = decision.ClusterNamespace
+	labels[common.ClusterNameLabel] = clusterName
+	labels[common.ClusterNamespaceLabel] = clusterName
 	labels[common.RootPolicyLabel] = replicatedName
 
 	replicated.SetLabels(labels)
