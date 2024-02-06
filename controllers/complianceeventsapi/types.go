@@ -390,7 +390,7 @@ func PolicyFromUnstructured(obj unstructured.Unstructured) *Policy {
 
 	policy.Name = obj.GetName()
 
-	spec, ok, _ := unstructured.NestedStringMap(obj.Object, "spec")
+	spec, ok, _ := unstructured.NestedMap(obj.Object, "spec")
 	if ok {
 		typedSpec := JSONMap{}
 
@@ -402,7 +402,9 @@ func PolicyFromUnstructured(obj unstructured.Unstructured) *Policy {
 	}
 
 	if severity, ok := spec["severity"]; ok {
-		policy.Severity = &severity
+		if sevString, ok := severity.(string); ok {
+			policy.Severity = &sevString
+		}
 	}
 
 	return policy
