@@ -99,9 +99,6 @@ func (r *RootPolicyReconciler) Reconcile(ctx context.Context, request ctrl.Reque
 	return reconcile.Result{}, nil
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:skip
-
 // updateExistingReplicas lists all existing replicated policies for this root policy, and sends
 // events for each of them to the replicated policy reconciler. This will trigger updates on those
 // replicated policies, for example when the root policy spec changes, or when the replicated
