@@ -688,7 +688,7 @@ OFFSET %d ROWS;`,
 	countQuery := `SELECT COUNT(*) FROM compliance_events
 LEFT JOIN clusters ON compliance_events.cluster_id = clusters.id
 LEFT JOIN parent_policies ON compliance_events.parent_policy_id = parent_policies.id
-LEFT JOIN policies ON compliance_events.policy_id = policies.id` + whereClause
+LEFT JOIN policies ON compliance_events.policy_id = policies.id` + whereClause // #nosec G202
 
 	row := db.QueryRowContext(r.Context(), countQuery, filterValues...)
 
