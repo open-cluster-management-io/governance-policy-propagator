@@ -12,10 +12,10 @@ spec:
       compliance: Compliant
   policy-templates:
     - objectDefinition:
-        apiVersion: policies.ibm.com/v1alpha1
-        kind: TrustedContainerPolicy
+        apiVersion: policies.open-cluster-management.io/v1alpha1
+        kind: FakePolicy
         metadata:
-          name: case13-test-policy-trustedcontainerpolicy
+          name: case13-test-policy-fakepolicy
         spec:
           severity: low
           namespaceSelector:
