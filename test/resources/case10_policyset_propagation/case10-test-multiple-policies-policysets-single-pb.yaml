@@ -7,10 +7,10 @@ spec:
   disabled: false
   policy-templates:
     - objectDefinition:
-        apiVersion: policies.ibm.com/v1alpha1
-        kind: TrustedContainerPolicy
+        apiVersion: policies.open-cluster-management.io/v1alpha1
+        kind: FakePolicy
         metadata:
-          name: case10-test-policy1-trustedcontainerpolicy
+          name: case10-test-policy1-fakepolicy
         spec:
           severity: low
           namespaceSelector:
@@ -28,10 +28,10 @@ spec:
   disabled: false
   policy-templates:
     - objectDefinition:
-        apiVersion: policies.ibm.com/v1alpha1
-        kind: TrustedContainerPolicy
+        apiVersion: policies.open-cluster-management.io/v1alpha1
+        kind: FakePolicy
         metadata:
-          name: case10-test-policy2-trustedcontainerpolicy
+          name: case10-test-policy2-fakepolicy
         spec:
           severity: low
           namespaceSelector:
