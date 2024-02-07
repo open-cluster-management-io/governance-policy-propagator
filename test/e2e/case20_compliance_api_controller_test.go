@@ -192,7 +192,9 @@ func bringDownDBConnection(ctx context.Context) {
 		g.Expect(err).ToNot(HaveOccurred())
 
 		resp, err := httpClient.Do(req)
-		g.Expect(err).ToNot(HaveOccurred())
+		if err != nil {
+			return
+		}
 
 		defer resp.Body.Close()
 

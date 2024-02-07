@@ -67,7 +67,7 @@ var _ = Describe("Test policy templates", func() {
 			Expect(plc).ToNot(BeNil())
 
 			yamlPlc := utils.ParseYaml(case9ReplicatedPolicyYamlM1)
-			Eventually(func() interface{} {
+			Eventually(func(g Gomega) interface{} {
 				replicatedPlc := utils.GetWithTimeout(
 					clientHubDynamic,
 					gvrPolicy,
@@ -76,6 +76,9 @@ var _ = Describe("Test policy templates", func() {
 					true,
 					defaultTimeoutSeconds,
 				)
+
+				err := utils.RemovePolicyTemplateDBAnnotations(replicatedPlc)
+				g.Expect(err).ToNot(HaveOccurred())
 
 				return replicatedPlc.Object["spec"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
@@ -87,7 +90,7 @@ var _ = Describe("Test policy templates", func() {
 
 			By("Verifying the policy is updated")
 			yamlPlc := utils.ParseYaml(case9ReplicatedPolicyYamlM1Update)
-			Eventually(func() interface{} {
+			Eventually(func(g Gomega) interface{} {
 				replicatedPlc := utils.GetWithTimeout(
 					clientHubDynamic,
 					gvrPolicy,
@@ -96,6 +99,9 @@ var _ = Describe("Test policy templates", func() {
 					true,
 					defaultTimeoutSeconds,
 				)
+
+				err := utils.RemovePolicyTemplateDBAnnotations(replicatedPlc)
+				g.Expect(err).ToNot(HaveOccurred())
 
 				return replicatedPlc.Object["spec"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
@@ -118,7 +124,7 @@ var _ = Describe("Test policy templates", func() {
 			Expect(plc).ToNot(BeNil())
 
 			yamlPlc := utils.ParseYaml(case9ReplicatedPolicyYamlM2)
-			Eventually(func() interface{} {
+			Eventually(func(g Gomega) interface{} {
 				replicatedPlc := utils.GetWithTimeout(
 					clientHubDynamic,
 					gvrPolicy,
@@ -127,6 +133,9 @@ var _ = Describe("Test policy templates", func() {
 					true,
 					defaultTimeoutSeconds,
 				)
+
+				err := utils.RemovePolicyTemplateDBAnnotations(replicatedPlc)
+				g.Expect(err).ToNot(HaveOccurred())
 
 				return replicatedPlc.Object["spec"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
@@ -210,7 +219,7 @@ var _ = Describe("Test encrypted policy templates", func() {
 
 				By("Verifying the replicated policy against a snapshot")
 				yamlPlc := utils.ParseYaml(case9PolicyYamlEncryptedRepl + managedCluster + ".yaml")
-				Eventually(func() interface{} {
+				Eventually(func(g Gomega) interface{} {
 					replicatedPlc = utils.GetWithTimeout(
 						clientHubDynamic,
 						gvrPolicy,
@@ -219,6 +228,9 @@ var _ = Describe("Test encrypted policy templates", func() {
 						true,
 						defaultTimeoutSeconds,
 					)
+
+					err := utils.RemovePolicyTemplateDBAnnotations(replicatedPlc)
+					g.Expect(err).ToNot(HaveOccurred())
 
 					return replicatedPlc.Object["spec"]
 				}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
@@ -361,7 +373,7 @@ var _ = Describe("Test encrypted policy templates with secret copy", func() {
 
 				By("Verifying the replicated policy against a snapshot")
 				yamlPlc := utils.ParseYaml(case9PolicyYamlCopiedRepl + managedCluster + ".yaml")
-				Eventually(func() interface{} {
+				Eventually(func(g Gomega) interface{} {
 					replicatedPlc = utils.GetWithTimeout(
 						clientHubDynamic,
 						gvrPolicy,
@@ -370,6 +382,9 @@ var _ = Describe("Test encrypted policy templates with secret copy", func() {
 						true,
 						defaultTimeoutSeconds,
 					)
+
+					err := utils.RemovePolicyTemplateDBAnnotations(replicatedPlc)
+					g.Expect(err).ToNot(HaveOccurred())
 
 					return replicatedPlc.Object["spec"]
 				}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
