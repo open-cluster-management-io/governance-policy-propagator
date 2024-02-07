@@ -126,6 +126,10 @@ func TestSetDBAnnotationsNoDB(t *testing.T) {
 		t.Fatalf("Expected the policy ID of 56 but got: %s", templateAnnotations[PolicyIDAnnotation])
 	}
 
+	if len(templateAnnotations) != 1 {
+		t.Fatalf("Expected 1 policy annotation but got: %d", len(templateAnnotations))
+	}
+
 	// Test a cache hit from the last run using the policies from the first run
 	reconciler.setDBAnnotations(context.TODO(), rootPolicy, replicatedPolicy, existingReplicatedPolicy)
 
@@ -141,5 +145,9 @@ func TestSetDBAnnotationsNoDB(t *testing.T) {
 
 	if templateAnnotations[PolicyIDAnnotation] != "56" {
 		t.Fatalf("Expected the policy ID of 56 but got: %s", templateAnnotations[PolicyIDAnnotation])
+	}
+
+	if len(templateAnnotations) != 1 {
+		t.Fatalf("Expected 1 policy annotation but got: %d", len(templateAnnotations))
 	}
 }

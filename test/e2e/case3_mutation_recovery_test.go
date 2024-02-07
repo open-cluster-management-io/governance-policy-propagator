@@ -136,10 +136,13 @@ var _ = Describe("Test unexpected policy mutation", func() {
 		rootPlc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, case3PolicyName, testNamespace, true, defaultTimeoutSeconds,
 		)
-		Eventually(func() interface{} {
+		Eventually(func(g Gomega) interface{} {
 			plc = utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds,
 			)
+
+			err := utils.RemovePolicyTemplateDBAnnotations(plc)
+			g.Expect(err).ToNot(HaveOccurred())
 
 			return plc.Object["spec"]
 		}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(rootPlc.Object["spec"]))

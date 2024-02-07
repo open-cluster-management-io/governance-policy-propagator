@@ -64,7 +64,7 @@ var _ = Describe("Test root policy metrics", Ordered, func() {
 			Expect(plc).ToNot(BeNil())
 
 			yamlPlc := utils.ParseYaml(case9ReplicatedPolicyYamlM1)
-			Eventually(func() interface{} {
+			Eventually(func(g Gomega) interface{} {
 				replicatedPlc := utils.GetWithTimeout(
 					clientHubDynamic,
 					gvrPolicy,
@@ -73,6 +73,9 @@ var _ = Describe("Test root policy metrics", Ordered, func() {
 					true,
 					defaultTimeoutSeconds,
 				)
+
+				err := utils.RemovePolicyTemplateDBAnnotations(replicatedPlc)
+				g.Expect(err).ToNot(HaveOccurred())
 
 				return replicatedPlc.Object["spec"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))

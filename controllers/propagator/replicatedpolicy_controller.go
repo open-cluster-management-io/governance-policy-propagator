@@ -522,6 +522,7 @@ func (r *ReplicatedPolicyReconciler) setDBAnnotations(
 		}
 	} else {
 		annotations[ParentPolicyIDAnnotation] = strconv.FormatInt(int64(parentPolicyID), 10)
+		replicatedPolicy.SetAnnotations(annotations)
 	}
 
 	for i, plcTemplate := range replicatedPolicy.Spec.PolicyTemplates {
@@ -546,18 +547,23 @@ func (r *ReplicatedPolicyReconciler) setDBAnnotations(
 			}
 
 			requeueForDB = true
-			annotations := plcTmplUnstruct.GetAnnotations()
+			tmplAnnotations := plcTmplUnstruct.GetAnnotations()
 
-			if annotations[PolicyIDAnnotation] == "" {
+			if tmplAnnotations[PolicyIDAnnotation] == "" {
 				continue
 			}
 
 			// Remove it if the user accidentally provided the annotation
-			delete(annotations, PolicyIDAnnotation)
-			plcTmplUnstruct.SetAnnotations(annotations)
+			delete(tmplAnnotations, PolicyIDAnnotation)
+			plcTmplUnstruct.SetAnnotations(tmplAnnotations)
 		} else {
-			annotations[PolicyIDAnnotation] = strconv.FormatInt(int64(policyID), 10)
-			plcTmplUnstruct.SetAnnotations(annotations)
+			tmplAnnotations := plcTmplUnstruct.GetAnnotations()
+			if tmplAnnotations == nil {
+				tmplAnnotations = map[string]string{}
+			}
+
+			tmplAnnotations[PolicyIDAnnotation] = strconv.FormatInt(int64(policyID), 10)
+			plcTmplUnstruct.SetAnnotations(tmplAnnotations)
 		}
 
 		updatedTemplate, err := plcTmplUnstruct.MarshalJSON()

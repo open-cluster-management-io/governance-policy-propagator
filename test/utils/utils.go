@@ -24,6 +24,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
+
+	"open-cluster-management.io/governance-policy-propagator/controllers/propagator"
 )
 
 // GeneratePlrStatus generate plr status with given clusters
@@ -52,6 +54,56 @@ func GeneratePldStatus(
 	}
 
 	return &clusterv1beta1.PlacementDecisionStatus{Decisions: plrDecision}
+}
+
+func RemovePolicyTemplateDBAnnotations(plc *unstructured.Unstructured) error {
+	// Remove the database annotation since this can be an inconsistent value
+	templates, _, _ := unstructured.NestedSlice(plc.Object, "spec", "policy-templates")
+
+	updated := false
+
+	for i, template := range templates {
+		template := template.(map[string]interface{})
+
+		annotations, ok, _ := unstructured.NestedMap(
+			template, "objectDefinition", "metadata", "annotations",
+		)
+		if !ok {
+			continue
+		}
+
+		annotationVal, ok := annotations[propagator.PolicyIDAnnotation].(string)
+		if !ok {
+			continue
+		}
+
+		if annotationVal != "" {
+			delete(annotations, propagator.PolicyIDAnnotation)
+
+			if len(annotations) == 0 {
+				unstructured.RemoveNestedField(template, "objectDefinition", "metadata", "annotations")
+			} else {
+				err := unstructured.SetNestedField(
+					template, annotations, "objectDefinition", "metadata", "annotations",
+				)
+				if err != nil {
+					return err
+				}
+			}
+
+			templates[i] = template
+			updated = true
+		}
+	}
+
+	if updated {
+		err := unstructured.SetNestedField(plc.Object, templates, "spec", "policy-templates")
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // Pause sleep for given seconds
