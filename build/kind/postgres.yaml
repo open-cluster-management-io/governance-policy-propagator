@@ -133,3 +133,26 @@ spec:
       targetPort: 8384
       nodePort: 30838
   type: NodePort
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: compliance-api-selfsigned-issuer
+  namespace: open-cluster-management
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: compliance-api-cert
+  namespace: open-cluster-management
+spec:
+  dnsNames:
+    - compliance-api-external.open-cluster-management.svc
+    - compliance-api-external.open-cluster-management.svc.cluster.local
+    - localhost
+  issuerRef:
+    kind: Issuer
+    name: compliance-api-selfsigned-issuer
+  secretName: compliance-api-cert

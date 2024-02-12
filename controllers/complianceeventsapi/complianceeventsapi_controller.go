@@ -121,6 +121,7 @@ type ComplianceDBSecretReconciler struct {
 // WARNING: In production, this should be namespaced to the namespace the controller is running in.
 //+kubebuilder:rbac:groups=core,resources=secrets,resourceNames=governance-policy-database,verbs=get;list;watch
 //+kubebuilder:rbac:groups=core,resources=events,verbs=create
+//+kubebuilder:rbac:groups=authorization.k8s.io,resources=subjectaccessreviews,verbs=create
 
 // Reconcile watches the governance-policy-database secret in the controller namespace. On updates it'll trigger
 // a database migration and update the shared database connection.

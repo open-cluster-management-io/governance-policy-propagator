@@ -174,6 +174,11 @@ postgres: cert-manager
 		--from-literal="host=$(POSTGRES_HOST)" \
 		--from-literal="dbname=ocm-compliance-history" \
 		--from-literal="ca=$$(kubectl -n $(KIND_NAMESPACE) get secret postgres-cert -o json | jq -r '.data["ca.crt"]' | base64 -d)"
+	
+	@echo "Copying the compliance API certificates locally"
+	kubectl -n $(KIND_NAMESPACE) get secret compliance-api-cert -o json | jq -r '.data["tls.crt"]' | base64 -d > dev-tls.crt
+	kubectl -n $(KIND_NAMESPACE) get secret compliance-api-cert -o json | jq -r '.data["ca.crt"]' | base64 -d >> dev-ca.crt
+	kubectl -n $(KIND_NAMESPACE) get secret compliance-api-cert -o json | jq -r '.data["tls.key"]' | base64 -d > dev-tls.key
 
 webhook: cert-manager
 	-kubectl create ns $(KIND_NAMESPACE)

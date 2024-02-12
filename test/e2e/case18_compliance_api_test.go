@@ -5,6 +5,7 @@ package e2e
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -26,7 +27,12 @@ import (
 
 const eventsEndpoint = "http://localhost:8385/api/v1/compliance-events"
 
-var httpClient = http.Client{Timeout: 30 * time.Second}
+var httpClient = http.Client{
+	Timeout: 30 * time.Second,
+	Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	},
+}
 
 func getTableNames(db *sql.DB) ([]string, error) {
 	tableNameRows, err := db.Query("SELECT tablename FROM pg_tables WHERE schemaname = current_schema()")
@@ -55,7 +61,7 @@ func getTableNames(db *sql.DB) ([]string, error) {
 }
 
 // Note: These tests require a running Postgres server running in the Kind cluster from the "postgres" Make target.
-var _ = Describe("Test the compliance events API", Label("compliance-events-api"), Ordered, func() {
+var _ = Describe("Test the compliance events API", Label("compliance-events-api"), Serial, Ordered, func() {
 	var k8sConfig *rest.Config
 	var k8sClient *kubernetes.Clientset
 	var db *sql.DB
@@ -65,6 +71,8 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 		k8sConfig, err = LoadConfig("", "", "")
 		Expect(err).ToNot(HaveOccurred())
+
+		Expect(k8sConfig.BearerToken).ToNot(BeEmpty(), "Ensure you use the service account kubeconfig (kubeconfig_hub)")
 
 		k8sClient, err = kubernetes.NewForConfig(k8sConfig)
 		Expect(err).ToNot(HaveOccurred())
@@ -105,7 +113,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 		err = complianceServerCtx.MigrateDB(ctx, k8sClient, "open-cluster-management")
 		Expect(err).ToNot(HaveOccurred())
 
-		complianceAPI := complianceeventsapi.NewComplianceAPIServer("localhost:8385")
+		complianceAPI := complianceeventsapi.NewComplianceAPIServer("localhost:8385", k8sConfig, nil, nil)
 
 		httpCtx, httpCtxCancel := context.WithCancel(context.Background())
 
@@ -172,7 +180,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 			BeforeAll(func(ctx context.Context) {
 				By("POST the event")
-				Eventually(postEvent(ctx, payload), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
 			})
 
 			It("Should have created the cluster in a table", func() {
@@ -427,8 +435,8 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 			BeforeAll(func(ctx context.Context) {
 				By("POST the events")
-				Eventually(postEvent(ctx, payload1), "5s", "1s").ShouldNot(HaveOccurred())
-				Eventually(postEvent(ctx, payload2), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload1, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload2, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
 			})
 
 			It("Should have created both clusters in a table", func() {
@@ -971,9 +979,9 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 			BeforeAll(func(ctx context.Context) {
 				By("POST the events")
-				Eventually(postEvent(ctx, payload1), "5s", "1s").ShouldNot(HaveOccurred())
-				Eventually(postEvent(ctx, payload2), "5s", "1s").ShouldNot(HaveOccurred())
-				Eventually(postEvent(ctx, payload3), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload1, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload2, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload3, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
 			})
 
 			It("Should have only created one cluster in the table", func() {
@@ -1170,9 +1178,9 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 			BeforeAll(func(ctx context.Context) {
 				By("POST the events")
-				Eventually(postEvent(ctx, payload1), "5s", "1s").ShouldNot(HaveOccurred())
-				Eventually(postEvent(ctx, payload2), "5s", "1s").ShouldNot(HaveOccurred())
-				Eventually(postEvent(ctx, payload3), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload1, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload2, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload3, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
 			})
 
 			It("Should have created two parent policies", func() {
@@ -1284,8 +1292,8 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 			BeforeAll(func(ctx context.Context) {
 				By("POST the events")
-				Eventually(postEvent(ctx, payload1), "5s", "1s").ShouldNot(HaveOccurred())
-				Eventually(postEvent(ctx, payload2), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload1, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
+				Eventually(postEvent(ctx, payload2, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
 			})
 
 			It("Should have created one parent policy", func() {
@@ -1372,7 +1380,9 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						"message": "configmaps [valid] valid in namespace valid",
 						"timestamp": "2023-09-09T09:09:09.999Z"
 					}
-				}`)), "5s", "1s").Should(MatchError(ContainSubstring("Got non-201 status code 400")))
+				}`), k8sConfig.BearerToken), "5s", "1s").Should(
+					MatchError(ContainSubstring("Got non-201 status code 400")),
+				)
 			})
 
 			It("should require the parent policy namespace to be specified", func(ctx context.Context) {
@@ -1396,7 +1406,9 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						"message": "configmaps [valid] valid in namespace valid",
 						"timestamp": "2023-09-09T09:09:09.999Z"
 					}
-				}`)), "5s", "1s").Should(MatchError(ContainSubstring("Got non-201 status code 400")))
+				}`), k8sConfig.BearerToken), "5s", "1s").Should(
+					MatchError(ContainSubstring("Got non-201 status code 400")),
+				)
 			})
 
 			It("should require the event time to be specified", func(ctx context.Context) {
@@ -1420,7 +1432,9 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						"compliance": "Compliant",
 						"message": "configmaps [valid] valid in namespace valid"
 					}
-				}`)), "5s", "1s").Should(MatchError(ContainSubstring("Got non-201 status code 400")))
+				}`), k8sConfig.BearerToken), "5s", "1s").Should(
+					MatchError(ContainSubstring("Got non-201 status code 400")),
+				)
 			})
 
 			It("should require the parent policy to have fields when specified", func(ctx context.Context) {
@@ -1442,7 +1456,9 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						"message": "configmaps [valid] valid in namespace valid",
 						"timestamp": "2023-09-09T09:09:09.999Z"
 					}
-				}`)), "5s", "1s").Should(MatchError(ContainSubstring("Got non-201 status code 400")))
+				}`), k8sConfig.BearerToken), "5s", "1s").Should(
+					MatchError(ContainSubstring("Got non-201 status code 400")),
+				)
 			})
 
 			It("should require the policy to be defined", func(ctx context.Context) {
@@ -1461,7 +1477,9 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						"message": "configmaps [valid] valid in namespace valid",
 						"timestamp": "2023-09-09T09:09:09.999Z"
 					}
-				}`)), "5s", "1s").Should(MatchError(ContainSubstring("Got non-201 status code 400")))
+				}`), k8sConfig.BearerToken), "5s", "1s").Should(
+					MatchError(ContainSubstring("Got non-201 status code 400")),
+				)
 			})
 
 			It("should require the input to be valid JSON", func(ctx context.Context) {
@@ -1488,7 +1506,9 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						"message": "configmaps [valid] valid in namespace valid",
 						"timestamp": "2023-09-09T09:09:09.999Z"
 					}
-				}`)), "5s", "1s").Should(MatchError(ContainSubstring("Got non-201 status code 400")))
+				}`), k8sConfig.BearerToken), "5s", "1s").Should(
+					MatchError(ContainSubstring("Got non-201 status code 400")),
+				)
 			})
 
 			It("should require the spec when inputting a new policy", func(ctx context.Context) {
@@ -1508,7 +1528,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						"message": "configmaps [valid] valid in namespace valid",
 						"timestamp": "2023-09-09T09:09:09.999Z"
 					}
-				}`)), "5s", "1s").Should(MatchError(ContainSubstring(
+				}`), k8sConfig.BearerToken), "5s", "1s").Should(MatchError(ContainSubstring(
 					`invalid input: parent_policy.id not found\\ninvalid input: policy.id not found`,
 				)))
 			})
@@ -1728,11 +1748,11 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 		BeforeAll(func(ctx context.Context) {
 			By("POST the initial event")
-			Eventually(postEvent(ctx, payload1), "5s", "1s").ShouldNot(HaveOccurred())
+			Eventually(postEvent(ctx, payload1, k8sConfig.BearerToken), "5s", "1s").ShouldNot(HaveOccurred())
 		})
 
 		It("Should fail when posting the same compliance event", func(ctx context.Context) {
-			err := postEvent(ctx, payload1)
+			err := postEvent(ctx, payload1, k8sConfig.BearerToken)
 			Expect(err).To(MatchError(ContainSubstring("The compliance event already exists")))
 		})
 	})
@@ -1814,13 +1834,14 @@ var _ = Describe("Test query generation", Label("compliance-events-api"), func()
 	})
 })
 
-func postEvent(ctx context.Context, payload []byte) error {
+func postEvent(ctx context.Context, payload []byte, token string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, eventsEndpoint, bytes.NewBuffer(payload))
 	if err != nil {
 		return err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	errs := make([]error, 0)
 

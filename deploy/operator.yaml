@@ -52,6 +52,12 @@ rules:
   - list
   - watch
 - apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+- apiGroups:
   - cluster.open-cluster-management.io
   resources:
   - managedclusters
@@ -275,7 +281,7 @@ spec:
         - --health-probe-bind-address=:8081
         - --metrics-bind-address=:8383
         - --leader-elect
-        - --event-history-api-host=0.0.0.0
+        - --compliance-history-api-host=0.0.0.0
         command:
         - governance-policy-propagator
         env:

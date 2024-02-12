@@ -2,12 +2,15 @@ package complianceeventsapi
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -18,6 +21,9 @@ import (
 	"time"
 
 	"github.com/lib/pq"
+	apiserverx509 "k8s.io/apiserver/pkg/authentication/request/x509"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 // init dynamically parses the database columns of each struct type to create a mapping of user provided sort/filter
@@ -119,16 +125,25 @@ var (
 	ErrInvalidSortOption    error
 	ErrInvalidQueryArgValue = errors.New("invalid query argument")
 	ErrInvalidQueryArg      error
+	ErrNotAuthorized        = errors.New("not authorized")
 )
 
 type ComplianceAPIServer struct {
-	server *http.Server
-	addr   string
+	server       *http.Server
+	addr         string
+	clientAuthCA *x509.CertPool
+	cert         *tls.Certificate
+	cfg          *rest.Config
 }
 
-func NewComplianceAPIServer(listenAddress string) *ComplianceAPIServer {
+func NewComplianceAPIServer(
+	listenAddress string, cfg *rest.Config, clientAuthCA *x509.CertPool, cert *tls.Certificate,
+) *ComplianceAPIServer {
 	return &ComplianceAPIServer{
-		addr: listenAddress,
+		addr:         listenAddress,
+		clientAuthCA: clientAuthCA,
+		cert:         cert,
+		cfg:          cfg,
 	}
 }
 
@@ -145,6 +160,38 @@ func (s *ComplianceAPIServer) Start(ctx context.Context, serverContext *Complian
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  15 * time.Second,
+	}
+
+	listener, err := net.Listen("tcp", s.addr)
+	if err != nil {
+		return err
+	}
+
+	var authenticator *apiserverx509.Authenticator
+	var authenticatedClient *kubernetes.Clientset
+
+	if s.cert != nil {
+		s.server.TLSConfig = &tls.Config{
+			MinVersion:   tls.VersionTLS12,
+			Certificates: []tls.Certificate{*s.cert},
+			// Let the Kubernetes apiserver package validate it if the certificate is presented
+			ClientAuth: tls.RequestClientCert,
+			ClientCAs:  s.clientAuthCA,
+		}
+
+		listener = tls.NewListener(listener, s.server.TLSConfig)
+
+		var err error
+
+		authenticator, err = getCertAuthenticator(s.cfg)
+		if err != nil {
+			return err
+		}
+
+		authenticatedClient, err = kubernetes.NewForConfig(s.cfg)
+		if err != nil {
+			return err
+		}
 	}
 
 	// register handlers here
@@ -164,7 +211,7 @@ func (s *ComplianceAPIServer) Start(ctx context.Context, serverContext *Complian
 		case http.MethodGet:
 			getComplianceEvents(serverContext.DB, w, r)
 		case http.MethodPost:
-			postComplianceEvent(serverContext.DB, w, r)
+			postComplianceEvent(serverContext.DB, s.cfg, authenticatedClient, authenticator, w, r)
 		default:
 			writeErrMsgJSON(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -191,14 +238,14 @@ func (s *ComplianceAPIServer) Start(ctx context.Context, serverContext *Complian
 		getSingleComplianceEvent(serverContext.DB, w, r)
 	})
 
-	listenAndServeErr := make(chan error)
+	serveErr := make(chan error)
 
 	go func() {
-		defer close(listenAndServeErr)
+		defer close(serveErr)
 
-		err := s.server.ListenAndServe()
+		err := s.server.Serve(listener)
 		if err != nil && err != http.ErrServerClosed {
-			listenAndServeErr <- err
+			serveErr <- err
 		}
 	}()
 
@@ -210,7 +257,7 @@ func (s *ComplianceAPIServer) Start(ctx context.Context, serverContext *Complian
 		}
 
 		return nil
-	case err, closed := <-listenAndServeErr:
+	case err, closed := <-serveErr:
 		if err != nil {
 			return err
 		}
@@ -726,7 +773,13 @@ LEFT JOIN policies ON compliance_events.policy_id = policies.id` + whereClause /
 	}
 }
 
-func postComplianceEvent(db *sql.DB, w http.ResponseWriter, r *http.Request) {
+func postComplianceEvent(db *sql.DB,
+	cfg *rest.Config,
+	authenticatedClient *kubernetes.Clientset,
+	authenticator *apiserverx509.Authenticator,
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Error(err, "error reading request body")
@@ -745,6 +798,27 @@ func postComplianceEvent(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 
 	if err := reqEvent.Validate(r.Context(), db); err != nil {
 		writeErrMsgJSON(w, err.Error(), http.StatusBadRequest)
+
+		return
+	}
+
+	allowed, err := canRecordComplianceEvent(cfg, authenticatedClient, authenticator, reqEvent.Cluster.Name, r)
+	if err != nil {
+		if errors.Is(err, ErrNotAuthorized) {
+			writeErrMsgJSON(w, "Unauthorized", http.StatusUnauthorized)
+
+			return
+		}
+
+		log.Error(err, "error determining if the user is authorized for recording compliance events")
+		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
+
+		return
+	}
+
+	if !allowed {
+		// Logging is handled by canRecordComplianceEvent
+		writeErrMsgJSON(w, "Forbidden", http.StatusForbidden)
 
 		return
 	}
