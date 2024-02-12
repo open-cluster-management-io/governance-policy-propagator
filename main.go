@@ -5,6 +5,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
@@ -31,6 +33,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
+	certutil "k8s.io/client-go/util/cert"
 	"k8s.io/klog/v2"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
@@ -106,8 +109,10 @@ func main() {
 		rootPolicyMaxConcurrency    uint
 		replPolicyMaxConcurrency    uint
 		enableWebhooks              bool
-		eventHistoryAPIHost         string
-		eventHistoryAPIPort         string
+		complianceAPIHost           string
+		complianceAPIPort           string
+		complianceAPICert           string
+		complianceAPIKey            string
 	)
 
 	pflag.StringVar(&metricsAddr, "metrics-bind-address", ":8383", "The address the metric endpoint binds to.")
@@ -154,12 +159,21 @@ func main() {
 		"The maximum number of concurrent reconciles for the replicated-policy controller",
 	)
 	pflag.StringVar(
-		&eventHistoryAPIHost, "event-history-api-host", "localhost",
+		&complianceAPIHost, "compliance-history-api-host", "localhost",
 		"The hostname that the event history API will listen on",
 	)
 	pflag.StringVar(
-		&eventHistoryAPIPort, "event-history-api-port", "8384",
-		"The port that the event history API will listen on",
+		&complianceAPIPort, "compliance-history-api-port", "8384",
+		"The port that the compliance history API will listen on",
+	)
+	pflag.StringVar(
+		&complianceAPICert, "compliance-history-api-cert", "",
+		"The path to the certificate the compliance history API will use for HTTPS (CA cert, if any, concatenated "+
+			"after server cert). If not set, HTTP will be used.",
+	)
+	pflag.StringVar(
+		&complianceAPIKey, "compliance-history-api-key", "",
+		"The path to the private key the compliance history API will use for HTTPS. If not set, HTTP will be used.",
 	)
 
 	pflag.Parse()
@@ -457,7 +471,9 @@ func main() {
 		cfg,
 		client,
 		complianceEventsNamespace,
-		net.JoinHostPort(eventHistoryAPIHost, eventHistoryAPIPort),
+		net.JoinHostPort(complianceAPIHost, complianceAPIPort),
+		complianceAPICert,
+		complianceAPIKey,
 		&wg,
 		tempDir,
 		replicatedPolicyUpdates,
@@ -500,6 +516,8 @@ func startComplianceEventsAPI(
 	client *kubernetes.Clientset,
 	controllerNamespace string,
 	complianceAPIAddr string,
+	complianceAPICert string,
+	complianceAPIKey string,
 	wg *sync.WaitGroup,
 	tempDir string,
 	reconcileRequests chan<- event.GenericEvent,
@@ -566,7 +584,38 @@ func startComplianceEventsAPI(
 
 	reconciler.DynamicWatcher = dbSecretDynamicWatcher
 
-	complianceAPI := complianceeventsapi.NewComplianceAPIServer(complianceAPIAddr)
+	var cert *tls.Certificate
+	var ca *x509.CertPool
+
+	if complianceAPICert != "" && complianceAPIKey != "" {
+		if cfg.CAData == nil {
+			log.Info("The kubeconfig does not contain a CA")
+			os.Exit(1)
+		}
+
+		ca, err = certutil.NewPoolFromBytes(cfg.CAData)
+		if err != nil {
+			log.Error(err, "The kubeconfig does not contain a valid CA")
+			os.Exit(1)
+		}
+
+		certTemp, err := tls.LoadX509KeyPair(complianceAPICert, complianceAPIKey)
+		if err != nil {
+			log.Error(
+				err,
+				"Failed to parse the provided TLS certificate and key",
+				"cert", complianceAPICert,
+				"key", complianceAPIKey,
+			)
+			os.Exit(1)
+		}
+
+		cert = &certTemp
+	} else {
+		log.Info("The compliance events history API will listen on HTTP since no certificate was provided")
+	}
+
+	complianceAPI := complianceeventsapi.NewComplianceAPIServer(complianceAPIAddr, cfg, ca, cert)
 
 	wg.Add(1)
 

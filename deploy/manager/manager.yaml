@@ -29,7 +29,7 @@ spec:
             - "--health-probe-bind-address=:8081"
             - "--metrics-bind-address=:8383"
             - "--leader-elect"
-            - "--event-history-api-host=0.0.0.0"
+            - "--compliance-history-api-host=0.0.0.0"
           ports:
             - containerPort: 8383
               protocol: TCP

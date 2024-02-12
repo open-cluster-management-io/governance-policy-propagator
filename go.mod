@@ -7,6 +7,7 @@ require (
 	github.com/go-logr/zapr v1.2.4
 	github.com/golang-migrate/migrate/v4 v4.16.2
 	github.com/google/go-cmp v0.6.0
+	github.com/google/uuid v1.3.1
 	github.com/lib/pq v1.10.9
 	github.com/onsi/ginkgo/v2 v2.13.0
 	github.com/onsi/gomega v1.28.1
@@ -17,6 +18,7 @@ require (
 	github.com/stolostron/kubernetes-dependency-watches v0.5.2-0.20231212185913-628ab39622b8
 	k8s.io/api v0.27.7
 	k8s.io/apimachinery v0.27.7
+	k8s.io/apiserver v0.27.7
 	k8s.io/client-go v0.27.7
 	k8s.io/klog/v2 v2.100.1
 	open-cluster-management.io/api v0.12.0
@@ -29,6 +31,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.2.1 // indirect
 	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/emicklei/go-restful/v3 v3.11.0 // indirect
@@ -46,7 +49,6 @@ require (
 	github.com/google/gnostic v0.6.9 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/pprof v0.0.0-20231023181126-ff6d637d2a7b // indirect
-	github.com/google/uuid v1.3.1 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/huandu/xstrings v1.4.0 // indirect
