@@ -21,12 +21,12 @@ jobs:
     name: Unit Tests
     steps:
     - name: Checkout Governance Policy Propagator
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         path: governance-policy-propagator
     
     - name: Set up Go
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@v5
       id: go
       with:
         go-version-file: governance-policy-propagator/go.mod
@@ -58,7 +58,7 @@ jobs:
     
     - name: Upload Unit Test Coverage
       if: ${{ github.event_name == 'pull_request' }}
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: coverage_unit
         path: governance-policy-propagator/coverage_unit.out
@@ -79,7 +79,7 @@ jobs:
     name: KinD tests
     steps:
     - name: Checkout Governance Policy Propagator
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         path: governance-policy-propagator
 
@@ -100,7 +100,7 @@ jobs:
 
     - name: Upload E2E Test Coverage
       if: ${{ github.event_name == 'pull_request' && matrix.kind == 'latest'}}
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: coverage_e2e
         path: governance-policy-propagator/coverage_e2e.out
@@ -111,7 +111,7 @@ jobs:
 
     - name: Upload Compliance Events API Test Coverage
       if: ${{ github.event_name == 'pull_request' && matrix.kind == 'latest'}}
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: coverage_e2e_compliance_events_api
         path: governance-policy-propagator/coverage_e2e_compliance_events_api.out
@@ -152,7 +152,7 @@ jobs:
     name: PolicyAutomation tests
     steps:
     - name: Checkout Governance Policy Propagator
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         path: governance-policy-propagator
 
@@ -169,7 +169,7 @@ jobs:
 
     - name: Upload PolicyAutomation Test Coverage
       if: ${{ github.event_name == 'pull_request' && matrix.kind == 'latest'}}
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: coverage_e2e_policyautomation
         path: governance-policy-propagator/coverage_e2e_policyautomation.out
@@ -195,25 +195,25 @@ jobs:
 
     steps:
     - name: Checkout Governance Policy Propagator
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Download Unit Coverage Result
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: coverage_unit
     
     - name: Download E2E Coverage Result
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: coverage_e2e
 
     - name: Download Compliance Events Coverage Result
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: coverage_e2e_compliance_events_api
 
     - name: Download PolicyAutomation Coverage Result
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: coverage_e2e_policyautomation
     
