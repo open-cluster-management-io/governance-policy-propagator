@@ -211,8 +211,11 @@ func HasValidPlacementRef(pb *policiesv1.PlacementBinding) bool {
 func GetDecisions(
 	ctx context.Context, c client.Client, pb *policiesv1.PlacementBinding,
 ) ([]string, error) {
+	// If the PlacementRef is invalid, log and return. (This is not recoverable.)
 	if !HasValidPlacementRef(pb) {
-		return nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Namespace, pb.Name)
+		log.Info(fmt.Sprintf("PlacementBinding %s/%s placementRef is not valid. Ignoring.", pb.Namespace, pb.Name))
+
+		return nil, nil
 	}
 
 	clusterDecisions := make([]string, 0)
