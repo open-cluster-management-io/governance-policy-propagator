@@ -212,7 +212,7 @@ func GetDecisions(
 	ctx context.Context, c client.Client, pb *policiesv1.PlacementBinding,
 ) ([]string, error) {
 	if !HasValidPlacementRef(pb) {
-		return nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Name, pb.Namespace)
+		return nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Namespace, pb.Name)
 	}
 
 	clusterDecisions := make([]string, 0)
@@ -266,7 +266,7 @@ func GetDecisions(
 		return clusterDecisions, nil
 	}
 
-	return nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Name, pb.Namespace)
+	return nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Namespace, pb.Name)
 }
 
 func ParseRootPolicyLabel(rootPlc string) (name, namespace string, err error) {

@@ -70,7 +70,7 @@ func GetPolicyPlacementDecisions(ctx context.Context, c client.Client,
 	instance *policiesv1.Policy, pb *policiesv1.PlacementBinding,
 ) (clusterDecisions []string, placements []*policiesv1.Placement, err error) {
 	if !HasValidPlacementRef(pb) {
-		return nil, nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Name, pb.Namespace)
+		return nil, nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Namespace, pb.Name)
 	}
 
 	policySubjectFound := false
