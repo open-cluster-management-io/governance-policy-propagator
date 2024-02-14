@@ -19,9 +19,35 @@ var _ = Describe("Test policy status aggregation", func() {
 	const (
 		case2PolicyName string = "case2-test-policy"
 		case2PolicyYaml string = "../resources/case2_aggregation/case2-test-policy.yaml"
+		faultyPBName    string = "case2-faulty-placementbinding"
+		faultyPBYaml    string = "../resources/case2_aggregation/faulty-placementbinding.yaml"
 	)
 
-	Describe("Root status from different placements", func() {
+	Describe("Root status from different placements", Ordered, func() {
+		AfterAll(func() {
+			utils.Kubectl("delete",
+				"-f", faultyPBYaml,
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
+			utils.Kubectl("delete",
+				"-f", case2PolicyYaml,
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
+			opt := metav1.ListOptions{}
+			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 10)
+		})
+
+		It("should create the faulty PlacementBinding in user ns", func() {
+			By("Creating " + faultyPBName)
+			utils.Kubectl("apply",
+				"-f", faultyPBYaml,
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
+			pb := utils.GetWithTimeout(
+				clientHubDynamic, gvrPlacementBinding, faultyPBName, testNamespace, true, defaultTimeoutSeconds,
+			)
+			Expect(pb).NotTo(BeNil())
+		})
 		It("should be created in user ns", func() {
 			By("Creating " + case2PolicyYaml)
 			utils.Kubectl("apply",
@@ -220,14 +246,6 @@ var _ = Describe("Test policy status aggregation", func() {
 
 				return rootPlc.Object["status"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(emptyStatus))
-		})
-		It("should clean up", func() {
-			utils.Kubectl("delete",
-				"-f", case2PolicyYaml,
-				"-n", testNamespace,
-				"--kubeconfig="+kubeconfigHub)
-			opt := metav1.ListOptions{}
-			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 10)
 		})
 	})
 	Describe("Root compliance from managed statuses", Ordered, func() {

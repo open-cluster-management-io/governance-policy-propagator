@@ -1,0 +1,12 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: case2-faulty-placementbinding
+placementRef:
+  apiGroup: cluster.open-cluster-management.io
+  kind: PlacementRule
+  name: case2-test-policy-plr
+subjects:
+- apiGroup: policy.open-cluster-management.io
+  kind: Policy
+  name: rando-policy

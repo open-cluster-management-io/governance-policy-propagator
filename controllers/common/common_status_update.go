@@ -69,10 +69,6 @@ func RootStatusUpdate(ctx context.Context, c client.Client, rootPolicy *policies
 func GetPolicyPlacementDecisions(ctx context.Context, c client.Client,
 	instance *policiesv1.Policy, pb *policiesv1.PlacementBinding,
 ) (clusterDecisions []string, placements []*policiesv1.Placement, err error) {
-	if !HasValidPlacementRef(pb) {
-		return nil, nil, fmt.Errorf("placement binding %s/%s reference is not valid", pb.Namespace, pb.Name)
-	}
-
 	policySubjectFound := false
 	policySetSubjects := make(map[string]struct{}) // a set, to prevent duplicates
 
@@ -106,6 +102,13 @@ func GetPolicyPlacementDecisions(ctx context.Context, c client.Client,
 
 	if len(placements) == 0 {
 		// None of the subjects in the PlacementBinding were relevant to this Policy.
+		return nil, nil, nil
+	}
+
+	// If the PlacementRef is invalid, log and return. (This is not recoverable.)
+	if !HasValidPlacementRef(pb) {
+		log.Info(fmt.Sprintf("Placement binding %s/%s placementRef is not valid. Ignoring.", pb.Namespace, pb.Name))
+
 		return nil, nil, nil
 	}
 
