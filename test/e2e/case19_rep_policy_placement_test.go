@@ -230,12 +230,15 @@ var _ = Describe("Test replicated_policy controller and propagation", Ordered, S
 			clientHubDynamic, gvrPolicy, testNamespace+"."+case19PolicyName, "managed2", true, defaultTimeoutSeconds,
 		)
 		Expect(plc2).ToNot(BeNil())
-		afterString = utils.GetMetrics("controller_runtime_reconcile_total",
-			`controller=\"replicated-policy\"`,
-			`,result=\"success\"`,
-		)[0]
-		afterTotal, err = strconv.Atoi(afterString)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(afterTotal - beforeTotal).Should(Equal(2))
+
+		Eventually(func(g Gomega) {
+			afterString = utils.GetMetrics("controller_runtime_reconcile_total",
+				`controller=\"replicated-policy\"`,
+				`,result=\"success\"`,
+			)[0]
+			afterTotal, err = strconv.Atoi(afterString)
+			g.Expect(err).ShouldNot(HaveOccurred())
+			g.Expect(afterTotal - beforeTotal).Should(Equal(2))
+		}).Should(Succeed())
 	})
 })
