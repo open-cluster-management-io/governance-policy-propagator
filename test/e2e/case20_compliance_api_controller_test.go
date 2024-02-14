@@ -35,12 +35,12 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
-const (
-	case20PolicyName string = "case20-policy"
-	case20PolicyYAML string = "../resources/case20_compliance_api_controller/policy.yaml"
-)
-
 var _ = Describe("Test governance-policy-database secret changes and DB annotations", Serial, Ordered, func() {
+	const (
+		case20PolicyName string = "case20-policy"
+		case20PolicyYAML string = "../resources/case20_compliance_api_controller/policy.yaml"
+	)
+
 	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
 	nsName := fmt.Sprintf("case20-%d", seededRand.Int31())
 

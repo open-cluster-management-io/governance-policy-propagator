@@ -22,12 +22,12 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
-const (
-	case1PolicyName string = "case1-test-policy"
-	case1PolicyYaml string = "../resources/case1_propagation/case1-test-policy.yaml"
-)
-
 var _ = Describe("Test policy propagation", func() {
+	const (
+		case1PolicyName string = "case1-test-policy"
+		case1PolicyYaml string = "../resources/case1_propagation/case1-test-policy.yaml"
+	)
+
 	Describe("Test event emission when policy is disabled", Ordered, func() {
 		BeforeAll(func() {
 			By("Creating the policy, placementrule, and placementbinding")

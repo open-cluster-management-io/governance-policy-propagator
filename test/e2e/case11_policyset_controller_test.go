@@ -15,26 +15,27 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
-const (
-	case11PolicyName               string = "case11-test-policy"
-	case11PolicySetName            string = "case11-test-policyset"
-	case11PolicySetNameManaged1    string = "test-plcset-managed1"
-	case11PolicyNameManaged2       string = "case11-multiple-placements-rule"
-	case11PolicySetEmpty           string = "case11-empty-policyset"
-	case11PolicySetMultiStatus     string = "case11-multistatus-policyset"
-	case11PolicyCompliant          string = "case11-compliant-plc"
-	case11PolicyYaml               string = "../resources/case11_policyset_controller/case11-test-policy.yaml"
-	case11PolicySetPatchYaml       string = "../resources/case11_policyset_controller/case11-patch-plcset.yaml"
-	case11PolicySetPatch2Yaml      string = "../resources/case11_policyset_controller/case11-patch-plcset-2.yaml"
-	case11DisablePolicyYaml        string = "../resources/case11_policyset_controller/case11-disable-plc.yaml"
-	case11PolicySetManaged1Yaml    string = "../resources/case11_policyset_controller/case11-plcset-managed1.yaml"
-	case11PolicyManaged2Yaml       string = "../resources/case11_policyset_controller/case11-plc-managed2.yaml"
-	case11PolicySetEmptyYaml       string = "../resources/case11_policyset_controller/case11-empty-plcset.yaml"
-	case11PolicySetMultiStatusYaml string = "../resources/case11_policyset_controller/case11-plcset-multistatus.yaml"
-	case11PolicyCompliantYaml      string = "../resources/case11_policyset_controller/case11-compliant-plc.yaml"
-)
-
 var _ = Describe("Test policyset controller status updates", func() {
+	const (
+		case11PolicyName               string = "case11-test-policy"
+		case11PolicySetName            string = "case11-test-policyset"
+		case11PolicySetNameManaged1    string = "test-plcset-managed1"
+		case11PolicyNameManaged2       string = "case11-multiple-placements-rule"
+		case11PolicySetEmpty           string = "case11-empty-policyset"
+		case11PolicySetMultiStatus     string = "case11-multistatus-policyset"
+		case11PolicyCompliant          string = "case11-compliant-plc"
+		case11Path                     string = "../resources/case11_policyset_controller/"
+		case11PolicyYaml               string = case11Path + "case11-test-policy.yaml"
+		case11PolicySetPatchYaml       string = case11Path + "case11-patch-plcset.yaml"
+		case11PolicySetPatch2Yaml      string = case11Path + "case11-patch-plcset-2.yaml"
+		case11DisablePolicyYaml        string = case11Path + "case11-disable-plc.yaml"
+		case11PolicySetManaged1Yaml    string = case11Path + "case11-plcset-managed1.yaml"
+		case11PolicyManaged2Yaml       string = case11Path + "case11-plc-managed2.yaml"
+		case11PolicySetEmptyYaml       string = case11Path + "case11-empty-plcset.yaml"
+		case11PolicySetMultiStatusYaml string = case11Path + "case11-plcset-multistatus.yaml"
+		case11PolicyCompliantYaml      string = case11Path + "case11-compliant-plc.yaml"
+	)
+
 	Describe("Create policy, policyset, and placement in ns:"+testNamespace, func() {
 		It("should create and process policy and policyset", func() {
 			By("Creating " + case11PolicyYaml)

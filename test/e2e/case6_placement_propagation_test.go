@@ -15,12 +15,12 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
-const (
-	case6PolicyName string = "case6-test-policy"
-	case6PolicyYaml string = "../resources/case6_placement_propagation/case6-test-policy.yaml"
-)
-
 var _ = Describe("Test policy propagation", func() {
+	const (
+		case6PolicyName string = "case6-test-policy"
+		case6PolicyYaml string = "../resources/case6_placement_propagation/case6-test-policy.yaml"
+	)
+
 	Describe("Create policy/pb/plc in ns:"+testNamespace+" and then update pb/plc", Ordered, func() {
 		BeforeAll(func() {
 			By("Creating " + case6PolicyYaml)

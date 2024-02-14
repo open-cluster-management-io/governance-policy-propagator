@@ -11,12 +11,12 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
-const (
-	case19PolicyName string = "case19-test-policy"
-	case19PolicyYaml string = "../resources/case19_rep_policy_placement/case19-test-policy.yaml"
-)
-
 var _ = Describe("Test replicated_policy controller and propagation", Ordered, Serial, func() {
+	const (
+		case19PolicyName string = "case19-test-policy"
+		case19PolicyYaml string = "../resources/case19_rep_policy_placement/case19-test-policy.yaml"
+	)
+
 	BeforeAll(func() {
 		By("Creating " + case19PolicyName)
 		utils.Kubectl("apply",

@@ -17,17 +17,17 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
-const (
-	path                               string = "../resources/case10_policyset_propagation/"
-	case10PolicyName                   string = "case10-test-policy"
-	case10PolicySetName                string = "case10-test-policyset"
-	case10PolicySetYaml                string = path + "case10-test-policyset.yaml"
-	case10PolicySetPlacementYaml       string = path + "case10-test-policyset-placement.yaml"
-	case10PolicySetPolicyYaml          string = path + "case10-test-policyset-policy.yaml"
-	case10PolicySetPolicyPlacementYaml string = path + "case10-test-policyset-policy-placement.yaml"
-)
-
 var _ = Describe("Test policyset propagation", func() {
+	const (
+		path                               string = "../resources/case10_policyset_propagation/"
+		case10PolicyName                   string = "case10-test-policy"
+		case10PolicySetName                string = "case10-test-policyset"
+		case10PolicySetYaml                string = path + "case10-test-policyset.yaml"
+		case10PolicySetPlacementYaml       string = path + "case10-test-policyset-placement.yaml"
+		case10PolicySetPolicyYaml          string = path + "case10-test-policyset-policy.yaml"
+		case10PolicySetPolicyPlacementYaml string = path + "case10-test-policyset-policy-placement.yaml"
+	)
+
 	Describe("Test policy propagation through policyset placementbinding with placementrule", func() {
 		It("should be created in user ns", func() {
 			By("Creating " + case10PolicySetYaml)

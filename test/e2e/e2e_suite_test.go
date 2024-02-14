@@ -27,6 +27,14 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
+const (
+	IVAnnotation            = "policy.open-cluster-management.io/encryption-iv"
+	EncryptionKeySecret     = "policy-encryption-key"
+	LastRotatedAnnotation   = "policy.open-cluster-management.io/last-rotated"
+	RootPolicyLabel         = "policy.open-cluster-management.io/root-policy"
+	TriggerUpdateAnnotation = "policy.open-cluster-management.io/trigger-update"
+)
+
 var (
 	testNamespace         string
 	clientHub             kubernetes.Interface

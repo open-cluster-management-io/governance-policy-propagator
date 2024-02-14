@@ -19,13 +19,6 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
-const (
-	EncryptionKeySecret     = "policy-encryption-key"
-	LastRotatedAnnotation   = "policy.open-cluster-management.io/last-rotated"
-	RootPolicyLabel         = "policy.open-cluster-management.io/root-policy"
-	TriggerUpdateAnnotation = "policy.open-cluster-management.io/trigger-update"
-)
-
 var _ = Describe("Test policy encryption key rotation", func() {
 	key := bytes.Repeat([]byte{byte('A')}, 256/8)
 	keyB64 := base64.StdEncoding.EncodeToString(key)

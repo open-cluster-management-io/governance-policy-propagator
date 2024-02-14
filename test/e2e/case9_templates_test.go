@@ -16,27 +16,27 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
-const (
-	case9PolicyName                   = "case9-test-policy"
-	case9PolicyYaml                   = "../resources/case9_templates/case9-test-policy.yaml"
-	case9ReplicatedPolicyYamlM1       = "../resources/case9_templates/case9-test-replpolicy-managed1.yaml"
-	case9ReplicatedPolicyYamlM1Update = "../resources/case9_templates/case9-test-replpolicy-managed1-relabelled.yaml"
-	case9ReplicatedPolicyYamlM2       = "../resources/case9_templates/case9-test-replpolicy-managed2.yaml"
-	case9PolicyNameEncrypted          = "case9-test-policy-encrypted"
-	case9PolicyYamlEncrypted          = "../resources/case9_templates/case9-test-policy_encrypted.yaml"
-	case9PolicyYamlEncryptedRepl      = "../resources/case9_templates/case9-test-replpolicy_encrypted-"
-	case9EncryptionSecret             = "../resources/case9_templates/case9-test-encryption-secret.yaml"
-	case9EncryptionSecretName         = "policy-encryption-key"
-	case9SecretName                   = "case9-secret"
-	IVAnnotation                      = "policy.open-cluster-management.io/encryption-iv"
-	case9PolicyNameCopy               = "case9-test-policy-copy"
-	case9PolicyYamlCopy               = "../resources/case9_templates/case9-test-policy_copy.yaml"
-	case9PolicyYamlCopiedRepl         = "../resources/case9_templates/case9-test-replpolicy_copied-"
-	case9PolicyWithCSLookupName       = "case9-test-policy-cslookup"
-	case9PolicyWithCSLookupYaml       = "../resources/case9_templates/case9-test-policy-cslookup.yaml"
-)
-
 var _ = Describe("Test policy templates", func() {
+	const (
+		case9PolicyName                   = "case9-test-policy"
+		case9PathPrefix                   = "../resources/case9_templates/"
+		case9PolicyYaml                   = case9PathPrefix + "case9-test-policy.yaml"
+		case9ReplicatedPolicyYamlM1       = case9PathPrefix + "case9-test-replpolicy-managed1.yaml"
+		case9ReplicatedPolicyYamlM1Update = case9PathPrefix + "case9-test-replpolicy-managed1-relabelled.yaml"
+		case9ReplicatedPolicyYamlM2       = case9PathPrefix + "case9-test-replpolicy-managed2.yaml"
+		case9PolicyNameEncrypted          = "case9-test-policy-encrypted"
+		case9PolicyYamlEncrypted          = case9PathPrefix + "case9-test-policy_encrypted.yaml"
+		case9PolicyYamlEncryptedRepl      = case9PathPrefix + "case9-test-replpolicy_encrypted-"
+		case9EncryptionSecret             = case9PathPrefix + "case9-test-encryption-secret.yaml"
+		case9EncryptionSecretName         = "policy-encryption-key"
+		case9SecretName                   = "case9-secret"
+		case9PolicyNameCopy               = "case9-test-policy-copy"
+		case9PolicyYamlCopy               = case9PathPrefix + "case9-test-policy_copy.yaml"
+		case9PolicyYamlCopiedRepl         = case9PathPrefix + "case9-test-replpolicy_copied-"
+		case9PolicyWithCSLookupName       = "case9-test-policy-cslookup"
+		case9PolicyWithCSLookupYaml       = case9PathPrefix + "case9-test-policy-cslookup.yaml"
+	)
+
 	Describe("Create policy, placement and referenced resource in ns:"+testNamespace, Ordered, func() {
 		It("should be created in user ns", func() {
 			By("Creating " + case9PolicyYaml)
@@ -152,10 +152,8 @@ var _ = Describe("Test policy templates", func() {
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, defaultTimeoutSeconds)
 		})
 	})
-})
 
-var _ = Describe("Test encrypted policy templates", func() {
-	Describe("Create policy, placement and referenced resource in ns: "+testNamespace, Ordered, func() {
+	Describe("Test encrypted policy templates", Ordered, func() {
 		for i := 1; i <= 2; i++ {
 			managedCluster := "managed" + fmt.Sprint(i)
 
@@ -306,10 +304,8 @@ var _ = Describe("Test encrypted policy templates", func() {
 			})
 		}
 	})
-})
 
-var _ = Describe("Test encrypted policy templates with secret copy", func() {
-	Describe("Create policy, placement and referenced resource in ns: "+testNamespace, Ordered, func() {
+	Describe("Test encrypted policy templates with secret copy", Ordered, func() {
 		for i := 1; i <= 2; i++ {
 			managedCluster := "managed" + fmt.Sprint(i)
 
@@ -470,10 +466,8 @@ var _ = Describe("Test encrypted policy templates with secret copy", func() {
 			})
 		}
 	})
-})
 
-var _ = Describe("Test policy templates with cluster-scoped lookup", func() {
-	Describe("Create policy, placement and referenced resource in ns:"+testNamespace, Ordered, func() {
+	Describe("Test policy templates with cluster-scoped lookup", Ordered, func() {
 		It("should be created in user ns", func() {
 			By("Creating " + case9PolicyWithCSLookupName)
 			utils.Kubectl("apply",

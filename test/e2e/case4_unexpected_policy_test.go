@@ -11,12 +11,12 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
-const (
-	case4PolicyName string = "case4-test-policy"
-	case4PolicyYaml string = "../resources/case4_unexpected_policy/case4-test-policy.yaml"
-)
-
 var _ = Describe("Test unexpect policy handling", func() {
+	const (
+		case4PolicyName string = "case4-test-policy"
+		case4PolicyYaml string = "../resources/case4_unexpected_policy/case4-test-policy.yaml"
+	)
+
 	It("Unexpected root policy in cluster namespace should be deleted", func() {
 		By("Creating " + case4PolicyYaml + "in cluster namespace: managed1")
 		out, err := utils.KubectlWithOutput("apply",
