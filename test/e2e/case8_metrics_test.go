@@ -14,12 +14,12 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
-const (
-	case8PolicyName string = "case8-test-policy"
-	case8PolicyYaml string = "../resources/case8_metrics/case8-test-policy.yaml"
-)
-
 var _ = Describe("Test metrics appear locally", func() {
+	const (
+		case8PolicyName string = "case8-test-policy"
+		case8PolicyYaml string = "../resources/case8_metrics/case8-test-policy.yaml"
+	)
+
 	It("should report 0 for compliant root policy and replicated policies", func() {
 		By("Creating " + case8PolicyYaml)
 		utils.Kubectl("apply",

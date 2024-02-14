@@ -16,12 +16,12 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
-const (
-	case3PolicyName string = "case3-test-policy"
-	case3PolicyYaml string = "../resources/case3_mutation_recovery/case3-test-policy.yaml"
-)
-
 var _ = Describe("Test unexpected policy mutation", func() {
+	const (
+		case3PolicyName string = "case3-test-policy"
+		case3PolicyYaml string = "../resources/case3_mutation_recovery/case3-test-policy.yaml"
+	)
+
 	BeforeEach(func() {
 		By("Creating " + case3PolicyYaml)
 		utils.Kubectl("apply",

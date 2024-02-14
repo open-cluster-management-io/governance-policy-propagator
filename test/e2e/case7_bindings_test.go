@@ -15,16 +15,16 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
-const (
-	case7PolicyName   string = "case7-test-policy"
-	case7PolicyYaml   string = "../resources/case7_placement_bindings/case7-test-policy.yaml"
-	case7BindingYaml1 string = "../resources/case7_placement_bindings/case7-test-binding1.yaml"
-	case7BindingYaml2 string = "../resources/case7_placement_bindings/case7-test-binding2.yaml"
-	case7BindingYaml3 string = "../resources/case7_placement_bindings/case7-test-binding3.yaml"
-	case7BindingYaml4 string = "../resources/case7_placement_bindings/case7-test-binding4.yaml"
-)
-
 var _ = Describe("Test policy propagation", func() {
+	const (
+		case7PolicyName   string = "case7-test-policy"
+		case7PolicyYaml   string = "../resources/case7_placement_bindings/case7-test-policy.yaml"
+		case7BindingYaml1 string = "../resources/case7_placement_bindings/case7-test-binding1.yaml"
+		case7BindingYaml2 string = "../resources/case7_placement_bindings/case7-test-binding2.yaml"
+		case7BindingYaml3 string = "../resources/case7_placement_bindings/case7-test-binding3.yaml"
+		case7BindingYaml4 string = "../resources/case7_placement_bindings/case7-test-binding4.yaml"
+	)
+
 	Describe("Create policy/pb/plc in ns:"+testNamespace, Ordered, func() {
 		BeforeAll(func() {
 			By("Creating " + case7PolicyYaml)

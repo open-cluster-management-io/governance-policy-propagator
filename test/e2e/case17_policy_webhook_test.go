@@ -14,29 +14,29 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
-const (
-	case17Prefix                     string = "../resources/case17_policy_webhook/"
-	case17PolicyLongYaml             string = case17Prefix + "case17_policy_long.yaml"
-	case17PolicyReplicatedYaml       string = case17Prefix + "case17_policy_replicate.yaml"
-	case17PolicyRemediationYaml      string = case17Prefix + "case17_invalid_remediation_policy.yaml"
-	case17PolicyRootRemediationYaml  string = case17Prefix + "case17_valid_remediation_policy_root.yaml"
-	case17PolicyCfplcRemediationYaml string = case17Prefix + "case17_valid_remediation_policy_cfplc.yaml"
-	longNamespace                    string = "long-long-long-long-long-long-long"
-	case17PolicyReplicatedName       string = "case17-test-policy-replicated-longlong"
-	case17PolicyReplicatedPlr        string = "case17-test-policy-replicated-longlong-plr"
-	case17PolicyReplicatedPb         string = "case17-test-policy-replicated-longlong-pb"
-	case17PolicyRemediationName      string = "case17-test-policy-no-remediation"
-	case17PolicyRootRemediationName  string = "case17-test-policy-root-remediation"
-	case17PolicyCfplcRemediationName string = "case17-test-policy-cfplc-remediation"
-	errPrefix                        string = `admission webhook "policy.open-cluster-management.io.webhook" ` +
-		`denied the request: `
-	combinedLengthErr string = errPrefix + "the combined length of the policy namespace and name " +
-		"cannot exceed 62 characters"
-	remediationErr string = errPrefix + "RemediationAction field of the policy and policy template " +
-		"cannot both be unset"
-)
-
 var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
+	const (
+		case17Prefix                     string = "../resources/case17_policy_webhook/"
+		case17PolicyLongYaml             string = case17Prefix + "case17_policy_long.yaml"
+		case17PolicyReplicatedYaml       string = case17Prefix + "case17_policy_replicate.yaml"
+		case17PolicyRemediationYaml      string = case17Prefix + "case17_invalid_remediation_policy.yaml"
+		case17PolicyRootRemediationYaml  string = case17Prefix + "case17_valid_remediation_policy_root.yaml"
+		case17PolicyCfplcRemediationYaml string = case17Prefix + "case17_valid_remediation_policy_cfplc.yaml"
+		longNamespace                    string = "long-long-long-long-long-long-long"
+		case17PolicyReplicatedName       string = "case17-test-policy-replicated-longlong"
+		case17PolicyReplicatedPlr        string = "case17-test-policy-replicated-longlong-plr"
+		case17PolicyReplicatedPb         string = "case17-test-policy-replicated-longlong-pb"
+		case17PolicyRemediationName      string = "case17-test-policy-no-remediation"
+		case17PolicyRootRemediationName  string = "case17-test-policy-root-remediation"
+		case17PolicyCfplcRemediationName string = "case17-test-policy-cfplc-remediation"
+		errPrefix                        string = `admission webhook "policy.open-cluster-management.io.webhook" ` +
+			`denied the request: `
+		combinedLengthErr string = errPrefix + "the combined length of the policy namespace and name " +
+			"cannot exceed 62 characters"
+		remediationErr string = errPrefix + "RemediationAction field of the policy and policy template " +
+			"cannot both be unset"
+	)
+
 	Describe("Test name + namespace over 63", func() {
 		BeforeAll(func() {
 			_, err := utils.KubectlWithOutput("create",

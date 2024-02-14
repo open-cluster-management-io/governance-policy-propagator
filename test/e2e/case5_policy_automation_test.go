@@ -20,14 +20,13 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
-const (
-	case5PolicyName string = "case5-test-policy"
-	case5PolicyYaml string = "../resources/case5_policy_automation/case5-test-policy.yaml"
-)
-
-const automationName string = "create-service.now-ticket"
-
 var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, func() {
+	const (
+		case5PolicyName string = "case5-test-policy"
+		case5PolicyYaml string = "../resources/case5_policy_automation/case5-test-policy.yaml"
+		automationName  string = "create-service.now-ticket"
+	)
+
 	ansiblelistlen := 0
 	// Use this only when target_clusters managed1 managed2 managed3
 	getLastAnsiblejob := func() *unstructured.Unstructured {

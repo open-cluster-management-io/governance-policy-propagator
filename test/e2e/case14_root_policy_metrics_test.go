@@ -17,8 +17,9 @@ import (
 
 var _ = Describe("Test root policy metrics", Ordered, func() {
 	const (
-		policyName = "case9-test-policy"
-		policyYaml = "../resources/case9_templates/case9-test-policy.yaml"
+		policyName           = "case9-test-policy"
+		policyYaml           = "../resources/case9_templates/case9-test-policy.yaml"
+		replicatedPolicyYaml = "../resources/case9_templates/case9-test-replpolicy-managed1.yaml"
 	)
 
 	Describe("Create policy, placement and referenced resource in ns:"+testNamespace, func() {
@@ -63,7 +64,7 @@ var _ = Describe("Test root policy metrics", Ordered, func() {
 			)
 			Expect(plc).ToNot(BeNil())
 
-			yamlPlc := utils.ParseYaml(case9ReplicatedPolicyYamlM1)
+			yamlPlc := utils.ParseYaml(replicatedPolicyYaml)
 			Eventually(func(g Gomega) interface{} {
 				replicatedPlc := utils.GetWithTimeout(
 					clientHubDynamic,
