@@ -3,7 +3,6 @@ package complianceeventsapi
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
@@ -25,6 +24,7 @@ import (
 	apiserverx509 "k8s.io/apiserver/pkg/authentication/request/x509"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	certutil "k8s.io/client-go/util/cert"
 )
 
 // init dynamically parses the database columns of each struct type to create a mapping of user provided sort/filter
@@ -130,21 +130,21 @@ var (
 )
 
 type ComplianceAPIServer struct {
-	server       *http.Server
-	addr         string
-	clientAuthCA *x509.CertPool
-	cert         *tls.Certificate
-	cfg          *rest.Config
+	server        *http.Server
+	addr          string
+	clientAuthCAs []byte
+	cert          *tls.Certificate
+	cfg           *rest.Config
 }
 
 func NewComplianceAPIServer(
-	listenAddress string, cfg *rest.Config, clientAuthCA *x509.CertPool, cert *tls.Certificate,
+	listenAddress string, cfg *rest.Config, clientAuthCAs []byte, cert *tls.Certificate,
 ) *ComplianceAPIServer {
 	return &ComplianceAPIServer{
-		addr:         listenAddress,
-		clientAuthCA: clientAuthCA,
-		cert:         cert,
-		cfg:          cfg,
+		addr:          listenAddress,
+		clientAuthCAs: clientAuthCAs,
+		cert:          cert,
+		cfg:           cfg,
 	}
 }
 
@@ -172,19 +172,22 @@ func (s *ComplianceAPIServer) Start(ctx context.Context, serverContext *Complian
 	var authenticatedClient *kubernetes.Clientset
 
 	if s.cert != nil {
+		clientAuthCAPool, err := certutil.NewPoolFromBytes(s.clientAuthCAs)
+		if err != nil {
+			return err
+		}
+
 		s.server.TLSConfig = &tls.Config{
 			MinVersion:   tls.VersionTLS12,
 			Certificates: []tls.Certificate{*s.cert},
 			// Let the Kubernetes apiserver package validate it if the certificate is presented
 			ClientAuth: tls.RequestClientCert,
-			ClientCAs:  s.clientAuthCA,
+			ClientCAs:  clientAuthCAPool,
 		}
 
 		listener = tls.NewListener(listener, s.server.TLSConfig)
 
-		var err error
-
-		authenticator, err = getCertAuthenticator(s.cfg)
+		authenticator, err = getCertAuthenticator(s.clientAuthCAs)
 		if err != nil {
 			return err
 		}
