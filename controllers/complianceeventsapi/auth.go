@@ -176,9 +176,10 @@ func getTokenUsername(token string) string {
 }
 
 // getCertAuthenticator returns an Authenticator that can validate that an input certificate is signed by the API
-// server represented in the input cfg and that the certificate can be used for client authentication (e.g. key usage).
-func getCertAuthenticator(cfg *rest.Config) (*apiserverx509.Authenticator, error) {
-	p, err := dynamiccertificates.NewStaticCAContent("client-ca", cfg.CAData)
+// server represented in the input clientAuthCAs and that the certificate can be used for client authentication
+// (e.g. key usage).
+func getCertAuthenticator(clientAuthCAs []byte) (*apiserverx509.Authenticator, error) {
+	p, err := dynamiccertificates.NewStaticCAContent("client-ca", clientAuthCAs)
 	if err != nil {
 		return nil, err
 	}

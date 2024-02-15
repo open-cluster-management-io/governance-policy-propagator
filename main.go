@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
@@ -33,7 +32,6 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
-	certutil "k8s.io/client-go/util/cert"
 	"k8s.io/klog/v2"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
@@ -585,18 +583,22 @@ func startComplianceEventsAPI(
 	reconciler.DynamicWatcher = dbSecretDynamicWatcher
 
 	var cert *tls.Certificate
-	var ca *x509.CertPool
+	var clientAuthCAs []byte
 
 	if complianceAPICert != "" && complianceAPIKey != "" {
-		if cfg.CAData == nil {
+		if cfg.CAData == nil && cfg.CAFile == "" {
 			log.Info("The kubeconfig does not contain a CA")
 			os.Exit(1)
 		}
 
-		ca, err = certutil.NewPoolFromBytes(cfg.CAData)
-		if err != nil {
-			log.Error(err, "The kubeconfig does not contain a valid CA")
-			os.Exit(1)
+		if cfg.CAData == nil {
+			clientAuthCAs, err = os.ReadFile(cfg.CAFile)
+			if err != nil {
+				log.Error(err, "The kubeconfig does not contain a valid CA")
+				os.Exit(1)
+			}
+		} else {
+			clientAuthCAs = cfg.CAData
 		}
 
 		certTemp, err := tls.LoadX509KeyPair(complianceAPICert, complianceAPIKey)
@@ -615,7 +617,7 @@ func startComplianceEventsAPI(
 		log.Info("The compliance events history API will listen on HTTP since no certificate was provided")
 	}
 
-	complianceAPI := complianceeventsapi.NewComplianceAPIServer(complianceAPIAddr, cfg, ca, cert)
+	complianceAPI := complianceeventsapi.NewComplianceAPIServer(complianceAPIAddr, cfg, clientAuthCAs, cert)
 
 	wg.Add(1)
 
