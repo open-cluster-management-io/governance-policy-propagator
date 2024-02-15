@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	stdlog "log"
 	"math"
 	"net"
 	"net/http"
@@ -148,6 +149,26 @@ func NewComplianceAPIServer(
 	}
 }
 
+type serverErrorLogWriter struct{}
+
+func (*serverErrorLogWriter) Write(p []byte) (int, error) {
+	m := string(p)
+
+	// The OpenShift router (haproxy) seems to perform TCP checks to see if the connection is available. When it does
+	// this, it resets the connection when done, which causes a log message every 5 seconds, so this will filter it out.
+	if strings.HasPrefix(m, "http: TLS handshake error") && strings.HasSuffix(m, ": connection reset by peer\n") {
+		log.V(2).Info(m)
+	} else {
+		log.Info(m)
+	}
+
+	return len(p), nil
+}
+
+func newServerErrorLog() *stdlog.Logger {
+	return stdlog.New(&serverErrorLogWriter{}, "", 0)
+}
+
 // Start starts the HTTP server and blocks until ctx is closed or there was an error starting the
 // HTTP server.
 func (s *ComplianceAPIServer) Start(ctx context.Context, serverContext *ComplianceServerCtx) error {
@@ -161,6 +182,7 @@ func (s *ComplianceAPIServer) Start(ctx context.Context, serverContext *Complian
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  15 * time.Second,
+		ErrorLog:     newServerErrorLog(),
 	}
 
 	listener, err := net.Listen("tcp", s.addr)
