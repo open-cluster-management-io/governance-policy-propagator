@@ -120,12 +120,10 @@ run:
 ############################################################
 # Generate manifests
 ############################################################
-# Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
-CRD_OPTIONS ?= crd:trivialVersions=true,preserveUnknownFields=false
 
 .PHONY: manifests
 manifests: kustomize controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=governance-policy-propagator paths="./..." output:crd:artifacts:config=deploy/crds output:rbac:artifacts:config=deploy/rbac
+	$(CONTROLLER_GEN) crd rbac:roleName=governance-policy-propagator paths="./..." output:crd:artifacts:config=deploy/crds output:rbac:artifacts:config=deploy/rbac
 	mv deploy/crds/policy.open-cluster-management.io_policies.yaml deploy/crds/kustomize/policy.open-cluster-management.io_policies.yaml
 	# Add a newline so that the format matches what kubebuilder generates
 	@printf "\n---\n" > deploy/crds/policy.open-cluster-management.io_policies.yaml
