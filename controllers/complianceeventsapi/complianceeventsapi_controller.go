@@ -89,13 +89,14 @@ func NewComplianceServerCtx(dbConnectionURL string) (*ComplianceServerCtx, error
 
 	if dbConnectionURL == "" {
 		err = ErrInvalidConnectionURL
-	}
-
-	// As of the writing of this code, sql.Open doesn't create a connection. db.Ping will though, so this
-	// should never fail unless the connection URL is invalid to the Postgres driver.
-	db, openErr := sql.Open("postgres", dbConnectionURL)
-	if openErr != nil {
-		err = fmt.Errorf("%w: %w", ErrInvalidConnectionURL, err)
+	} else {
+		var openErr error
+		// As of the writing of this code, sql.Open doesn't create a connection. db.Ping will though, so this
+		// should never fail unless the connection URL is invalid to the Postgres driver.
+		db, openErr = sql.Open("postgres", dbConnectionURL)
+		if openErr != nil {
+			err = fmt.Errorf("%w: %w", ErrInvalidConnectionURL, err)
+		}
 	}
 
 	return &ComplianceServerCtx{
