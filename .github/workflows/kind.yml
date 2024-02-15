@@ -13,7 +13,6 @@ on:
 defaults:
   run:
     shell: bash
-    working-directory: governance-policy-propagator
 
 jobs:
   unit-tests:
@@ -22,14 +21,11 @@ jobs:
     steps:
     - name: Checkout Governance Policy Propagator
       uses: actions/checkout@v4
-      with:
-        path: governance-policy-propagator
     
     - name: Set up Go
       uses: actions/setup-go@v5
-      id: go
       with:
-        go-version-file: governance-policy-propagator/go.mod
+        go-version-file: go.mod
 
     - name: Verify modules
       run: |
@@ -40,6 +36,7 @@ jobs:
         make fmt
         git diff --exit-code
         make lint
+        make gosec-scan
 
     - name: Verify deploy/operator.yaml
       run: |
@@ -61,7 +58,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: coverage_unit
-        path: governance-policy-propagator/coverage_unit.out
+        path: coverage_unit.out
 
   kind-tests:
     runs-on: ubuntu-latest
@@ -80,8 +77,6 @@ jobs:
     steps:
     - name: Checkout Governance Policy Propagator
       uses: actions/checkout@v4
-      with:
-        path: governance-policy-propagator
 
     - name: Create K8s KinD Cluster - ${{ matrix.kind }}
       env:
@@ -103,7 +98,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: coverage_e2e
-        path: governance-policy-propagator/coverage_e2e.out
+        path: coverage_e2e.out
 
     - name: E2E Tests for Compliance Events API
       run: |
@@ -114,7 +109,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: coverage_e2e_compliance_events_api
-        path: governance-policy-propagator/coverage_e2e_compliance_events_api.out
+        path: coverage_e2e_compliance_events_api.out
 
     - name: Verify Deployment Configuration
       run: |
@@ -153,8 +148,6 @@ jobs:
     steps:
     - name: Checkout Governance Policy Propagator
       uses: actions/checkout@v4
-      with:
-        path: governance-policy-propagator
 
     - name: Create K8s KinD Cluster - ${{ matrix.kind }}
       env:
@@ -172,7 +165,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: coverage_e2e_policyautomation
-        path: governance-policy-propagator/coverage_e2e_policyautomation.out
+        path: coverage_e2e_policyautomation.out
 
     - name: Debug
       if: ${{ failure() }}
