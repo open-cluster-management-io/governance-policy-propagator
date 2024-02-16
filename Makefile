@@ -16,12 +16,7 @@
 PWD := $(shell pwd)
 LOCAL_BIN ?= $(PWD)/bin
 
-# Keep an existing GOPATH, make a private one if it is undefined
-GOPATH_DEFAULT := $(PWD)/.go
-export GOPATH ?= $(GOPATH_DEFAULT)
-GOBIN_DEFAULT := $(GOPATH)/bin
-export GOBIN ?= $(GOBIN_DEFAULT)
-export PATH := $(LOCAL_BIN):$(GOBIN):$(PATH)
+export PATH := $(LOCAL_BIN):$(PATH)
 GOARCH = $(shell go env GOARCH)
 GOOS = $(shell go env GOOS)
 TESTARGS_DEFAULT := "-v"
