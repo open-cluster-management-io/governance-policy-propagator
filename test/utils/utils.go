@@ -160,7 +160,7 @@ func GetClusterLevelWithTimeout(
 		}
 
 		return nil
-	}, timeout, 1).Should(BeNil())
+	}, timeout, 1).ShouldNot(HaveOccurred())
 
 	if wantFound {
 		return obj
@@ -202,7 +202,7 @@ func GetWithTimeout(
 		}
 
 		return nil
-	}, timeout, 1).Should(BeNil())
+	}, timeout, 1).ShouldNot(HaveOccurred())
 
 	if wantFound {
 		return obj
@@ -239,7 +239,7 @@ func ListWithTimeout(
 		}
 
 		return nil
-	}, timeout, 1).Should(BeNil())
+	}, timeout, 1).ShouldNot(HaveOccurred())
 
 	if wantFound {
 		return list
@@ -277,7 +277,7 @@ func ListWithTimeoutByNamespace(
 		}
 
 		return nil
-	}, timeout, 1).Should(BeNil())
+	}, timeout, 1).ShouldNot(HaveOccurred())
 
 	if wantFound {
 		return list
