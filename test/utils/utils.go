@@ -298,11 +298,14 @@ func Kubectl(args ...string) {
 
 // KubectlWithOutput execute kubectl cli and return output and error
 func KubectlWithOutput(args ...string) (string, error) {
-	output, err := exec.Command("kubectl", args...).CombinedOutput()
-	//nolint:forbidigo
-	fmt.Println(string(output))
+	kubectlCmd := exec.Command("kubectl", args...)
 
-	return string(output), err
+	output, err := kubectlCmd.CombinedOutput()
+	if err != nil {
+		return string(output), fmt.Errorf("error running kubectl command: %s: %s", output, err.Error())
+	}
+
+	return string(output), nil
 }
 
 // GetMetrics execs into the propagator pod and curls the metrics endpoint, filters
