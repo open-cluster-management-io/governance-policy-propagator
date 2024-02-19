@@ -302,10 +302,16 @@ func KubectlWithOutput(args ...string) (string, error) {
 
 	output, err := kubectlCmd.CombinedOutput()
 	if err != nil {
-		return string(output), fmt.Errorf("error running kubectl command: %s: %s", output, err.Error())
+		// Reformat error to include kubectl command and stderr output
+		err = fmt.Errorf(
+			"error running command '%s':\n %s: %s",
+			strings.Join(kubectlCmd.Args, " "),
+			output,
+			err.Error(),
+		)
 	}
 
-	return string(output), nil
+	return string(output), err
 }
 
 // GetMetrics execs into the propagator pod and curls the metrics endpoint, filters
