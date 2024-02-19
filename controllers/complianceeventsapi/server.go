@@ -534,14 +534,10 @@ func setAuthorizedClusters(ctx context.Context, db *sql.DB, parsed *queryOptions
 		return parsed, nil
 	}
 
-	tempClusterIDs := parsed.Filters["clusters.cluster_id"]
-	clusterIDs := make([]string, len(tempClusterIDs))
-
-	// Deep copy parsed.Filters["clusters.cluster_id"]
-	copy(clusterIDs, tempClusterIDs)
-
-	// Reset clusters.cluster_id
+	clusterIDs := parsed.Filters["clusters.cluster_id"]
+	// Temporarily reset clusters.cluster_id and repopulate with all known cluster IDs
 	parsed.Filters["clusters.cluster_id"] = []string{}
+
 	// Convert id to name
 	for _, id := range clusterIDs {
 		clusterName, err := getClusterNameFromID(ctx, db, id)
@@ -570,16 +566,12 @@ func setAuthorizedClusters(ctx context.Context, db *sql.DB, parsed *queryOptions
 		}
 	}
 
-	// There is no cluster.id or clusterName arg from the url query
+	// There is no cluster.cluster_id or cluster.name query argument.
 	// In other words, the user requests all they have access to.
 	if len(clusterIDs) == 0 && len(parsedClusterNames) == 0 {
-		starRules, ok := allRules["*"]
-		if ok && slices.Contains(starRules, "get") || slices.Contains(starRules, "*") {
-			return parsed, nil
-		}
-
 		for mcName := range allRules {
-			// Should have "GET" auth for all managedCluster
+			// Add the cluster to the filter if the user has get authentication. Note that if the user has get access
+			// on all managed clusters, that gets handled at the beginning of the function.
 			if getAccessByClusterName(allRules, mcName) {
 				parsed.Filters["clusters.name"] = append(parsed.Filters["clusters.name"], mcName)
 			}
