@@ -2100,6 +2100,35 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 					By("Should return 0 rows")
 					Expect(rows).Should(BeEmpty())
 				})
+
+			It("Should return empty data when only unknown cluster IDs are provided",
+				func(ctx context.Context) {
+					endpoint := eventsEndpoint + "?cluster.cluster_id=does-not-exist,does-also-not-exist"
+					req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+					Expect(err).ShouldNot(HaveOccurred())
+					req.Header.Set("Authorization", "Bearer "+token)
+
+					resp, err := httpClient.Do(req)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					defer resp.Body.Close()
+
+					body, err := io.ReadAll(resp.Body)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					respJSON := map[string]any{}
+
+					err = json.Unmarshal(body, &respJSON)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					rows, ok := respJSON["data"].([]interface{})
+					Expect(ok).To(BeTrue())
+
+					By("Should return 0 rows")
+					Expect(rows).Should(BeEmpty())
+				},
+			)
+
 			It("Should return a forbidden error when SA has only managed1 auth",
 				func(ctx context.Context) {
 					argument := "cluster.name=managed1,managed2,managed3"
