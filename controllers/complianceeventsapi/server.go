@@ -576,15 +576,15 @@ func setAuthorizedClusters(ctx context.Context, db *sql.DB, parsed *queryOptions
 				parsed.Filters["clusters.name"] = append(parsed.Filters["clusters.name"], mcName)
 			}
 		}
-
-		if len(parsed.Filters["clusters.name"]) == 0 {
-			return parsed, ErrNoAccess
-		}
 	}
 
 	if len(unAuthorizedClusters) > 0 {
 		return parsed, fmt.Errorf("%w: the following cluster filters are not authorized: %s",
 			ErrForbidden, strings.Join(unAuthorizedClusters, ", "))
+	}
+
+	if len(parsed.Filters["clusters.name"]) == 0 && len(parsed.Filters["clusters.cluster_id"]) == 0 {
+		return parsed, ErrNoAccess
 	}
 
 	return parsed, nil
