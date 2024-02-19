@@ -29,7 +29,10 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
-const eventsEndpoint = "http://localhost:8385/api/v1/compliance-events"
+const (
+	eventsEndpoint = "http://localhost:8385/api/v1/compliance-events"
+	csvEndpoint    = "http://localhost:8385/api/v1/reports/compliance-events"
+)
 
 var httpClient = http.Client{
 	Timeout: 30 * time.Second,
@@ -1759,9 +1762,8 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 		)
 
 		Describe("Test the /api/v1/reports/compliance-events endpoint", func() {
-			csvEndpoints := "http://localhost:8385/api/v1/reports/compliance-events"
 			It("should send CSV file in http response", func(ctx context.Context) {
-				req, err := http.NewRequestWithContext(ctx, http.MethodGet, csvEndpoints, nil)
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, csvEndpoint, nil)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				req.Header.Set("Authorization", "Bearer "+token)
@@ -1812,7 +1814,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			})
 			It("Should return only header when SA does not have any GET verb to managedCluster",
 				func(ctx context.Context) {
-					req, err := http.NewRequestWithContext(ctx, http.MethodGet, csvEndpoints, nil)
+					req, err := http.NewRequestWithContext(ctx, http.MethodGet, csvEndpoint, nil)
 					Expect(err).ShouldNot(HaveOccurred())
 
 					req.Header.Set("Content-Type", "application/json")
@@ -1861,7 +1863,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 			DescribeTable("Should filter CSV file",
 				func(ctx context.Context, queryArgs []string, expectedLine int) {
-					endpoints := csvEndpoints
+					endpoints := csvEndpoint
 
 					endpoints += "?" + strings.Join(queryArgs, "&")
 
@@ -2048,23 +2050,26 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 	Describe("Test authorization", func() {
 		Describe("Test method Get", func() {
-			It("Should return StatusForbidden when it is empty token", func(ctx context.Context) {
+			It("Should return unauthorized when it is empty token", func(ctx context.Context) {
 				req, err := http.NewRequestWithContext(ctx, http.MethodGet, eventsEndpoint+"/1", nil)
 				Expect(err).ToNot(HaveOccurred())
 
-				req.Header.Set("Content-Type", "application/json")
 				res, err := httpClient.Do(req)
-
-				Expect(res.StatusCode).Should(Equal(http.StatusForbidden))
+				Expect(res.StatusCode).Should(Equal(http.StatusUnauthorized))
 				Expect(err).ShouldNot(HaveOccurred())
 
 				req, err = http.NewRequestWithContext(ctx, http.MethodGet, eventsEndpoint, nil)
 				Expect(err).ToNot(HaveOccurred())
 
-				req.Header.Set("Content-Type", "application/json")
 				res, err = httpClient.Do(req)
+				Expect(res.StatusCode).Should(Equal(http.StatusUnauthorized))
+				Expect(err).ShouldNot(HaveOccurred())
 
-				Expect(res.StatusCode).Should(Equal(http.StatusForbidden))
+				req, err = http.NewRequestWithContext(ctx, http.MethodGet, csvEndpoint, nil)
+				Expect(err).ToNot(HaveOccurred())
+
+				res, err = httpClient.Do(req)
+				Expect(res.StatusCode).Should(Equal(http.StatusUnauthorized))
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 			It("Should return empty data when SA does not have any GET verb to managedCluster",
@@ -2148,7 +2153,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 					Expect(ok).To(BeTrue())
 
 					Expect(message).
-						Should(Equal("not authorized: the following cluster filters are not authorized: " +
+						Should(Equal("the request is not allowed: the following cluster filters are not authorized: " +
 							"managed2, managed3"))
 
 					Expect(resp.StatusCode).Should(Equal(http.StatusForbidden))
@@ -2184,7 +2189,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 					By("The error message should include test2-managed2-fake-uuid-2 except managed1")
 					Expect(message).
 						Should(Equal(
-							"not authorized: the following cluster filters are not authorized: " +
+							"the request is not allowed: the following cluster filters are not authorized: " +
 								"test2-managed2-fake-uuid-2"))
 
 					Expect(resp.StatusCode).Should(Equal(http.StatusForbidden))

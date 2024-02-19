@@ -128,7 +128,8 @@ var (
 	ErrInvalidSortOption    error
 	ErrInvalidQueryArgValue = errors.New("invalid query argument")
 	ErrInvalidQueryArg      error
-	ErrNotAuthorized        = errors.New("not authorized")
+	ErrUnauthorized         = errors.New("not authorized")
+	ErrForbidden            = errors.New("the request is not allowed")
 	// The user has no access to any managed cluster
 	ErrNoAccess = errors.New("the user has no access")
 )
@@ -241,8 +242,8 @@ func (s *ComplianceAPIServer) Start(ctx context.Context, serverContext *Complian
 			// To verify each request independently
 			userConfig, err := getUserKubeConfig(s.cfg, r)
 			if err != nil {
-				if errors.Is(err, ErrNotAuthorized) {
-					writeErrMsgJSON(w, "The Authorization header is not set", http.StatusForbidden)
+				if errors.Is(err, ErrUnauthorized) {
+					writeErrMsgJSON(w, "The Authorization header is not set", http.StatusUnauthorized)
 				}
 
 				return
@@ -276,8 +277,8 @@ func (s *ComplianceAPIServer) Start(ctx context.Context, serverContext *Complian
 		// To verify each request independently
 		userConfig, err := getUserKubeConfig(s.cfg, r)
 		if err != nil {
-			if errors.Is(err, ErrNotAuthorized) {
-				writeErrMsgJSON(w, "The Authorization header is not set", http.StatusForbidden)
+			if errors.Is(err, ErrUnauthorized) {
+				writeErrMsgJSON(w, "The Authorization header is not set", http.StatusUnauthorized)
 			}
 
 			return
@@ -293,8 +294,8 @@ func (s *ComplianceAPIServer) Start(ctx context.Context, serverContext *Complian
 		// To verify each request independently
 		userConfig, err := getUserKubeConfig(s.cfg, r)
 		if err != nil {
-			if errors.Is(err, ErrNotAuthorized) {
-				writeErrMsgJSON(w, "The Authorization header is not set", http.StatusForbidden)
+			if errors.Is(err, ErrUnauthorized) {
+				writeErrMsgJSON(w, "The Authorization header is not set", http.StatusUnauthorized)
 			}
 
 			return
@@ -591,7 +592,7 @@ func setAuthorizedClusters(ctx context.Context, db *sql.DB, parsed *queryOptions
 
 	if len(unAuthorizedClusters) > 0 {
 		return parsed, fmt.Errorf("%w: the following cluster filters are not authorized: %s",
-			ErrNotAuthorized, strings.Join(unAuthorizedClusters, ", "))
+			ErrForbidden, strings.Join(unAuthorizedClusters, ", "))
 	}
 
 	return parsed, nil
@@ -888,7 +889,7 @@ func getComplianceEvents(db *sql.DB, w http.ResponseWriter,
 ) {
 	queryArgs, err := parseQueryArgs(r.Context(), r.URL.Query(), db, userConfig, false)
 	if err != nil {
-		if errors.Is(err, ErrNotAuthorized) {
+		if errors.Is(err, ErrForbidden) {
 			writeErrMsgJSON(w, err.Error(), http.StatusForbidden)
 
 			return
@@ -1041,7 +1042,7 @@ func postComplianceEvent(db *sql.DB,
 
 	allowed, err := canRecordComplianceEvent(cfg, authenticatedClient, authenticator, reqEvent.Cluster.Name, r)
 	if err != nil {
-		if errors.Is(err, ErrNotAuthorized) {
+		if errors.Is(err, ErrUnauthorized) {
 			writeErrMsgJSON(w, "Unauthorized", http.StatusUnauthorized)
 
 			return

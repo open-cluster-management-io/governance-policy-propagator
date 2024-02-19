@@ -95,14 +95,14 @@ func canRecordComplianceEvent(
 		resp, ok, err := authenticator.AuthenticateRequest(req)
 		if err != nil {
 			if errors.As(err, &x509.UnknownAuthorityError{}) || errors.As(err, &x509.CertificateInvalidError{}) {
-				return false, ErrNotAuthorized
+				return false, ErrUnauthorized
 			}
 
 			return false, err
 		}
 
 		if !ok {
-			return false, ErrNotAuthorized
+			return false, ErrUnauthorized
 		}
 
 		review, err := authenticatedClient.AuthorizationV1().SubjectAccessReviews().Create(
@@ -153,7 +153,7 @@ func canRecordComplianceEvent(
 	)
 	if err != nil {
 		if k8serrors.IsUnauthorized(err) {
-			return false, ErrNotAuthorized
+			return false, ErrUnauthorized
 		}
 
 		return false, err
@@ -234,7 +234,7 @@ func getUserKubeConfig(config *rest.Config, r *http.Request) (*rest.Config, erro
 	userConfig.BearerToken = parseToken(r)
 
 	if userConfig.BearerToken == "" {
-		return nil, ErrNotAuthorized
+		return nil, ErrUnauthorized
 	}
 
 	return userConfig, nil
