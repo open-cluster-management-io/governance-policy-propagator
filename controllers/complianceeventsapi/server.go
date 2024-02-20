@@ -23,10 +23,7 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-	apiserverx509 "k8s.io/apiserver/pkg/authentication/request/x509"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	certutil "k8s.io/client-go/util/cert"
 )
 
 // init dynamically parses the database columns of each struct type to create a mapping of user provided sort/filter
@@ -135,21 +132,17 @@ var (
 )
 
 type ComplianceAPIServer struct {
-	server        *http.Server
-	addr          string
-	clientAuthCAs []byte
-	cert          *tls.Certificate
-	cfg           *rest.Config
+	server *http.Server
+	addr   string
+	cert   *tls.Certificate
+	cfg    *rest.Config
 }
 
-func NewComplianceAPIServer(
-	listenAddress string, cfg *rest.Config, clientAuthCAs []byte, cert *tls.Certificate,
-) *ComplianceAPIServer {
+func NewComplianceAPIServer(listenAddress string, cfg *rest.Config, cert *tls.Certificate) *ComplianceAPIServer {
 	return &ComplianceAPIServer{
-		addr:          listenAddress,
-		clientAuthCAs: clientAuthCAs,
-		cert:          cert,
-		cfg:           cfg,
+		addr: listenAddress,
+		cert: cert,
+		cfg:  cfg,
 	}
 }
 
@@ -194,34 +187,13 @@ func (s *ComplianceAPIServer) Start(ctx context.Context, serverContext *Complian
 		return err
 	}
 
-	var authenticator *apiserverx509.Authenticator
-	var authenticatedClient *kubernetes.Clientset
-
 	if s.cert != nil {
-		clientAuthCAPool, err := certutil.NewPoolFromBytes(s.clientAuthCAs)
-		if err != nil {
-			return err
-		}
-
 		s.server.TLSConfig = &tls.Config{
 			MinVersion:   tls.VersionTLS12,
 			Certificates: []tls.Certificate{*s.cert},
-			// Let the Kubernetes apiserver package validate it if the certificate is presented
-			ClientAuth: tls.RequestClientCert,
-			ClientCAs:  clientAuthCAPool,
 		}
 
 		listener = tls.NewListener(listener, s.server.TLSConfig)
-
-		authenticator, err = getCertAuthenticator(s.clientAuthCAs)
-		if err != nil {
-			return err
-		}
-
-		authenticatedClient, err = kubernetes.NewForConfig(s.cfg)
-		if err != nil {
-			return err
-		}
 	}
 
 	// register handlers here
@@ -250,7 +222,7 @@ func (s *ComplianceAPIServer) Start(ctx context.Context, serverContext *Complian
 			}
 			getComplianceEvents(serverContext.DB, w, r, userConfig)
 		case http.MethodPost:
-			postComplianceEvent(serverContext.DB, s.cfg, authenticatedClient, authenticator, w, r)
+			postComplianceEvent(serverContext.DB, s.cfg, w, r)
 		default:
 			writeErrMsgJSON(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -1003,13 +975,7 @@ LEFT JOIN policies ON compliance_events.policy_id = policies.id` + whereClause /
 	}
 }
 
-func postComplianceEvent(db *sql.DB,
-	cfg *rest.Config,
-	authenticatedClient *kubernetes.Clientset,
-	authenticator *apiserverx509.Authenticator,
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func postComplianceEvent(db *sql.DB, cfg *rest.Config, w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Error(err, "error reading request body")
@@ -1032,7 +998,7 @@ func postComplianceEvent(db *sql.DB,
 		return
 	}
 
-	allowed, err := canRecordComplianceEvent(cfg, authenticatedClient, authenticator, reqEvent.Cluster.Name, r)
+	allowed, err := canRecordComplianceEvent(cfg, reqEvent.Cluster.Name, r)
 	if err != nil {
 		if errors.Is(err, ErrUnauthorized) {
 			writeErrMsgJSON(w, "Unauthorized", http.StatusUnauthorized)

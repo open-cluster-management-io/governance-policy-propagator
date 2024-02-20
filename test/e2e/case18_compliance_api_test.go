@@ -131,7 +131,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 		err = complianceServerCtx.MigrateDB(ctx, k8sClient, "open-cluster-management")
 		Expect(err).ToNot(HaveOccurred())
 
-		complianceAPI := complianceeventsapi.NewComplianceAPIServer("localhost:8385", k8sConfig, nil, nil)
+		complianceAPI := complianceeventsapi.NewComplianceAPIServer("localhost:8385", k8sConfig, nil)
 
 		httpCtx, httpCtxCancel := context.WithCancel(context.Background())
 

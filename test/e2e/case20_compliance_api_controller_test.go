@@ -5,14 +5,8 @@ package e2e
 import (
 	"bytes"
 	"context"
-	cryptorand "crypto/rand"
-	"crypto/rsa"
-	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
 	"database/sql"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"math/rand"
@@ -22,13 +16,11 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	certv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	certutil "k8s.io/client-go/util/cert"
 
 	"open-cluster-management.io/governance-policy-propagator/controllers/complianceeventsapi"
 	"open-cluster-management.io/governance-policy-propagator/controllers/propagator"
@@ -233,7 +225,6 @@ var _ = Describe("Test compliance events API authentication and authorization", 
 	eventsEndpoint := fmt.Sprintf("https://localhost:%d/api/v1/compliance-events", complianceAPIPort)
 	const saName string = "compliance-api-user"
 	var token string
-	var clientCert tls.Certificate
 
 	getSamplePostRequest := func(clusterName string) *bytes.Buffer {
 		payload := []byte(fmt.Sprintf(`{
@@ -339,63 +330,6 @@ var _ = Describe("Test compliance events API authentication and authorization", 
 
 			token = string(secret.Data["token"])
 		}, defaultTimeoutSeconds, 1).Should(Succeed())
-
-		privateKey, err := rsa.GenerateKey(cryptorand.Reader, 2048)
-		Expect(err).ToNot(HaveOccurred())
-
-		csr, err := certutil.MakeCSR(
-			privateKey,
-			&pkix.Name{CommonName: fmt.Sprintf("system:serviceaccount:%s:%s", testNamespace, saName)},
-			nil,
-			nil,
-		)
-		Expect(err).ToNot(HaveOccurred())
-
-		csrObj, err := clientHub.CertificatesV1().CertificateSigningRequests().Create(
-			ctx,
-			&certv1.CertificateSigningRequest{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: saName,
-				},
-				Spec: certv1.CertificateSigningRequestSpec{
-					Request:    csr,
-					SignerName: certv1.KubeAPIServerClientSignerName,
-					Usages: []certv1.KeyUsage{
-						certv1.UsageDigitalSignature,
-						certv1.UsageKeyEncipherment,
-						certv1.UsageClientAuth,
-					},
-				},
-			},
-			metav1.CreateOptions{},
-		)
-		Expect(err).ToNot(HaveOccurred())
-
-		csrObj.Status.Conditions = append(csrObj.Status.Conditions, certv1.CertificateSigningRequestCondition{
-			Type:           certv1.CertificateApproved,
-			Reason:         "test",
-			Message:        "This CSR was approved by the test",
-			LastUpdateTime: metav1.Now(),
-			Status:         corev1.ConditionTrue,
-		})
-
-		_, err = clientHub.CertificatesV1().CertificateSigningRequests().UpdateApproval(
-			ctx, saName, csrObj, metav1.UpdateOptions{},
-		)
-		Expect(err).ToNot(HaveOccurred())
-
-		Eventually(func(g Gomega) {
-			csrObj, err = clientHub.CertificatesV1().CertificateSigningRequests().Get(ctx, saName, metav1.GetOptions{})
-			g.Expect(csrObj.Status.Certificate).ToNot(BeNil())
-		}, defaultTimeoutSeconds, 1).Should(Succeed())
-
-		keyPem := pem.EncodeToMemory(&pem.Block{
-			Type:  "RSA PRIVATE KEY",
-			Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
-		})
-
-		clientCert, err = tls.X509KeyPair(csrObj.Status.Certificate, keyPem)
-		Expect(err).ToNot(HaveOccurred())
 	})
 
 	AfterAll(func(ctx context.Context) {
@@ -416,11 +350,6 @@ var _ = Describe("Test compliance events API authentication and authorization", 
 		}
 
 		err = clientHub.RbacV1().RoleBindings(testNamespace).Delete(ctx, saName, metav1.DeleteOptions{})
-		if !k8serrors.IsNotFound(err) {
-			Expect(err).ToNot(HaveOccurred())
-		}
-
-		err = clientHub.CertificatesV1().CertificateSigningRequests().Delete(ctx, saName, metav1.DeleteOptions{})
 		if !k8serrors.IsNotFound(err) {
 			Expect(err).ToNot(HaveOccurred())
 		}
@@ -459,7 +388,7 @@ var _ = Describe("Test compliance events API authentication and authorization", 
 		Expect(resp.StatusCode).To(Equal(http.StatusUnauthorized))
 	})
 
-	It("Rejects recording the compliance event for the wrong namespace (token auth)", func(ctx context.Context) {
+	It("Rejects recording the compliance event for the wrong namespace", func(ctx context.Context) {
 		payload := getSamplePostRequest("cluster")
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, eventsEndpoint, payload)
@@ -477,91 +406,13 @@ var _ = Describe("Test compliance events API authentication and authorization", 
 		Expect(resp.StatusCode).To(Equal(http.StatusForbidden))
 	})
 
-	It("Rejects recording the compliance event for the wrong namespace (cert auth)", func(ctx context.Context) {
-		payload := getSamplePostRequest("cluster")
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, eventsEndpoint, payload)
-		Expect(err).ToNot(HaveOccurred())
-		req.Header.Set("Content-Type", "application/json")
-
-		httpClient := http.Client{
-			Timeout: 30 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true, Certificates: []tls.Certificate{clientCert}},
-			},
-		}
-
-		resp, err := httpClient.Do(req)
-		Expect(err).ToNot(HaveOccurred())
-
-		if resp != nil {
-			defer resp.Body.Close()
-		}
-
-		Expect(resp.StatusCode).To(Equal(http.StatusForbidden))
-	})
-
-	It("Rejects recording the compliance event with cert signed by unknown CA (cert auth)", func(ctx context.Context) {
-		payload := getSamplePostRequest(testNamespace)
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, eventsEndpoint, payload)
-		Expect(err).ToNot(HaveOccurred())
-		req.Header.Set("Content-Type", "application/json")
-
-		cert, key, err := certutil.GenerateSelfSignedCertKey("test.local", nil, nil)
-		Expect(err).ToNot(HaveOccurred())
-
-		badClientCert, err := tls.X509KeyPair(cert, key)
-		Expect(err).ToNot(HaveOccurred())
-
-		httpClient := http.Client{
-			Timeout: 30 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true, Certificates: []tls.Certificate{badClientCert}},
-			},
-		}
-
-		resp, err := httpClient.Do(req)
-		Expect(err).ToNot(HaveOccurred())
-
-		if resp != nil {
-			defer resp.Body.Close()
-		}
-
-		Expect(resp.StatusCode).To(Equal(http.StatusUnauthorized))
-	})
-
-	It("Allows recording the compliance event (token auth)", func(ctx context.Context) {
+	It("Allows recording the compliance event", func(ctx context.Context) {
 		payload := getSamplePostRequest(testNamespace)
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, eventsEndpoint, payload)
 		Expect(err).ToNot(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+token)
-
-		resp, err := httpClient.Do(req)
-		Expect(err).ToNot(HaveOccurred())
-
-		if resp != nil {
-			defer resp.Body.Close()
-		}
-
-		Expect(resp.StatusCode).To(Equal(http.StatusCreated))
-	})
-
-	It("Allows recording the compliance event (cert auth)", func(ctx context.Context) {
-		payload := getSamplePostRequest(testNamespace)
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, eventsEndpoint, payload)
-		Expect(err).ToNot(HaveOccurred())
-		req.Header.Set("Content-Type", "application/json")
-
-		httpClient := http.Client{
-			Timeout: 30 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true, Certificates: []tls.Certificate{clientCert}},
-			},
-		}
 
 		resp, err := httpClient.Do(req)
 		Expect(err).ToNot(HaveOccurred())

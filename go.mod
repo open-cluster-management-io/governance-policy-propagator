@@ -18,7 +18,6 @@ require (
 	github.com/stolostron/kubernetes-dependency-watches v0.5.2-0.20231212185913-628ab39622b8
 	k8s.io/api v0.27.7
 	k8s.io/apimachinery v0.27.7
-	k8s.io/apiserver v0.27.7
 	k8s.io/client-go v0.27.7
 	k8s.io/klog/v2 v2.100.1
 	open-cluster-management.io/api v0.12.0
@@ -31,7 +30,6 @@ require (
 	github.com/Masterminds/semver/v3 v3.2.1 // indirect
 	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/emicklei/go-restful/v3 v3.11.0 // indirect

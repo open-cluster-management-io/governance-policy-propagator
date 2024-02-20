@@ -2,10 +2,8 @@
 package complianceeventsapi
 
 import (
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"slices"
 	"strings"
@@ -15,8 +13,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	apiserverx509 "k8s.io/apiserver/pkg/authentication/request/x509"
-	"k8s.io/apiserver/pkg/server/dynamiccertificates"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -69,69 +65,10 @@ func parseToken(req *http.Request) string {
 	return strings.TrimSpace(strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer"))
 }
 
-// canRecordComplianceEvent will perform certificate or token authentication and perform a subject access review to
+// canRecordComplianceEvent will perform token authentication and perform a self subject access review to
 // ensure the input user has patch access to patch the policy status in the managed cluster namespace. An error is
-// returned if the authorization could not be determined. Note that authenticatedClient and authenticator can be nil
-// if certificate authentication isn't used. If both certificate and token authentication is present, certificate takes
-// precedence.
-func canRecordComplianceEvent(
-	cfg *rest.Config,
-	authenticatedClient *kubernetes.Clientset,
-	authenticator *apiserverx509.Authenticator,
-	clusterName string,
-	req *http.Request,
-) (bool, error) {
-	postRules := authzv1.ResourceAttributes{
-		Group:       "policy.open-cluster-management.io",
-		Version:     "v1",
-		Resource:    "policies",
-		Verb:        "patch",
-		Namespace:   clusterName,
-		Subresource: "status",
-	}
-
-	// req.TLS.PeerCertificates will be empty if certificate authentication is not enabled (e.g. endpoint is not HTTPS)
-	if req.TLS != nil && len(req.TLS.PeerCertificates) > 0 {
-		resp, ok, err := authenticator.AuthenticateRequest(req)
-		if err != nil {
-			if errors.As(err, &x509.UnknownAuthorityError{}) || errors.As(err, &x509.CertificateInvalidError{}) {
-				return false, ErrUnauthorized
-			}
-
-			return false, err
-		}
-
-		if !ok {
-			return false, ErrUnauthorized
-		}
-
-		review, err := authenticatedClient.AuthorizationV1().SubjectAccessReviews().Create(
-			req.Context(),
-			&authzv1.SubjectAccessReview{
-				Spec: authzv1.SubjectAccessReviewSpec{
-					ResourceAttributes: &postRules,
-					User:               resp.User.GetName(),
-					Groups:             resp.User.GetGroups(),
-					UID:                resp.User.GetUID(),
-				},
-			},
-			metav1.CreateOptions{},
-		)
-		if err != nil {
-			return false, err
-		}
-
-		if !review.Status.Allowed {
-			log.V(0).Info(
-				"The user is not authorized to record a compliance event",
-				"cluster", clusterName,
-				"user", resp.User.GetName(),
-			)
-		}
-
-		return review.Status.Allowed, nil
-	}
-
+// returned if the authorization could not be determined.
+func canRecordComplianceEvent(cfg *rest.Config, clusterName string, req *http.Request) (bool, error) {
 	userConfig, err := getUserKubeConfig(cfg, req)
 	if err != nil {
 		return false, err
@@ -146,7 +83,14 @@ func canRecordComplianceEvent(
 		req.Context(),
 		&authzv1.SelfSubjectAccessReview{
 			Spec: authzv1.SelfSubjectAccessReviewSpec{
-				ResourceAttributes: &postRules,
+				ResourceAttributes: &authzv1.ResourceAttributes{
+					Group:       "policy.open-cluster-management.io",
+					Version:     "v1",
+					Resource:    "policies",
+					Verb:        "patch",
+					Namespace:   clusterName,
+					Subresource: "status",
+				},
 			},
 		},
 		metav1.CreateOptions{},
@@ -201,21 +145,6 @@ func getTokenUsername(token string) string {
 	}
 
 	return username
-}
-
-// getCertAuthenticator returns an Authenticator that can validate that an input certificate is signed by the API
-// server represented in the input clientAuthCAs and that the certificate can be used for client authentication
-// (e.g. key usage).
-func getCertAuthenticator(clientAuthCAs []byte) (*apiserverx509.Authenticator, error) {
-	p, err := dynamiccertificates.NewStaticCAContent("client-ca", clientAuthCAs)
-	if err != nil {
-		return nil, err
-	}
-
-	// This is the same approach taken by kube-rbac-proxy.
-	authenticator := apiserverx509.NewDynamic(p.VerifyOptions, apiserverx509.CommonNameUserConversion)
-
-	return authenticator, nil
 }
 
 func getUserKubeConfig(config *rest.Config, r *http.Request) (*rest.Config, error) {
