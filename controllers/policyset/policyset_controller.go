@@ -186,13 +186,23 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 
 				err := r.Client.Get(ctx, pbNamespacedName, pb)
 				if err != nil {
-					log.V(1).Info("Error getting placement binding " + pbName)
+					if errors.IsNotFound(err) {
+						log.V(1).Info("The placement binding was not found", "placementBinding", pbName)
+					} else {
+						log.Error(err, "Failed to get the placement binding", "placementBinding", pbName)
+					}
+
+					continue
 				}
 
 				var clusterDecisions []string
 				clusterDecisions, err = common.GetDecisions(ctx, r.Client, pb)
 				if err != nil {
-					log.Error(err, "Error getting placement decisions for binding "+pbName)
+					log.Error(
+						err, "Failed to get placement decisions for the placement binding", "placementBinding", pbName,
+					)
+
+					continue
 				}
 
 				clusters = append(clusters, clusterDecisions...)
