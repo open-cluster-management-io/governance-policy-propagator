@@ -457,7 +457,14 @@ func main() {
 
 	complianceEventsNamespace, _ := os.LookupEnv(complianceeventsapi.WatchNamespaceEnvVar)
 	if complianceEventsNamespace == "" {
-		complianceEventsNamespace = "open-cluster-management"
+		namespace, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+		if err == nil {
+			complianceEventsNamespace = string(namespace)
+		} else {
+			log.Info("Could not detect the controller namespace. Assuming open-cluster-management.")
+
+			complianceEventsNamespace = "open-cluster-management"
+		}
 	}
 
 	wg := sync.WaitGroup{}
