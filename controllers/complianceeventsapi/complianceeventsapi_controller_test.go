@@ -31,6 +31,15 @@ func TestParseDBSecret(t *testing.T) {
 			expected: "postgresql://grc:grc@localhost/db?sslmode=disable&connect_timeout=5",
 		},
 		{
+			name: "connectionURL-newline",
+			secret: corev1.Secret{
+				Data: map[string][]byte{
+					"connectionURL": []byte("postgresql://grc:grc@localhost/db?sslmode=disable\n"),
+				},
+			},
+			expected: "postgresql://grc:grc@localhost/db?sslmode=disable&connect_timeout=5",
+		},
+		{
 			name: "connectionURL-ssl-ca",
 			secret: corev1.Secret{
 				Data: map[string][]byte{
