@@ -376,10 +376,7 @@ func ParseDBSecret(dbSecret *corev1.Secret, tempDirPath string) (string, error) 
 	if dbSecret.Data["connectionURL"] != nil {
 		connectionURL, err = url.Parse(strings.TrimSpace(string(dbSecret.Data["connectionURL"])))
 		if err != nil {
-			err := fmt.Errorf(
-				"%w: failed to parse the connectionURL value, but not logging the error to protect sensitive data",
-				ErrInvalidDBSecret,
-			)
+			err := fmt.Errorf("%w: failed to parse the connectionURL value: %w", ErrInvalidDBSecret, err)
 
 			return "", err
 		}
