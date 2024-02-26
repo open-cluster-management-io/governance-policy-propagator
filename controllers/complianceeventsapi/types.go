@@ -66,7 +66,7 @@ type ComplianceEvent struct {
 // Validate ensures that a valid POST request for a compliance event is set. This means that if the shorthand approach
 // of providing parent_policy.id and/or policy.id is used, the other fields for ParentPolicy and Policy will not be
 // present.
-func (ce ComplianceEvent) Validate(ctx context.Context, db *sql.DB) error {
+func (ce ComplianceEvent) Validate(ctx context.Context, serverContext *ComplianceServerCtx) error {
 	errs := make([]error, 0)
 
 	if err := ce.Cluster.Validate(); err != nil {
@@ -75,7 +75,7 @@ func (ce ComplianceEvent) Validate(ctx context.Context, db *sql.DB) error {
 
 	if ce.ParentPolicy != nil {
 		if ce.ParentPolicy.KeyID != 0 {
-			row := db.QueryRowContext(
+			row := serverContext.DB.QueryRowContext(
 				ctx, `SELECT EXISTS(SELECT * FROM parent_policies WHERE id=$1);`, ce.ParentPolicy.KeyID,
 			)
 
@@ -104,7 +104,9 @@ func (ce ComplianceEvent) Validate(ctx context.Context, db *sql.DB) error {
 	}
 
 	if ce.Policy.KeyID != 0 {
-		row := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT * FROM policies WHERE id=$1);`, ce.Policy.KeyID)
+		row := serverContext.DB.QueryRowContext(
+			ctx, `SELECT EXISTS(SELECT * FROM policies WHERE id=$1);`, ce.Policy.KeyID,
+		)
 
 		var exists bool
 
