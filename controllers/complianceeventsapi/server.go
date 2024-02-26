@@ -116,10 +116,12 @@ func init() {
 	)
 }
 
+const (
+	postgresForeignKeyViolationCode = "23503"
+)
+
 var (
 	clusterKeyCache         sync.Map
-	parentPolicyKeyCache    sync.Map
-	policyKeyCache          sync.Map
 	queryOptionsToSQL       map[string]string
 	validQueryArgs          []string
 	ErrInvalidSortOption    error
@@ -222,7 +224,7 @@ func (s *ComplianceAPIServer) Start(ctx context.Context, serverContext *Complian
 			}
 			getComplianceEvents(serverContext.DB, w, r, userConfig)
 		case http.MethodPost:
-			postComplianceEvent(serverContext.DB, s.cfg, w, r)
+			postComplianceEvent(serverContext, s.cfg, w, r)
 		default:
 			writeErrMsgJSON(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -975,7 +977,8 @@ LEFT JOIN policies ON compliance_events.policy_id = policies.id` + whereClause /
 	}
 }
 
-func postComplianceEvent(db *sql.DB, cfg *rest.Config, w http.ResponseWriter, r *http.Request) {
+// postComplianceEvent assumes you have a read lock already attained.
+func postComplianceEvent(serverContext *ComplianceServerCtx, cfg *rest.Config, w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Error(err, "error reading request body")
@@ -992,7 +995,7 @@ func postComplianceEvent(db *sql.DB, cfg *rest.Config, w http.ResponseWriter, r 
 		return
 	}
 
-	if err := reqEvent.Validate(r.Context(), db); err != nil {
+	if err := reqEvent.Validate(r.Context(), serverContext); err != nil {
 		writeErrMsgJSON(w, err.Error(), http.StatusBadRequest)
 
 		return
@@ -1019,7 +1022,7 @@ func postComplianceEvent(db *sql.DB, cfg *rest.Config, w http.ResponseWriter, r 
 		return
 	}
 
-	clusterFK, err := getClusterForeignKey(r.Context(), db, reqEvent.Cluster)
+	clusterFK, err := getClusterForeignKey(r.Context(), serverContext.DB, reqEvent.Cluster)
 	if err != nil {
 		log.Error(err, "error getting cluster foreign key")
 		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
@@ -1030,7 +1033,7 @@ func postComplianceEvent(db *sql.DB, cfg *rest.Config, w http.ResponseWriter, r 
 	reqEvent.Event.ClusterID = clusterFK
 
 	if reqEvent.ParentPolicy != nil {
-		pfk, err := getParentPolicyForeignKey(r.Context(), db, *reqEvent.ParentPolicy)
+		pfk, err := getParentPolicyForeignKey(r.Context(), serverContext, *reqEvent.ParentPolicy)
 		if err != nil {
 			log.Error(err, "error getting parent policy foreign key")
 			writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
@@ -1041,7 +1044,7 @@ func postComplianceEvent(db *sql.DB, cfg *rest.Config, w http.ResponseWriter, r 
 		reqEvent.Event.ParentPolicyID = &pfk
 	}
 
-	policyFK, err := getPolicyForeignKey(r.Context(), db, reqEvent.Policy)
+	policyFK, err := getPolicyForeignKey(r.Context(), serverContext, reqEvent.Policy)
 	if err != nil {
 		log.Error(err, "error getting policy foreign key")
 		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
@@ -1051,7 +1054,7 @@ func postComplianceEvent(db *sql.DB, cfg *rest.Config, w http.ResponseWriter, r 
 
 	reqEvent.Event.PolicyID = policyFK
 
-	err = reqEvent.Create(r.Context(), db)
+	err = reqEvent.Create(r.Context(), serverContext.DB)
 	if err != nil {
 		if errors.Is(err, errDuplicateComplianceEvent) {
 			writeErrMsgJSON(w, "The compliance event already exists", http.StatusConflict)
@@ -1059,7 +1062,29 @@ func postComplianceEvent(db *sql.DB, cfg *rest.Config, w http.ResponseWriter, r 
 			return
 		}
 
-		log.Error(err, "error inserting compliance event")
+		pqErr, ok := err.(*pq.Error) //nolint:errorlint
+		if ok && pqErr.Code == postgresForeignKeyViolationCode {
+			// This can only happen if the cache is out of date due to data loss in the database because if the
+			// database ID is provided, it is validated against the database.
+			log.Info(
+				"Encountered a foreign key violation. Assuming the database lost data, so the cache is "+
+					"being cleared",
+				"message", pqErr.Message,
+				"detail", pqErr.Detail,
+			)
+
+			// Temporarily upgrade the lock to a write lock
+			serverContext.Lock.RUnlock()
+			serverContext.Lock.Lock()
+			serverContext.ParentPolicyToID = sync.Map{}
+			serverContext.PolicyToID = sync.Map{}
+			clusterKeyCache = sync.Map{}
+			serverContext.Lock.Unlock()
+			serverContext.Lock.RLock()
+		} else {
+			log.Error(err, "error inserting compliance event")
+		}
+
 		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
 
 		return
@@ -1325,7 +1350,9 @@ func getClusterForeignKey(ctx context.Context, db *sql.DB, cluster Cluster) (int
 	return cluster.KeyID, nil
 }
 
-func getParentPolicyForeignKey(ctx context.Context, db *sql.DB, parent ParentPolicy) (int32, error) {
+func getParentPolicyForeignKey(
+	ctx context.Context, complianceServerCtx *ComplianceServerCtx, parent ParentPolicy,
+) (int32, error) {
 	if parent.KeyID != 0 {
 		return parent.KeyID, nil
 	}
@@ -1333,22 +1360,22 @@ func getParentPolicyForeignKey(ctx context.Context, db *sql.DB, parent ParentPol
 	// Check cache
 	parKey := parent.Key()
 
-	key, ok := parentPolicyKeyCache.Load(parKey)
+	key, ok := complianceServerCtx.ParentPolicyToID.Load(parKey)
 	if ok {
 		return key.(int32), nil
 	}
 
-	err := parent.GetOrCreate(ctx, db)
+	err := parent.GetOrCreate(ctx, complianceServerCtx.DB)
 	if err != nil {
 		return 0, err
 	}
 
-	parentPolicyKeyCache.Store(parKey, parent.KeyID)
+	complianceServerCtx.ParentPolicyToID.Store(parKey, parent.KeyID)
 
 	return parent.KeyID, nil
 }
 
-func getPolicyForeignKey(ctx context.Context, db *sql.DB, pol Policy) (int32, error) {
+func getPolicyForeignKey(ctx context.Context, complianceServerCtx *ComplianceServerCtx, pol Policy) (int32, error) {
 	if pol.KeyID != 0 {
 		return pol.KeyID, nil
 	}
@@ -1356,17 +1383,17 @@ func getPolicyForeignKey(ctx context.Context, db *sql.DB, pol Policy) (int32, er
 	// Check cache
 	polKey := pol.Key()
 
-	key, ok := policyKeyCache.Load(polKey)
+	key, ok := complianceServerCtx.PolicyToID.Load(polKey)
 	if ok {
 		return key.(int32), nil
 	}
 
-	err := pol.GetOrCreate(ctx, db)
+	err := pol.GetOrCreate(ctx, complianceServerCtx.DB)
 	if err != nil {
 		return 0, err
 	}
 
-	policyKeyCache.Store(polKey, pol.KeyID)
+	complianceServerCtx.PolicyToID.Store(polKey, pol.KeyID)
 
 	return pol.KeyID, nil
 }

@@ -232,6 +232,10 @@ var _ = Describe("Test compliance events API authentication and authorization", 
 				"name": "%s",
 				"cluster_id": "%s"
 			},
+			"parent_policy": {
+				"name": "parent-policy",
+				"namespace": "%s"
+			},
 			"policy": {
 				"apiGroup": "policy.open-cluster-management.io",
 				"kind": "ConfigurationPolicy",
@@ -243,7 +247,7 @@ var _ = Describe("Test compliance events API authentication and authorization", 
 				"message": "configmaps [etcd] not found in namespace default",
 				"timestamp": "2023-02-02T02:02:02.222Z"
 			}
-		}`, clusterName, uuid.New().String(), uuid.New().String()))
+		}`, clusterName, uuid.New().String(), uuid.New().String(), uuid.New().String()))
 
 		return bytes.NewBuffer(payload)
 	}
@@ -367,6 +371,8 @@ var _ = Describe("Test compliance events API authentication and authorization", 
 		Expect(err).ToNot(HaveOccurred())
 		_, err = db.ExecContext(ctx, "DELETE FROM clusters")
 		Expect(err).ToNot(HaveOccurred())
+		_, err = db.ExecContext(ctx, "DELETE FROM parent_policies")
+		Expect(err).ToNot(HaveOccurred())
 		_, err = db.ExecContext(ctx, "DELETE FROM policies")
 		Expect(err).ToNot(HaveOccurred())
 	})
@@ -415,6 +421,77 @@ var _ = Describe("Test compliance events API authentication and authorization", 
 		req.Header.Set("Authorization", "Bearer "+token)
 
 		resp, err := httpClient.Do(req)
+		Expect(err).ToNot(HaveOccurred())
+
+		if resp != nil {
+			defer resp.Body.Close()
+		}
+
+		Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+	})
+
+	It("Clears its database ID cache when the database loses data", func(ctx context.Context) {
+		By("Creating a compliance event")
+		payloadStr := getSamplePostRequest(testNamespace).String()
+		payload := bytes.NewBufferString(payloadStr)
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, eventsEndpoint, payload)
+		Expect(err).ToNot(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+
+		resp, err := httpClient.Do(req)
+		Expect(err).ToNot(HaveOccurred())
+
+		if resp != nil {
+			defer resp.Body.Close()
+		}
+
+		Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+		By("Deleting all compliance events and policy references")
+		connectionURL := "postgresql://grc:grc@localhost:5432/ocm-compliance-history?sslmode=disable"
+		db, err := sql.Open("postgres", connectionURL)
+		DeferCleanup(func() {
+			Expect(db.Close()).To(Succeed())
+		})
+
+		Expect(err).ToNot(HaveOccurred())
+
+		_, err = db.ExecContext(ctx, "DELETE FROM compliance_events")
+		Expect(err).ToNot(HaveOccurred())
+		_, err = db.ExecContext(ctx, "DELETE FROM parent_policies")
+		Expect(err).ToNot(HaveOccurred())
+		_, err = db.ExecContext(ctx, "DELETE FROM policies")
+		Expect(err).ToNot(HaveOccurred())
+
+		By("Verifying an internal error is returned the first time an invalid ID is provided")
+		payload = bytes.NewBufferString(payloadStr)
+		req, err = http.NewRequestWithContext(ctx, http.MethodPost, eventsEndpoint, payload)
+		Expect(err).ToNot(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+
+		resp, err = httpClient.Do(req)
+		Expect(err).ToNot(HaveOccurred())
+
+		if resp != nil {
+			defer resp.Body.Close()
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(resp.StatusCode).To(Equal(http.StatusInternalServerError), fmt.Sprintf("Got response %s", string(body)))
+
+		By("Verifying a success after the cache is cleared")
+		payload = bytes.NewBufferString(payloadStr)
+		req, err = http.NewRequestWithContext(ctx, http.MethodPost, eventsEndpoint, payload)
+		Expect(err).ToNot(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+
+		resp, err = httpClient.Do(req)
 		Expect(err).ToNot(HaveOccurred())
 
 		if resp != nil {

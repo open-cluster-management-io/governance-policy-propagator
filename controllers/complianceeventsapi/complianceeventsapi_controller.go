@@ -181,6 +181,11 @@ func (r *ComplianceDBSecretReconciler) Reconcile(
 		// Need the connection URL for the migration.
 		r.ComplianceServerCtx.connectionURL = r.ConnectionURL
 
+		// Clear the database ID caches in case this is a new database or the database was restored
+		r.ComplianceServerCtx.ParentPolicyToID = sync.Map{}
+		r.ComplianceServerCtx.PolicyToID = sync.Map{}
+		clusterKeyCache = sync.Map{}
+
 		if parsedConnectionURL == "" {
 			r.ComplianceServerCtx.DB = nil
 		} else {
