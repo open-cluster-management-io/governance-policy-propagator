@@ -16,6 +16,7 @@ require (
 	github.com/stolostron/go-log-utils v0.1.2
 	github.com/stolostron/go-template-utils/v4 v4.0.1-0.20231212190701-4dc096ec1b40
 	github.com/stolostron/kubernetes-dependency-watches v0.5.2-0.20231212185913-628ab39622b8
+	github.com/stolostron/rbac-api-utils v0.0.0-20240227203157-d0f039286f99
 	k8s.io/api v0.27.7
 	k8s.io/apimachinery v0.27.7
 	k8s.io/client-go v0.27.7
@@ -66,7 +67,6 @@ require (
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/shopspring/decimal v1.3.1 // indirect
 	github.com/spf13/cast v1.5.1 // indirect
-	github.com/stolostron/rbac-api-utils v0.0.0-20230213163759-159deac7d398
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.26.0 // indirect
