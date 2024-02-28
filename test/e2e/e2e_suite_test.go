@@ -53,6 +53,7 @@ var (
 	gvrNamespace          schema.GroupVersionResource
 	defaultTimeoutSeconds int
 	defaultImageRegistry  string
+	clientToken           string
 )
 
 func TestE2e(t *testing.T) {
@@ -111,6 +112,11 @@ var _ = BeforeSuite(func() {
 	defaultImageRegistry = "quay.io/open-cluster-management"
 	testNamespace = "policy-propagator-test"
 	defaultTimeoutSeconds = 30
+
+	k8sConfig, err := LoadConfig("", "", "")
+	Expect(err).ToNot(HaveOccurred())
+	clientToken = k8sConfig.BearerToken
+
 	By("Create Namespace if needed")
 	namespaces := clientHub.CoreV1().Namespaces()
 	if _, err := namespaces.Get(

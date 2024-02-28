@@ -227,6 +227,7 @@ install-resources:
 	@echo creating namespaces
 	kubectl create ns policy-propagator-test
 	kubectl create ns $(KIND_NAMESPACE)
+	kubectl create ns local-cluster
 	kubectl create ns managed1
 	kubectl create ns managed2
 	kubectl create ns managed3
@@ -237,6 +238,7 @@ install-resources:
 	kubectl apply -k deploy/rbac -n $(KIND_NAMESPACE)
 	kubectl apply -f deploy/manager/service-account.yaml -n $(KIND_NAMESPACE)
 	@echo creating cluster resources
+	kubectl apply -f test/resources/local-cluster.yaml
 	kubectl apply -f test/resources/managed1-cluster.yaml
 	kubectl apply -f test/resources/managed2-cluster.yaml
 	kubectl apply -f test/resources/managed3-cluster.yaml

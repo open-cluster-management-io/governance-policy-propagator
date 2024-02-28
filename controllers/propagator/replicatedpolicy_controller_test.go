@@ -24,7 +24,7 @@ func getPolicyTemplateAnnotations(policy *policiesv1.Policy, templateIndex int) 
 }
 
 func TestSetDBAnnotationsNoDB(t *testing.T) {
-	complianceAPICtx, err := complianceeventsapi.NewComplianceServerCtx("postgres://localhost?mydb")
+	complianceAPICtx, err := complianceeventsapi.NewComplianceServerCtx("postgres://localhost?mydb", "unknown")
 	if err != nil {
 		t.Fatalf("Failed create the compliance server context: %v", err)
 	}
