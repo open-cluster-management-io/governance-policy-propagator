@@ -83,7 +83,7 @@ func (ce ComplianceEvent) Validate(ctx context.Context, serverContext *Complianc
 
 			err := row.Scan(&exists)
 			if err != nil {
-				log.Error(err, "Failed to query for the existence of the parent policy ID")
+				log.Error(err, "Failed to query for the existence of the parent policy ID", getPqErrKeyVals(err)...)
 
 				return errors.New("failed to determine if parent_policy.id is valid")
 			}
@@ -112,7 +112,7 @@ func (ce ComplianceEvent) Validate(ctx context.Context, serverContext *Complianc
 
 		err := row.Scan(&exists)
 		if err != nil {
-			log.Error(err, "Failed to query for the existence of the policy ID")
+			log.Error(err, "Failed to query for the existence of the policy ID", getPqErrKeyVals(err)...)
 
 			return errors.New("failed to determine if policy.id is valid")
 		}

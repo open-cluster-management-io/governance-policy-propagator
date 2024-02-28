@@ -522,7 +522,7 @@ func setAuthorizedClusters(ctx context.Context, db *sql.DB, parsed *queryOptions
 				continue
 			}
 
-			log.Error(err, "Failed to get cluster name from cluster ID", "ID", id)
+			log.Error(err, "Failed to get cluster name from cluster ID", getPqErrKeyVals(err, "ID", id)...)
 
 			return parsed, err
 		}
@@ -720,7 +720,7 @@ func getSingleComplianceEvent(db *sql.DB, w http.ResponseWriter,
 			return
 		}
 
-		log.Error(err, "Failed to unmarshal the database results")
+		log.Error(err, "Failed to unmarshal the database results", getPqErrKeyVals(err)...)
 		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
 
 		return
@@ -753,6 +753,26 @@ func getSingleComplianceEvent(db *sql.DB, w http.ResponseWriter,
 	if _, err = w.Write(jsonResp); err != nil {
 		log.Error(err, "Error writing success response")
 	}
+}
+
+// getPqErrKeyVals is a helper to add additional database error details to a log message. additionalKeyVals is provided
+// as a convenience so that the keys don't need to be explicitly set to interface{} types when using the
+// `getPqErrKeyVals(err, "key1", "val1")...“ syntax.
+func getPqErrKeyVals(err error, additionalKeyVals ...interface{}) []interface{} {
+	unwrappedErr := err
+
+	for unwrappedErr != nil {
+		if pqErr, ok := unwrappedErr.(*pq.Error); ok { //nolint: errorlint
+			return append(
+				[]interface{}{"dbMessage", pqErr.Message, "dbDetail", pqErr.Detail, "dbCode", pqErr.Code},
+				additionalKeyVals...,
+			)
+		}
+
+		unwrappedErr = errors.Unwrap(unwrappedErr)
+	}
+
+	return additionalKeyVals
 }
 
 func getClusterNameFromID(ctx context.Context, db *sql.DB, clusterID string) (name string, err error) {
@@ -944,7 +964,7 @@ LEFT JOIN policies ON compliance_events.policy_id = policies.id` + whereClause /
 	var total uint64
 
 	if err := row.Scan(&total); err != nil {
-		log.Error(err, "Failed to get the count of compliance events")
+		log.Error(err, "Failed to get the count of compliance events", getPqErrKeyVals(err)...)
 		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
 
 		return
@@ -1025,7 +1045,7 @@ func postComplianceEvent(serverContext *ComplianceServerCtx, cfg *rest.Config, w
 
 	clusterFK, err := GetClusterForeignKey(r.Context(), serverContext.DB, reqEvent.Cluster)
 	if err != nil {
-		log.Error(err, "error getting cluster foreign key")
+		log.Error(err, "error getting cluster foreign key", getPqErrKeyVals(err)...)
 		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
 
 		return
@@ -1036,7 +1056,7 @@ func postComplianceEvent(serverContext *ComplianceServerCtx, cfg *rest.Config, w
 	if reqEvent.ParentPolicy != nil {
 		pfk, err := getParentPolicyForeignKey(r.Context(), serverContext, *reqEvent.ParentPolicy)
 		if err != nil {
-			log.Error(err, "error getting parent policy foreign key")
+			log.Error(err, "error getting parent policy foreign key", getPqErrKeyVals(err)...)
 			writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
 
 			return
@@ -1047,7 +1067,7 @@ func postComplianceEvent(serverContext *ComplianceServerCtx, cfg *rest.Config, w
 
 	policyFK, err := getPolicyForeignKey(r.Context(), serverContext, reqEvent.Policy)
 	if err != nil {
-		log.Error(err, "error getting policy foreign key")
+		log.Error(err, "error getting policy foreign key", getPqErrKeyVals(err)...)
 		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
 
 		return
@@ -1083,7 +1103,7 @@ func postComplianceEvent(serverContext *ComplianceServerCtx, cfg *rest.Config, w
 			serverContext.Lock.Unlock()
 			serverContext.Lock.RLock()
 		} else {
-			log.Error(err, "error inserting compliance event")
+			log.Error(err, "error inserting compliance event", getPqErrKeyVals(err)...)
 		}
 
 		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
