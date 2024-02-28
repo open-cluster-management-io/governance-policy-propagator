@@ -36,23 +36,25 @@ const (
 )
 
 var (
-	testNamespace         string
-	clientHub             kubernetes.Interface
-	clientHubDynamic      dynamic.Interface
-	kubeconfigHub         string
-	complianceAPIPort     uint
-	gvrPolicy             schema.GroupVersionResource
-	gvrPolicyAutomation   schema.GroupVersionResource
-	gvrPolicySet          schema.GroupVersionResource
-	gvrPlacementBinding   schema.GroupVersionResource
-	gvrPlacementRule      schema.GroupVersionResource
-	gvrPlacement          schema.GroupVersionResource
-	gvrPlacementDecision  schema.GroupVersionResource
-	gvrSecret             schema.GroupVersionResource
-	gvrAnsibleJob         schema.GroupVersionResource
-	gvrNamespace          schema.GroupVersionResource
-	defaultTimeoutSeconds int
-	defaultImageRegistry  string
+	testNamespace           string
+	clientHub               kubernetes.Interface
+	clientHubDynamic        dynamic.Interface
+	placementClient         dynamic.ResourceInterface
+	placementDecisionClient dynamic.ResourceInterface
+	kubeconfigHub           string
+	complianceAPIPort       uint
+	gvrPolicy               schema.GroupVersionResource
+	gvrPolicyAutomation     schema.GroupVersionResource
+	gvrPolicySet            schema.GroupVersionResource
+	gvrPlacementBinding     schema.GroupVersionResource
+	gvrPlacementRule        schema.GroupVersionResource
+	gvrPlacement            schema.GroupVersionResource
+	gvrPlacementDecision    schema.GroupVersionResource
+	gvrSecret               schema.GroupVersionResource
+	gvrAnsibleJob           schema.GroupVersionResource
+	gvrNamespace            schema.GroupVersionResource
+	defaultTimeoutSeconds   int
+	defaultImageRegistry    string
 )
 
 func TestE2e(t *testing.T) {
@@ -111,6 +113,8 @@ var _ = BeforeSuite(func() {
 	defaultImageRegistry = "quay.io/open-cluster-management"
 	testNamespace = "policy-propagator-test"
 	defaultTimeoutSeconds = 30
+	placementClient = clientHubDynamic.Resource(gvrPlacement).Namespace(testNamespace)
+	placementDecisionClient = clientHubDynamic.Resource(gvrPlacementDecision).Namespace(testNamespace)
 	By("Create Namespace if needed")
 	namespaces := clientHub.CoreV1().Namespaces()
 	if _, err := namespaces.Get(

@@ -29,7 +29,7 @@ var _ = Describe("Test replicated_policy controller and propagation", Ordered, S
 		Expect(plc).NotTo(BeNil())
 	})
 	AfterAll(func() {
-		By("Creating " + case19PolicyName)
+		By("Deleting " + case19PolicyName)
 		utils.Kubectl("delete",
 			"-f", case19PolicyYaml,
 			"-n", testNamespace,
@@ -47,20 +47,16 @@ var _ = Describe("Test replicated_policy controller and propagation", Ordered, S
 	})
 	It("should propagate reconcile only managed2", func() {
 		By("Patching test-policy-plr with decision of cluster managed1, managed2")
+		decisionName := case19PolicyName + "-plr-1"
 		plr := utils.GetWithTimeout(
 			clientHubDynamic,
 			gvrPlacementDecision,
-			case19PolicyName+"-plr-1",
+			decisionName,
 			testNamespace,
 			true,
 			defaultTimeoutSeconds,
 		)
-		plr.Object["status"] = utils.GeneratePldStatus(plr.GetName(), plr.GetNamespace(), "managed1", "managed2")
-		_, err := clientHubDynamic.Resource(gvrPlacementDecision).Namespace(testNamespace).UpdateStatus(
-			context.TODO(),
-			plr, metav1.UpdateOptions{},
-		)
-		Expect(err).ToNot(HaveOccurred())
+		utils.GeneratePldStatus(placementDecisionClient, plr, "managed1", "managed2")
 		plc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, testNamespace+"."+case19PolicyName, "managed1", true, defaultTimeoutSeconds,
 		)
@@ -80,17 +76,12 @@ var _ = Describe("Test replicated_policy controller and propagation", Ordered, S
 		plr = utils.GetWithTimeout(
 			clientHubDynamic,
 			gvrPlacementDecision,
-			case19PolicyName+"-plr-1",
+			decisionName,
 			testNamespace,
 			true,
 			defaultTimeoutSeconds,
 		)
-		plr.Object["status"] = utils.GeneratePldStatus(plr.GetName(), plr.GetNamespace(), "managed2")
-		_, err = clientHubDynamic.Resource(gvrPlacementDecision).Namespace(testNamespace).UpdateStatus(
-			context.TODO(),
-			plr, metav1.UpdateOptions{},
-		)
-		Expect(err).ToNot(HaveOccurred())
+		utils.GeneratePldStatus(placementDecisionClient, plr, "managed2")
 		plc = utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, testNamespace+"."+case19PolicyName, "managed1", false, defaultTimeoutSeconds,
 		)
@@ -125,12 +116,7 @@ var _ = Describe("Test replicated_policy controller and propagation", Ordered, S
 			true,
 			defaultTimeoutSeconds,
 		)
-		plr.Object["status"] = utils.GeneratePldStatus(plr.GetName(), plr.GetNamespace(), "managed1")
-		_, err = clientHubDynamic.Resource(gvrPlacementDecision).Namespace(testNamespace).UpdateStatus(
-			context.TODO(),
-			plr, metav1.UpdateOptions{},
-		)
-		Expect(err).ShouldNot(HaveOccurred())
+		utils.GeneratePldStatus(placementDecisionClient, plr, "managed1")
 		By("Patching gvrPlacementBinding placementRef")
 		plb := utils.GetWithTimeout(
 			clientHubDynamic,

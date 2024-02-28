@@ -41,11 +41,30 @@ func GeneratePlrStatus(clusters ...string) *appsv1.PlacementRuleStatus {
 	return &appsv1.PlacementRuleStatus{Decisions: plrDecision}
 }
 
+// GeneratePlacementStatus generate plr status with given clusters
+func GeneratePlacementStatus(
+	client dynamic.ResourceInterface, placement *unstructured.Unstructured, pldName string, clusterCount int32,
+) {
+	status := clusterv1beta1.PlacementStatus{}
+	status.NumberOfSelectedClusters = clusterCount
+	status.DecisionGroups = []clusterv1beta1.DecisionGroupStatus{
+		{
+			ClustersCount: clusterCount,
+			Decisions:     []string{pldName},
+		},
+	}
+
+	_, err := client.UpdateStatus(context.TODO(), placement, metav1.UpdateOptions{})
+
+	ExpectWithOffset(1, err).ToNot(HaveOccurred())
+}
+
 // GeneratePldStatus generate pld status with given clusters
 func GeneratePldStatus(
-	_ string, _ string, clusters ...string,
-) *clusterv1beta1.PlacementDecisionStatus {
+	client dynamic.ResourceInterface, decision *unstructured.Unstructured, clusters ...string,
+) {
 	plrDecision := []clusterv1beta1.ClusterDecision{}
+
 	for _, cluster := range clusters {
 		plrDecision = append(plrDecision, clusterv1beta1.ClusterDecision{
 			ClusterName: cluster,
@@ -53,7 +72,12 @@ func GeneratePldStatus(
 		})
 	}
 
-	return &clusterv1beta1.PlacementDecisionStatus{Decisions: plrDecision}
+	decision, err := client.Update(context.TODO(), decision, metav1.UpdateOptions{})
+	ExpectWithOffset(1, err).ToNot(HaveOccurred())
+
+	decision.Object["status"] = clusterv1beta1.PlacementDecisionStatus{Decisions: plrDecision}
+	_, err = client.UpdateStatus(context.TODO(), decision, metav1.UpdateOptions{})
+	ExpectWithOffset(1, err).ToNot(HaveOccurred())
 }
 
 func RemovePolicyTemplateDBAnnotations(plc *unstructured.Unstructured) error {

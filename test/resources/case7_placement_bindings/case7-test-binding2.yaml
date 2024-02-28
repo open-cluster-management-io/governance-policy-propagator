@@ -27,3 +27,4 @@ metadata:
   name: case7-test-policy-plr-2
   labels:
     cluster.open-cluster-management.io/placement: case7-test-policy-plr2
+    cluster.open-cluster-management.io/decision-group-index: "0"

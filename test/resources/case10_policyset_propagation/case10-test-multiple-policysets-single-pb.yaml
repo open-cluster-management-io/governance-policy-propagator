@@ -88,6 +88,7 @@ metadata:
   name: case10-test-policyset-plm-decision
   labels:
     cluster.open-cluster-management.io/placement: case10-test-policyset-plm
+    cluster.open-cluster-management.io/decision-group-index: "0"
 status:
   decisions:
   - clusterName: managed2
