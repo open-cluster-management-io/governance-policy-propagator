@@ -24,8 +24,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -58,8 +60,13 @@ import (
 )
 
 var (
-	scheme = k8sruntime.NewScheme()
-	log    = ctrl.Log.WithName("setup")
+	scheme          = k8sruntime.NewScheme()
+	log             = ctrl.Log.WithName("setup")
+	clusterClaimGVR = schema.GroupVersionResource{
+		Group:    "cluster.open-cluster-management.io",
+		Version:  "v1alpha1",
+		Resource: "clusterclaims",
+	}
 )
 
 func printVersion() {
@@ -364,9 +371,30 @@ func main() {
 		}
 	}
 
+	dynamicClient := dynamic.NewForConfigOrDie(mgr.GetConfig())
+
+	var clusterID string
+
+	idClusterClaim, err := dynamicClient.Resource(clusterClaimGVR).Get(controllerCtx, "id.k8s.io", metav1.GetOptions{})
+	if err != nil && !k8serrors.IsNotFound(err) {
+		log.Error(err, "Failed to find the cluster ID")
+
+		os.Exit(1)
+	}
+
+	if err == nil {
+		clusterID, _, _ = unstructured.NestedString(idClusterClaim.Object, "spec", "value")
+	}
+
+	if clusterID == "" {
+		log.Info("The id.k8s.io cluster claim is not set. Using the cluster ID of unknown.")
+
+		clusterID = "unknown"
+	}
+
 	if err = (&automationctrl.PolicyAutomationReconciler{
 		Client:        mgr.GetClient(),
-		DynamicClient: dynamic.NewForConfigOrDie(mgr.GetConfig()),
+		DynamicClient: dynamicClient,
 		Scheme:        mgr.GetScheme(),
 		Recorder:      mgr.GetEventRecorderFor(automationctrl.ControllerName),
 	}).SetupWithManager(mgr); err != nil {
@@ -475,6 +503,7 @@ func main() {
 		controllerCtx,
 		cfg,
 		client,
+		clusterID,
 		complianceEventsNamespace,
 		net.JoinHostPort(complianceAPIHost, complianceAPIPort),
 		complianceAPICert,
@@ -519,6 +548,7 @@ func startComplianceEventsAPI(
 	ctx context.Context,
 	cfg *rest.Config,
 	client *kubernetes.Clientset,
+	clusterID string,
 	controllerNamespace string,
 	complianceAPIAddr string,
 	complianceAPICert string,
@@ -562,7 +592,7 @@ func startComplianceEventsAPI(
 		}
 	}
 
-	complianceServerCtx, err := complianceeventsapi.NewComplianceServerCtx(dbConnectionURL)
+	complianceServerCtx, err := complianceeventsapi.NewComplianceServerCtx(dbConnectionURL, clusterID)
 	if err == nil {
 		// If the migration failed, MigrateDB will log it and MonitorDatabaseConnection will fix it.
 		err := complianceServerCtx.MigrateDB(ctx, client, controllerNamespace)

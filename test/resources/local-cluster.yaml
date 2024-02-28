@@ -1,0 +1,9 @@
+apiVersion: cluster.open-cluster-management.io/v1
+kind: ManagedCluster
+metadata:
+  labels:
+    cloud: auto-detect
+    name: local-cluster
+    vendor: auto-detect
+  name: local-cluster
+spec: {}

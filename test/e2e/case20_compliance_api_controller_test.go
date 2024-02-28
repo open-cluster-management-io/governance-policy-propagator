@@ -27,7 +27,7 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
-var _ = Describe("Test governance-policy-database secret changes and DB annotations", Serial, Ordered, func() {
+var _ = Describe("Test governance-policy-database secret changes, DB annotations, and events", Serial, Ordered, func() {
 	const (
 		case20PolicyName string = "case20-policy"
 		case20PolicyYAML string = "../resources/case20_compliance_api_controller/policy.yaml"
@@ -36,48 +36,15 @@ var _ = Describe("Test governance-policy-database secret changes and DB annotati
 	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
 	nsName := fmt.Sprintf("case20-%d", seededRand.Int31())
 
-	AfterAll(func(ctx context.Context) {
-		Eventually(func(g Gomega) {
-			namespacedSecret := clientHub.CoreV1().Secrets("open-cluster-management")
-			secret, err := namespacedSecret.Get(
-				ctx, complianceeventsapi.DBSecretName, metav1.GetOptions{},
-			)
-			g.Expect(err).ToNot(HaveOccurred())
-
-			if secret.Data["port"] != nil {
-				delete(secret.Data, "port")
-
-				_, err = namespacedSecret.Update(ctx, secret, metav1.UpdateOptions{})
-				g.Expect(err).ToNot(HaveOccurred())
-			}
-		}, defaultTimeoutSeconds, 1).Should(Succeed())
-
-		err := clientHub.CoreV1().Namespaces().Delete(ctx, nsName, metav1.DeleteOptions{})
-		Expect(err).ToNot(HaveOccurred())
-	})
-
-	It("Updates the connection to be invalid", func(ctx context.Context) {
-		bringDownDBConnection(ctx)
-	})
-
-	It("Adds missing database IDs once database connection is restored", func(ctx context.Context) {
-		By("Creating a random namespace to avoid a cache hit")
-		ns := &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: nsName,
-			},
-		}
-		_, err := clientHub.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
-		Expect(err).ToNot(HaveOccurred())
-
+	createCase20Policy := func(ctx context.Context) {
 		By("Creating " + case20PolicyName)
 		utils.Kubectl("apply", "-f", case20PolicyYAML, "-n", nsName, "--kubeconfig="+kubeconfigHub)
 		plc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, case20PolicyName, nsName, true, defaultTimeoutSeconds,
 		)
-		Expect(plc).NotTo(BeNil())
+		ExpectWithOffset(1, plc).NotTo(BeNil())
 
-		By("Patching the placement with decision of cluster managed1")
+		By("Patching the placement with decision of cluster local-cluster")
 		pld := utils.GetWithTimeout(
 			clientHubDynamic,
 			gvrPlacementDecision,
@@ -86,13 +53,90 @@ var _ = Describe("Test governance-policy-database secret changes and DB annotati
 			true,
 			defaultTimeoutSeconds,
 		)
-		pld.Object["status"] = utils.GeneratePldStatus(pld.GetName(), pld.GetNamespace(), "managed1")
-		_, err = clientHubDynamic.Resource(gvrPlacementDecision).Namespace(nsName).UpdateStatus(
+		pld.Object["status"] = utils.GeneratePldStatus(pld.GetName(), pld.GetNamespace(), "local-cluster")
+		_, err := clientHubDynamic.Resource(gvrPlacementDecision).Namespace(nsName).UpdateStatus(
 			ctx, pld, metav1.UpdateOptions{},
 		)
-		Expect(err).ToNot(HaveOccurred())
+		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 
 		By("Waiting for the replicated policy")
+		replicatedPolicy := utils.GetWithTimeout(
+			clientHubDynamic, gvrPolicy, case20PolicyName, nsName, true, defaultTimeoutSeconds,
+		)
+		ExpectWithOffset(1, replicatedPolicy).NotTo(BeNil())
+	}
+
+	waitForDisabledEvent := func(ctx context.Context, after time.Time) {
+		afterStr := after.Format(time.RFC3339Nano)
+
+		By("Waiting for the disabled compliance event after " + afterStr)
+		EventuallyWithOffset(1, func(g Gomega) {
+			endpoint := fmt.Sprintf(
+				"https://localhost:%d/api/v1/compliance-events?cluster.name=local-cluster&event.compliance=Disabled"+
+					"&event.timestamp_after=%s&policy.name=%s",
+				complianceAPIPort,
+				afterStr,
+				case20PolicyName,
+			)
+
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			req.Header.Set("Authorization", "Bearer "+clientToken)
+
+			resp, err := httpClient.Do(req)
+			if err != nil {
+				return
+			}
+
+			defer resp.Body.Close()
+
+			g.Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+			body, err := io.ReadAll(resp.Body)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			result := map[string]any{}
+
+			err = json.Unmarshal(body, &result)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			metadata, ok := result["metadata"].(map[string]interface{})
+			g.Expect(ok).To(BeTrue(), "The metadata key was the wrong type")
+
+			g.Expect(metadata["total"]).To(BeEquivalentTo(1))
+		}, defaultTimeoutSeconds*2, 1).Should(Succeed())
+	}
+
+	BeforeAll(func(ctx context.Context) {
+		Expect(clientToken).ToNot(BeEmpty(), "Ensure you use the service account kubeconfig (kubeconfig_hub)")
+
+		By("Creating a random namespace to avoid a cache hit")
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: nsName,
+			},
+		}
+		_, err := clientHub.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
+		Expect(err).ToNot(HaveOccurred())
+	})
+
+	AfterEach(func(ctx context.Context) {
+		restoreDBConnection(ctx)
+	})
+
+	AfterAll(func(ctx context.Context) {
+		err := clientHub.CoreV1().Namespaces().Delete(ctx, nsName, metav1.DeleteOptions{})
+		Expect(err).ToNot(HaveOccurred())
+	})
+
+	It("Adds missing database IDs once database connection is restored", func(ctx context.Context) {
+		By("Updating the connection to be invalid")
+		bringDownDBConnection(ctx)
+
+		createCase20Policy(ctx)
+
+		By("Getting the replicated policy")
 		replicatedPolicy := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, case20PolicyName, nsName, true, defaultTimeoutSeconds,
 		)
@@ -119,7 +163,7 @@ var _ = Describe("Test governance-policy-database secret changes and DB annotati
 		By("Waiting for the replicated policy to have the database ID annotations")
 		Eventually(func(g Gomega) {
 			replicatedPolicy = utils.GetWithTimeout(
-				clientHubDynamic, gvrPolicy, nsName+"."+case20PolicyName, "managed1", true, defaultTimeoutSeconds,
+				clientHubDynamic, gvrPolicy, nsName+"."+case20PolicyName, "local-cluster", true, defaultTimeoutSeconds,
 			)
 			g.Expect(replicatedPolicy).NotTo(BeNil())
 
@@ -140,37 +184,42 @@ var _ = Describe("Test governance-policy-database secret changes and DB annotati
 		}, defaultTimeoutSeconds, 1).Should(Succeed())
 	})
 
-	It("Adds the database IDs by using the cache", func(ctx context.Context) {
+	It("Creates a disabled event for local-cluster", func(ctx context.Context) {
+		now := time.Now().UTC().Add(-1 * time.Second)
+
+		By("Deleting " + case20PolicyName)
+		utils.Kubectl("delete", "-f", case20PolicyYAML, "-n", nsName, "--kubeconfig="+kubeconfigHub)
+		plc := utils.GetWithTimeout(
+			clientHubDynamic, gvrPolicy, case20PolicyName, nsName, false, defaultTimeoutSeconds,
+		)
+		Expect(plc).To(BeNil())
+
+		waitForDisabledEvent(ctx, now)
+	})
+
+	It("Creates a disabled event for local-cluster when the database is down and restored", func(ctx context.Context) {
+		createCase20Policy(ctx)
+
 		bringDownDBConnection(ctx)
 
-		By("Deleting the replicated policy")
-		err := clientHubDynamic.Resource(gvrPolicy).Namespace(nsName).Delete(
-			ctx, case20PolicyName, metav1.DeleteOptions{},
+		now := time.Now().UTC().Add(-1 * time.Second)
+
+		By("Deleting " + case20PolicyName)
+		utils.Kubectl("delete", "-f", case20PolicyYAML, "-n", nsName, "--kubeconfig="+kubeconfigHub)
+		plc := utils.GetWithTimeout(
+			clientHubDynamic, gvrPolicy, case20PolicyName, nsName, false, defaultTimeoutSeconds,
 		)
-		Expect(err).ToNot(HaveOccurred())
+		Expect(plc).To(BeNil())
 
-		By("Waiting for the replicated policy to have the database ID annotations")
-		Eventually(func(g Gomega) {
-			replicatedPolicy := utils.GetWithTimeout(
-				clientHubDynamic, gvrPolicy, nsName+"."+case20PolicyName, "managed1", true, defaultTimeoutSeconds,
-			)
-			g.Expect(replicatedPolicy).NotTo(BeNil())
+		By("Waiting for the replicated policy to be deleted")
+		replicatedPolicy := utils.GetWithTimeout(
+			clientHubDynamic, gvrPolicy, case20PolicyName, nsName, false, defaultTimeoutSeconds,
+		)
+		Expect(replicatedPolicy).To(BeNil())
 
-			annotations := replicatedPolicy.GetAnnotations()
-			g.Expect(annotations[propagator.ParentPolicyIDAnnotation]).ToNot(BeEmpty())
+		restoreDBConnection(ctx)
 
-			templates, _, _ := unstructured.NestedSlice(replicatedPolicy.Object, "spec", "policy-templates")
-			g.Expect(templates).To(HaveLen(1))
-
-			policyID, _, _ := unstructured.NestedString(
-				templates[0].(map[string]interface{}),
-				"objectDefinition",
-				"metadata",
-				"annotations",
-				propagator.PolicyIDAnnotation,
-			)
-			g.Expect(policyID).ToNot(BeEmpty())
-		}, defaultTimeoutSeconds*2, 1).Should(Succeed())
+		waitForDisabledEvent(ctx, now)
 	})
 })
 
@@ -196,9 +245,7 @@ func bringDownDBConnection(ctx context.Context) {
 		)
 		g.Expect(err).ToNot(HaveOccurred())
 
-		// Set auth token
-		token := getToken(ctx, "open-cluster-management", "governance-policy-propagator")
-		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Authorization", "Bearer "+clientToken)
 
 		resp, err := httpClient.Do(req)
 		if err != nil {
@@ -218,6 +265,48 @@ func bringDownDBConnection(ctx context.Context) {
 		g.Expect(err).ToNot(HaveOccurred())
 
 		g.Expect(respJSON["message"]).To(Equal("The database is unavailable"))
+	}, defaultTimeoutSeconds, 1).Should(Succeed())
+}
+
+func restoreDBConnection(ctx context.Context) {
+	By("Restoring the database connection")
+	EventuallyWithOffset(1, func(g Gomega) {
+		namespacedSecret := clientHub.CoreV1().Secrets("open-cluster-management")
+		secret, err := namespacedSecret.Get(
+			ctx, complianceeventsapi.DBSecretName, metav1.GetOptions{},
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		if secret.Data["port"] == nil {
+			return
+		}
+
+		delete(secret.Data, "port")
+
+		_, err = namespacedSecret.Update(ctx, secret, metav1.UpdateOptions{})
+		g.Expect(err).ToNot(HaveOccurred())
+	}, defaultTimeoutSeconds, 1).Should(Succeed())
+
+	By("Waiting for the database connection to be up")
+	EventuallyWithOffset(1, func(g Gomega) {
+		req, err := http.NewRequestWithContext(
+			ctx,
+			http.MethodGet,
+			fmt.Sprintf("https://localhost:%d/api/v1/compliance-events?per_page=1", complianceAPIPort),
+			nil,
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		req.Header.Set("Authorization", "Bearer "+clientToken)
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return
+		}
+
+		defer resp.Body.Close()
+
+		g.Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	}, defaultTimeoutSeconds, 1).Should(Succeed())
 }
 

@@ -118,6 +118,7 @@ func init() {
 
 const (
 	postgresForeignKeyViolationCode = "23503"
+	postgresUniqueViolationCode     = "23505"
 )
 
 var (
@@ -1022,7 +1023,7 @@ func postComplianceEvent(serverContext *ComplianceServerCtx, cfg *rest.Config, w
 		return
 	}
 
-	clusterFK, err := getClusterForeignKey(r.Context(), serverContext.DB, reqEvent.Cluster)
+	clusterFK, err := GetClusterForeignKey(r.Context(), serverContext.DB, reqEvent.Cluster)
 	if err != nil {
 		log.Error(err, "error getting cluster foreign key")
 		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
@@ -1333,7 +1334,8 @@ func convertToString(v interface{}) string {
 	}
 }
 
-func getClusterForeignKey(ctx context.Context, db *sql.DB, cluster Cluster) (int32, error) {
+// GetClusterForeignKey will return the database ID based on the cluster.ClusterID.
+func GetClusterForeignKey(ctx context.Context, db *sql.DB, cluster Cluster) (int32, error) {
 	// Check cache
 	key, ok := clusterKeyCache.Load(cluster.ClusterID)
 	if ok {
