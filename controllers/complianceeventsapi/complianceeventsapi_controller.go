@@ -374,7 +374,9 @@ func RecordLocalClusterComplianceEvent(
 		// If it's a unique constraint violation, then the event is a duplicate and can be ignored. If it's a foreign
 		// key violation, that means the database experienced data loss and the foreign key is invalid, so the
 		// compliance event can't be recorded.
-		if pqErr, ok := err.(*pq.Error); ok { //nolint: errorlint
+		var pqErr *pq.Error
+
+		if errors.As(err, &pqErr) {
 			if pqErr.Code == postgresUniqueViolationCode {
 				return nil
 			}

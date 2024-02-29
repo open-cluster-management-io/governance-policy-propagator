@@ -759,17 +759,13 @@ func getSingleComplianceEvent(db *sql.DB, w http.ResponseWriter,
 // as a convenience so that the keys don't need to be explicitly set to interface{} types when using the
 // `getPqErrKeyVals(err, "key1", "val1")...“ syntax.
 func getPqErrKeyVals(err error, additionalKeyVals ...interface{}) []interface{} {
-	unwrappedErr := err
+	var pqErr *pq.Error
 
-	for unwrappedErr != nil {
-		if pqErr, ok := unwrappedErr.(*pq.Error); ok { //nolint: errorlint
-			return append(
-				[]interface{}{"dbMessage", pqErr.Message, "dbDetail", pqErr.Detail, "dbCode", pqErr.Code},
-				additionalKeyVals...,
-			)
-		}
-
-		unwrappedErr = errors.Unwrap(unwrappedErr)
+	if errors.As(err, &pqErr) {
+		return append(
+			[]interface{}{"dbMessage", pqErr.Message, "dbDetail", pqErr.Detail, "dbCode", pqErr.Code},
+			additionalKeyVals...,
+		)
 	}
 
 	return additionalKeyVals
@@ -1083,8 +1079,9 @@ func postComplianceEvent(serverContext *ComplianceServerCtx, cfg *rest.Config, w
 			return
 		}
 
-		pqErr, ok := err.(*pq.Error) //nolint:errorlint
-		if ok && pqErr.Code == postgresForeignKeyViolationCode {
+		var pqErr *pq.Error
+
+		if errors.As(err, &pqErr) && pqErr.Code == postgresForeignKeyViolationCode {
 			// This can only happen if the cache is out of date due to data loss in the database because if the
 			// database ID is provided, it is validated against the database.
 			log.Info(
