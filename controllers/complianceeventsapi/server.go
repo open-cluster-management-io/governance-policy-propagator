@@ -1162,13 +1162,6 @@ func getComplianceEventsQuery(whereClause string, queryArgs *queryOptions) strin
 	)
 }
 
-func setCSVResponseHeaders(w http.ResponseWriter) {
-	w.Header().Set("Content-Disposition", "attachment; filename=reports.csv")
-	// It's going to be divided into chunks. if the user don't get it all at once,
-	// the user can receive one by one in the meantime
-	w.Header().Set("Transfer-Encoding", "chunked")
-}
-
 func getComplianceEventsCSV(db *sql.DB, w http.ResponseWriter, r *http.Request,
 	userConfig *rest.Config,
 ) {
@@ -1187,12 +1180,13 @@ func getComplianceEventsCSV(db *sql.DB, w http.ResponseWriter, r *http.Request,
 
 			return
 		}
+
+		w.Header().Set("Content-Disposition", "attachment; filename=reports.csv")
+		w.Header().Set("Transfer-Encoding", "chunked")
 	}
 
 	if queryArgsErr != nil {
 		if errors.Is(queryArgsErr, ErrNoAccess) {
-			setCSVResponseHeaders(w)
-
 			writer.Flush()
 
 			return
@@ -1248,8 +1242,6 @@ func getComplianceEventsCSV(db *sql.DB, w http.ResponseWriter, r *http.Request,
 			return
 		}
 	}
-
-	setCSVResponseHeaders(w)
 
 	writer.Flush()
 }
