@@ -263,8 +263,9 @@ func (s *ComplianceAPIServer) Start(ctx context.Context, serverContext *Complian
 	})
 
 	mux.HandleFunc("/api/v1/reports/compliance-events", func(w http.ResponseWriter, r *http.Request) {
-		// This header is for error writings
-		w.Header().Set("Content-Type", "application/json")
+		// This header needs to be set universally and then overridden if a JSON error message is sent since the
+		// transfer is chunked. If the output is large, and multiple chunks are used, it falls back to this header.
+		w.Header().Set("Content-Type", "text/csv")
 
 		// To verify each request independently
 		userConfig, err := getUserKubeConfig(s.cfg, r)
@@ -1163,7 +1164,6 @@ func getComplianceEventsQuery(whereClause string, queryArgs *queryOptions) strin
 
 func setCSVResponseHeaders(w http.ResponseWriter) {
 	w.Header().Set("Content-Disposition", "attachment; filename=reports.csv")
-	w.Header().Set("Content-Type", "text/csv")
 	// It's going to be divided into chunks. if the user don't get it all at once,
 	// the user can receive one by one in the meantime
 	w.Header().Set("Transfer-Encoding", "chunked")
@@ -1433,6 +1433,7 @@ func writeErrMsgJSON(w http.ResponseWriter, message string, code int) {
 		log.Error(err, "error marshaling error message", "message", message)
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 
 	if _, err := w.Write(resp); err != nil {
