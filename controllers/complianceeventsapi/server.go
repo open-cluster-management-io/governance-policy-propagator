@@ -707,7 +707,7 @@ func getSingleComplianceEvent(db *sql.DB, w http.ResponseWriter,
 
 	row := db.QueryRowContext(r.Context(), query, eventID)
 	if row.Err() != nil {
-		log.Error(row.Err(), "Failed to query for the compliance event", "eventID", eventID)
+		log.Error(row.Err(), "Failed to query for the compliance event", getPqErrKeyVals(err, "eventID", eventID)...)
 		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
 
 		return
@@ -929,7 +929,7 @@ func getComplianceEvents(db *sql.DB, w http.ResponseWriter,
 	}
 
 	if err != nil {
-		log.Error(err, "Failed to query for compliance events")
+		log.Error(err, "Failed to query for compliance events", getPqErrKeyVals(err)...)
 		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
 
 		return
@@ -1215,7 +1215,7 @@ func getComplianceEventsCSV(db *sql.DB, w http.ResponseWriter, r *http.Request,
 	}
 
 	if err != nil {
-		log.Error(err, "Failed to query for compliance events")
+		log.Error(err, "Failed to query for compliance events", getPqErrKeyVals(err)...)
 		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
 
 		return
