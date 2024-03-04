@@ -1181,8 +1181,8 @@ func getComplianceEventsCSV(db *sql.DB, w http.ResponseWriter, r *http.Request,
 			return
 		}
 
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Content-Disposition", "attachment; filename=reports.csv")
-		w.Header().Set("Transfer-Encoding", "chunked")
 	}
 
 	if queryArgsErr != nil {
@@ -1223,6 +1223,8 @@ func getComplianceEventsCSV(db *sql.DB, w http.ResponseWriter, r *http.Request,
 
 	defer rows.Close()
 
+	numLines := 0
+
 	for rows.Next() {
 		ce, err := scanIntoComplianceEvent(rows, queryArgs.IncludeSpec)
 		if err != nil {
@@ -1240,6 +1242,13 @@ func getComplianceEventsCSV(db *sql.DB, w http.ResponseWriter, r *http.Request,
 			writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
 
 			return
+		}
+
+		numLines++
+
+		// Generate a chunk every 100 lines
+		if numLines%100 == 0 {
+			w.(http.Flusher).Flush()
 		}
 	}
 
