@@ -1773,6 +1773,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 
 				By("Content-type should be CSV")
 				Expect(resp.Header.Get("Content-Type")).Should(Equal("text/csv"))
+				Expect(resp.TransferEncoding).Should(ContainElement("chunked"))
 
 				csvReader := csv.NewReader(resp.Body)
 
