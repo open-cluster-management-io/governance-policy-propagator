@@ -238,7 +238,7 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 		StatusMessage: getStatusMessage(disabledPolicies, unknownPolicies, deletedPolicies, pendingPolicies),
 	}
 	if showCompliance(compliancesFound, unknownPolicies, pendingPolicies) {
-		builtStatus.Compliant = string(aggregatedCompliance)
+		builtStatus.Compliant = aggregatedCompliance
 	}
 
 	if !equality.Semantic.DeepEqual(plcSet.Status, builtStatus) {
