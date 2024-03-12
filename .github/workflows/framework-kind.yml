@@ -1,0 +1,16 @@
+name: Framework
+
+on:
+  push:
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  fw-kind-tests:
+    name: KinD
+    uses: stolostron/governance-policy-framework/.github/workflows/kind.yml@main
+    with:
+      hub_only_component: 'true'
