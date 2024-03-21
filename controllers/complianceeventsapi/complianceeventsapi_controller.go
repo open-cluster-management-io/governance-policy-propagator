@@ -263,14 +263,23 @@ func MonitorDatabaseConnection(
 			continue
 		}
 
-		complianceServerCtx.Lock.RUnlock()
-
 		if complianceServerCtx.needsMigration {
+			// Upgrade to a write lock to migrate the database.
+			complianceServerCtx.Lock.RUnlock()
 			complianceServerCtx.Lock.Lock()
 			err := complianceServerCtx.MigrateDB(ctx, client, controllerNamespace)
 			complianceServerCtx.Lock.Unlock()
 
 			if err != nil {
+				continue
+			}
+
+			// Reinitate the read lock and ensure the DB is still defined after obtaining the lock.
+			complianceServerCtx.Lock.RLock()
+
+			if complianceServerCtx.DB == nil {
+				complianceServerCtx.Lock.RUnlock()
+
 				continue
 			}
 		}
@@ -336,6 +345,8 @@ func MonitorDatabaseConnection(
 			if shutdown {
 				log.Info("The queue was shutdown. Exiting MonitorDatabaseConnection.")
 
+				complianceServerCtx.Lock.RUnlock()
+
 				return
 			}
 		}
@@ -346,6 +357,8 @@ func MonitorDatabaseConnection(
 				"queueLength", complianceServerCtx.Queue.Len(),
 			)
 		}
+
+		complianceServerCtx.Lock.RUnlock()
 	}
 }
 
