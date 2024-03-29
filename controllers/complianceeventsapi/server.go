@@ -569,14 +569,18 @@ func setAuthorizedClusters(ctx context.Context, db *sql.DB, parsed *queryOptions
 // generateGetComplianceEventsQuery will return a SELECT query with results ready to be parsed by
 // scanIntoComplianceEvent. The caller is responsible for adding filters to the query.
 func generateGetComplianceEventsQuery(includeSpec bool) string {
-	return fmt.Sprintf(`SELECT %s
+	query := `SELECT %s
 FROM
   compliance_events
   LEFT JOIN clusters ON compliance_events.cluster_id = clusters.id
   LEFT JOIN parent_policies ON compliance_events.parent_policy_id = parent_policies.id
-  LEFT JOIN policies ON compliance_events.policy_id = policies.id`,
-		strings.Join(generateSelectedArgs(includeSpec), ", "),
-	)
+  LEFT JOIN policies ON compliance_events.policy_id = policies.id`
+
+	if includeSpec {
+		query += "\n	  LEFT JOIN specs ON policies.spec_id=specs.id"
+	}
+
+	return fmt.Sprintf(query, strings.Join(generateSelectedArgs(includeSpec), ", "))
 }
 
 func generateSelectedArgs(includeSpec bool) []string {
@@ -604,7 +608,7 @@ func generateSelectedArgs(includeSpec bool) []string {
 	}
 
 	if includeSpec {
-		selectArgs = append(selectArgs, "policies.spec")
+		selectArgs = append(selectArgs, "specs.spec")
 	}
 
 	return selectArgs
@@ -616,7 +620,11 @@ func getCsvHeader(includeSpec bool) []string {
 	localSelectArgs := generateSelectedArgs(includeSpec)
 
 	for i, arg := range localSelectArgs {
-		localSelectArgs[i] = strings.ReplaceAll(arg, ".", "_")
+		if arg == "specs.spec" {
+			localSelectArgs[i] = "policies_spec"
+		} else {
+			localSelectArgs[i] = strings.ReplaceAll(arg, ".", "_")
+		}
 	}
 
 	return localSelectArgs
@@ -1145,6 +1153,7 @@ func getComplianceEventsQuery(whereClause string, queryArgs *queryOptions) strin
 	//   LEFT JOIN clusters ON compliance_events.cluster_id = clusters.id
 	//   LEFT JOIN parent_policies ON compliance_events.parent_policy_id = parent_policies.id
 	//   LEFT JOIN policies ON compliance_events.policy_id = policies.id
+	//   LEFT JOIN specs ON policies.spec_id=specs.id
 	//   WHERE (policies.name=$1 OR policies.name=$2) AND (policies.kind=$3)
 	//   ORDER BY compliance_events.timestamp desc
 	//   LIMIT 20

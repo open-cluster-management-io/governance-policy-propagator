@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"strings"
 	"time"
@@ -47,8 +48,11 @@ var (
 )
 
 const (
-	wrongSAYaml  = "../resources/case18_compliance_api_test/wrong_service_account.yaml"
-	subsetSAYaml = "../resources/case18_compliance_api_test/subset_service_account.yaml"
+	wrongSAYaml         = "../resources/case18_compliance_api_test/wrong_service_account.yaml"
+	subsetSAYaml        = "../resources/case18_compliance_api_test/subset_service_account.yaml"
+	policiesQueryByName = "SELECT policies.id, policies.kind, policies.api_group, policies.name, " +
+		"policies.namespace, policies.severity, specs.spec FROM policies " +
+		"LEFT JOIN specs ON policies.spec_id=specs.id WHERE name = $1 "
 )
 
 func getTableNames(db *sql.DB) ([]string, error) {
@@ -159,14 +163,16 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 		It("Migrates from a clean database", func(ctx context.Context) {
 			tableNames, err := getTableNames(db)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(tableNames).To(ContainElements("clusters", "parent_policies", "policies", "compliance_events"))
+			Expect(tableNames).To(ContainElements(
+				"clusters", "parent_policies", "policies", "compliance_events", "specs",
+			))
 
 			migrationVersionRows := db.QueryRow("SELECT version, dirty FROM schema_migrations")
 			var version int
 			var dirty bool
 			err = migrationVersionRows.Scan(&version, &dirty)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(version).To(Equal(1))
+			Expect(version).To(Equal(2))
 			Expect(dirty).To(BeFalse())
 		})
 	})
@@ -260,7 +266,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			})
 
 			It("Should have created the policy in a table", func() {
-				rows, err := db.Query("SELECT * FROM policies WHERE name = $1", "etcd-encryption1")
+				rows, err := db.Query(policiesQueryByName, "etcd-encryption1")
 				Expect(err).ToNot(HaveOccurred())
 
 				count := 0
@@ -271,11 +277,11 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						apiGroup string
 						name     string
 						ns       *string
-						spec     complianceeventsapi.JSONMap
 						severity *string
+						spec     complianceeventsapi.JSONMap
 					)
 
-					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &spec, &severity)
+					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &severity, &spec)
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).NotTo(Equal(0))
@@ -311,10 +317,11 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						timestamp      string
 						metadata       complianceeventsapi.JSONMap
 						reportedBy     *string
+						messageHash    string
 					)
 
 					err := rows.Scan(&id, &clusterID, &policyID, &parentPolicyID, &compliance, &message, &timestamp,
-						&metadata, &reportedBy)
+						&metadata, &reportedBy, &messageHash)
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).To(Equal(1))
@@ -326,6 +333,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 					Expect(message).To(Equal("configmaps [etcd] not found in namespace default"))
 					Expect(timestamp).To(Equal("2023-01-01T01:01:01.111Z"))
 					Expect(metadata).To(HaveKeyWithValue("test", true))
+					Expect(messageHash).To(Equal("3feb697b1df4585ef4ac1623ca233a34b2a2ea84"))
 					Expect(reportedBy).ToNot(BeNil())
 					Expect(*reportedBy).To(Equal("optional-test"))
 					count++
@@ -456,7 +464,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 				"event": {
 					"compliance": "Compliant",
 					"message": "configmaps [etcd] found in namespace default",
-					"timestamp": "2023-02-02T02:02:02.222Z"
+					"timestamp": "2023-02-02T02:02:02.223Z"
 				}
 			}`)
 
@@ -488,7 +496,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			})
 
 			It("Should have created two policies in a table despite having the same name", func() {
-				rows, err := db.Query("SELECT * FROM policies WHERE name = $1", "etcd-encryption2")
+				rows, err := db.Query(policiesQueryByName, "etcd-encryption2")
 				Expect(err).ToNot(HaveOccurred())
 
 				rowCount := 0
@@ -500,11 +508,11 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						apiGroup string
 						name     string
 						ns       *string
-						spec     complianceeventsapi.JSONMap
 						severity *string
+						spec     complianceeventsapi.JSONMap
 					)
 
-					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &spec, &severity)
+					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &severity, &spec)
 					Expect(err).ToNot(HaveOccurred())
 
 					rowCount++
@@ -515,8 +523,8 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			})
 
 			It("Should have created both events in a table", func() {
-				rows, err := db.Query("SELECT * FROM compliance_events WHERE timestamp = $1",
-					"2023-02-02T02:02:02.222Z")
+				rows, err := db.Query("SELECT * FROM compliance_events WHERE timestamp > $1",
+					"2023-02-02T02:02:02.221Z")
 				Expect(err).ToNot(HaveOccurred())
 
 				messages := make([]string, 0)
@@ -531,10 +539,11 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						timestamp      string
 						metadata       *string
 						reportedBy     *string
+						messageHash    string
 					)
 
 					err := rows.Scan(&id, &clusterID, &policyID, &parentPolicyID, &compliance, &message, &timestamp,
-						&metadata, &reportedBy)
+						&metadata, &reportedBy, &messageHash)
 					Expect(err).ToNot(HaveOccurred())
 
 					messages = append(messages, message)
@@ -1066,7 +1075,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			})
 
 			It("Should have only created one policy in a table", func() {
-				rows, err := db.Query("SELECT * FROM policies WHERE name = $1", "common")
+				rows, err := db.Query(policiesQueryByName, "common")
 				Expect(err).ToNot(HaveOccurred())
 
 				specs := make([]complianceeventsapi.JSONMap, 0, 1)
@@ -1077,11 +1086,11 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						apiGroup string
 						name     string
 						ns       *string
-						spec     complianceeventsapi.JSONMap
 						severity *string
+						spec     complianceeventsapi.JSONMap
 					)
 
-					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &spec, &severity)
+					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &severity, &spec)
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).NotTo(Equal(0))
@@ -1109,10 +1118,11 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						timestamp      string
 						metadata       *string
 						reportedBy     *string
+						messageHash    string
 					)
 
 					err := rows.Scan(&id, &clusterID, &policyID, &parentPolicyID, &compliance, &message, &timestamp,
-						&metadata, &reportedBy)
+						&metadata, &reportedBy, &messageHash)
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).NotTo(Equal(0))
@@ -1247,7 +1257,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			})
 
 			It("Should have created a single policy", func() {
-				rows, err := db.Query("SELECT * FROM policies WHERE name = $1", "common-a")
+				rows, err := db.Query(policiesQueryByName, "common-a")
 				Expect(err).ToNot(HaveOccurred())
 
 				ids := make([]int, 0)
@@ -1258,11 +1268,11 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						apiGroup string
 						name     string
 						ns       *string
-						spec     complianceeventsapi.JSONMap
 						severity *string
+						spec     complianceeventsapi.JSONMap
 					)
 
-					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &spec, &severity)
+					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &severity, &spec)
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).NotTo(Equal(0))
@@ -1356,7 +1366,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			})
 
 			It("Should have created two policies in the table, with different namespaces", func() {
-				rows, err := db.Query("SELECT * FROM policies WHERE name = $1", "common-b")
+				rows, err := db.Query(policiesQueryByName, "common-b")
 				Expect(err).ToNot(HaveOccurred())
 
 				ids := make([]int, 0)
@@ -1370,11 +1380,11 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 						apiGroup string
 						name     string
 						ns       *string
-						spec     complianceeventsapi.JSONMap
 						severity *string
+						spec     complianceeventsapi.JSONMap
 					)
 
-					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &spec, &severity)
+					err := rows.Scan(&id, &kind, &apiGroup, &name, &ns, &severity, &spec)
 					Expect(err).ToNot(HaveOccurred())
 
 					Expect(id).NotTo(Equal(0))
@@ -1606,7 +1616,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			Entry(
 				"Filter by event.message_includes",
 				[]string{"event.message_includes=etcd"},
-				[]float64{2, 3, 1},
+				[]float64{3, 2, 1},
 			),
 			Entry(
 				"Filter by event.message_includes and ensure special characters are escaped",
@@ -1638,7 +1648,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 				[]string{
 					"event.timestamp_after=2023-01-01T01:01:01.111Z", "event.timestamp_before=2023-04-01T01:01:01.111Z",
 				},
-				[]float64{4, 2, 3, 11, 10},
+				[]float64{4, 3, 2, 11, 10},
 			),
 			Entry(
 				"Filter by parent_policy.categories",
@@ -1648,7 +1658,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			Entry(
 				"Filter by parent_policy.categories is null",
 				[]string{"parent_policy.categories"},
-				[]float64{9, 8, 7, 2, 3, 11, 10},
+				[]float64{9, 8, 7, 3, 2, 11, 10},
 			),
 			Entry(
 				"Filter by parent_policy.controls",
@@ -1658,7 +1668,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			Entry(
 				"Filter by parent_policy.controls is null",
 				[]string{"parent_policy.controls"},
-				[]float64{9, 8, 7, 2, 3, 11, 10},
+				[]float64{9, 8, 7, 3, 2, 11, 10},
 			),
 			Entry(
 				"Filter by parent_policy.id",
@@ -1683,7 +1693,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			Entry(
 				"Filter by parent_policy.standards is null",
 				[]string{"parent_policy.standards"},
-				[]float64{9, 8, 2, 3, 11, 10},
+				[]float64{9, 8, 3, 2, 11, 10},
 			),
 			Entry(
 				"Filter by policy.apiGroup",
@@ -1723,7 +1733,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			Entry(
 				"Filter by policy.namespace is null",
 				[]string{"policy.namespace"},
-				[]float64{9, 8, 6, 7, 5, 4, 2, 3, 11},
+				[]float64{9, 8, 6, 7, 5, 4, 3, 2, 11},
 			),
 			Entry(
 				"Filter by policy.severity",
@@ -1733,7 +1743,7 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			Entry(
 				"Filter by policy.severity is null",
 				[]string{"policy.severity"},
-				[]float64{2, 3},
+				[]float64{3, 2},
 			),
 		)
 
@@ -2047,6 +2057,41 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 		})
 	})
 
+	Describe("Large values", func() {
+		It("Should allow a large spec and message", func(ctx context.Context) {
+			longString := ""
+			charset := []rune{
+				'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+			}
+
+			for i := 0; i < 100000; i++ {
+				c := charset[rand.Intn(len(charset))]
+				longString += string(c)
+			}
+
+			payload := []byte(fmt.Sprintf(`{
+			"cluster": {
+				"name": "managed2",
+				"cluster_id": "test2-managed2-fake-uuid-2"
+			},
+			"policy": {
+				"apiGroup": "policy.open-cluster-management.io",
+				"kind": "ConfigurationPolicy",
+				"name": "duplicate-test",
+				"spec": {"test": "%s"}
+			},
+			"event": {
+				"compliance": "NonCompliant",
+				"message": "%s",
+				"timestamp": "2023-02-02T02:02:02.222Z"
+			}
+		}`, longString, longString))
+
+			By("POST the event")
+			Eventually(postEvent(ctx, payload, clientToken), "5s", "1s").ShouldNot(HaveOccurred())
+		})
+	})
+
 	Describe("Test authorization", func() {
 		Describe("Test method Get", func() {
 			It("Should return unauthorized when it is empty token", func(ctx context.Context) {
@@ -2309,8 +2354,8 @@ var _ = Describe("Test query generation", Label("compliance-events-api"), func()
 		}
 		sql, vals := policy.SelectQuery("id")
 		Expect(sql).To(Equal(
-			"SELECT id FROM policies WHERE api_group=$1 AND kind=$2 AND name=$3 AND spec=$4 AND namespace is NULL " +
-				"AND severity is NULL",
+			"SELECT policies.id FROM policies LEFT JOIN specs ON policies.spec_id=specs.id WHERE api_group=$1 " +
+				"AND kind=$2 AND name=$3 AND spec=$4 AND namespace is NULL AND severity is NULL",
 		))
 		Expect(vals).To(HaveLen(4))
 	})
@@ -2329,8 +2374,8 @@ var _ = Describe("Test query generation", Label("compliance-events-api"), func()
 		}
 		sql, vals := policy.SelectQuery("id")
 		Expect(sql).To(Equal(
-			"SELECT id FROM policies WHERE api_group=$1 AND kind=$2 AND name=$3 AND spec=$4 AND namespace=$5 " +
-				"AND severity=$6",
+			"SELECT policies.id FROM policies LEFT JOIN specs ON policies.spec_id=specs.id WHERE api_group=$1 " +
+				"AND kind=$2 AND name=$3 AND spec=$4 AND namespace=$5 AND severity=$6",
 		))
 		Expect(vals).To(HaveLen(6))
 	})
