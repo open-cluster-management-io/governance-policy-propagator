@@ -2,8 +2,10 @@ package complianceeventsapi
 
 import (
 	"context"
+	"crypto/sha1" // #nosec G505 -- used for uniqueness checks and not for cryptography.
 	"database/sql"
 	"database/sql/driver"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -76,7 +78,7 @@ func (ce ComplianceEvent) Validate(ctx context.Context, serverContext *Complianc
 	if ce.ParentPolicy != nil {
 		if ce.ParentPolicy.KeyID != 0 {
 			row := serverContext.DB.QueryRowContext(
-				ctx, `SELECT EXISTS(SELECT * FROM parent_policies WHERE id=$1);`, ce.ParentPolicy.KeyID,
+				ctx, `SELECT EXISTS(SELECT id FROM parent_policies WHERE id=$1);`, ce.ParentPolicy.KeyID,
 			)
 
 			var exists bool
@@ -105,7 +107,7 @@ func (ce ComplianceEvent) Validate(ctx context.Context, serverContext *Complianc
 
 	if ce.Policy.KeyID != 0 {
 		row := serverContext.DB.QueryRowContext(
-			ctx, `SELECT EXISTS(SELECT * FROM policies WHERE id=$1);`, ce.Policy.KeyID,
+			ctx, `SELECT EXISTS(SELECT id FROM policies WHERE id=$1);`, ce.Policy.KeyID,
 		)
 
 		var exists bool
@@ -280,11 +282,24 @@ func (e EventDetails) Validate() error {
 }
 
 func (e *EventDetails) InsertQuery() (string, []any) {
+	hasher := sha1.New() // #nosec G401 -- used for uniqueness checks and not for cryptography.
+	hasher.Write([]byte(e.Message))
+	messageHash := hex.EncodeToString(hasher.Sum(nil))
+
 	sql := `INSERT INTO compliance_events` +
-		`(cluster_id, compliance, message, metadata, parent_policy_id, policy_id, reported_by, timestamp) ` +
-		`VALUES($1, $2, $3, $4, $5, $6, $7, $8)`
+		`(cluster_id, compliance, message, message_hash, metadata, parent_policy_id, policy_id, reported_by, ` +
+		`timestamp) ` +
+		`VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)`
 	values := []any{
-		e.ClusterID, e.Compliance, e.Message, e.Metadata, e.ParentPolicyID, e.PolicyID, e.ReportedBy, e.Timestamp,
+		e.ClusterID,
+		e.Compliance,
+		e.Message,
+		messageHash,
+		e.Metadata,
+		e.ParentPolicyID,
+		e.PolicyID,
+		e.ReportedBy,
+		e.Timestamp,
 	}
 
 	return sql, values
@@ -408,6 +423,37 @@ func ParentPolicyFromPolicyObj(plc *policiesv1.Policy) ParentPolicy {
 	}
 }
 
+type Spec struct {
+	KeyID int32   `db:"id" json:"id"`
+	Spec  JSONMap `json:"spec,omitempty"`
+}
+
+func (s *Spec) InsertQuery() (string, []any) {
+	sql := `INSERT INTO specs(spec) VALUES($1)`
+	values := []any{s.Spec}
+
+	return sql, values
+}
+
+func (s *Spec) SelectQuery(returnedColumns ...string) (string, []any) {
+	if len(returnedColumns) == 0 {
+		returnedColumns = []string{"*"}
+	}
+
+	sql := fmt.Sprintf(
+		`SELECT %s FROM specs WHERE spec=$1`,
+		strings.Join(returnedColumns, ", "),
+	)
+
+	values := []any{s.Spec}
+
+	return sql, values
+}
+
+func (s *Spec) GetOrCreate(ctx context.Context, db *sql.DB) error {
+	return getOrCreate(ctx, db, s)
+}
+
 func PolicyFromUnstructured(obj unstructured.Unstructured) *Policy {
 	policy := &Policy{}
 
@@ -447,7 +493,8 @@ type Policy struct {
 	APIGroup  string  `db:"api_group" json:"apiGroup"`
 	Name      string  `db:"name" json:"name"`
 	Namespace *string `db:"namespace" json:"namespace"`
-	Spec      JSONMap `db:"spec" json:"spec,omitempty"`
+	Spec      JSONMap `json:"spec,omitempty"`
+	SpecID    int32   `db:"spec_id" json:"-"`
 	Severity  *string `db:"severity" json:"severity"`
 }
 
@@ -475,21 +522,38 @@ func (p *Policy) Validate() error {
 
 func (p *Policy) InsertQuery() (string, []any) {
 	sql := `INSERT INTO policies` +
-		`(api_group, kind, name, namespace, severity, spec)` +
+		`(api_group, kind, name, namespace, severity, spec_id) ` +
 		`VALUES($1, $2, $3, $4, $5, $6)`
-	values := []any{p.APIGroup, p.Kind, p.Name, p.Namespace, p.Severity, p.Spec}
+	values := []any{p.APIGroup, p.Kind, p.Name, p.Namespace, p.Severity, p.SpecID}
 
 	return sql, values
 }
 
 func (p *Policy) SelectQuery(returnedColumns ...string) (string, []any) {
 	if len(returnedColumns) == 0 {
-		returnedColumns = []string{"*"}
+		returnedColumns = []string{
+			"policies.id",
+			"policies.kind",
+			"policies.api_group",
+			"policies.name",
+			"policies.namespace",
+			"policies.severity",
+			"specs.spec",
+		}
+	} else {
+		for i, column := range returnedColumns {
+			if column == "id" {
+				returnedColumns[i] = "policies.id"
+
+				break
+			}
+		}
 	}
 
 	sql := fmt.Sprintf(
 		`SELECT %s FROM policies `+
-			`WHERE api_group=$1 AND kind=$2 AND name=$3 AND spec=$4`,
+			`LEFT JOIN specs ON policies.spec_id=specs.id`+
+			` WHERE api_group=$1 AND kind=$2 AND name=$3 AND spec=$4`,
 		strings.Join(returnedColumns, ", "),
 	)
 
@@ -517,6 +581,15 @@ func (p *Policy) SelectQuery(returnedColumns ...string) (string, []any) {
 }
 
 func (p *Policy) GetOrCreate(ctx context.Context, db *sql.DB) error {
+	if p.SpecID == 0 {
+		spec := &Spec{Spec: p.Spec}
+		if err := getOrCreate(ctx, db, spec); err != nil {
+			return err
+		}
+
+		p.SpecID = spec.KeyID
+	}
+
 	return getOrCreate(ctx, db, p)
 }
 
