@@ -921,7 +921,9 @@ func getComplianceEvents(db *sql.DB, w http.ResponseWriter,
 			return
 		}
 
-		writeErrMsgJSON(w, err.Error(), http.StatusInternalServerError)
+		log.Error(err, "parsing the query arguments unexpectedly failed")
+
+		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
 
 		return
 	}
@@ -1214,7 +1216,9 @@ func getComplianceEventsCSV(db *sql.DB, w http.ResponseWriter, r *http.Request,
 			return
 		}
 
-		writeErrMsgJSON(w, queryArgsErr.Error(), http.StatusInternalServerError)
+		log.Error(queryArgsErr, "parsing the query arguments unexpectedly failed")
+
+		writeErrMsgJSON(w, "Internal Error", http.StatusInternalServerError)
 
 		return
 	}
