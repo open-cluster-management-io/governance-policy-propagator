@@ -1195,6 +1195,12 @@ func getComplianceEventsCSV(db *sql.DB, w http.ResponseWriter, r *http.Request,
 	}
 
 	if queryArgsErr != nil {
+		if errors.Is(queryArgsErr, ErrForbidden) {
+			writeErrMsgJSON(w, queryArgsErr.Error(), http.StatusForbidden)
+
+			return
+		}
+
 		if errors.Is(queryArgsErr, ErrNoAccess) {
 			writer.Flush()
 

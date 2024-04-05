@@ -2202,35 +2202,37 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 					}
 					Expect(hasVariousClusters).Should(BeTrue())
 
-					req, err := http.NewRequestWithContext(ctx, http.MethodGet, eventsEndpoint+"?"+argument, nil)
-					Expect(err).ShouldNot(HaveOccurred())
+					for _, endpoint := range []string{eventsEndpoint, csvEndpoint} {
+						req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"?"+argument, nil)
+						Expect(err).ShouldNot(HaveOccurred())
 
-					req.Header.Set("Content-Type", "application/json")
-					// Set auth token
-					req.Header.Set("Authorization", "Bearer "+subsetSAToken)
+						req.Header.Set("Content-Type", "application/json")
+						// Set auth token
+						req.Header.Set("Authorization", "Bearer "+subsetSAToken)
 
-					resp, err := httpClient.Do(req)
-					Expect(err).ShouldNot(HaveOccurred())
+						resp, err := httpClient.Do(req)
+						Expect(err).ShouldNot(HaveOccurred())
 
-					defer resp.Body.Close()
+						defer resp.Body.Close()
 
-					body, err := io.ReadAll(resp.Body)
-					Expect(err).ShouldNot(HaveOccurred())
+						body, err := io.ReadAll(resp.Body)
+						Expect(err).ShouldNot(HaveOccurred())
 
-					respJSON = map[string]any{}
+						respJSON = map[string]any{}
 
-					err = json.Unmarshal(body, &respJSON)
-					Expect(err).ShouldNot(HaveOccurred())
+						err = json.Unmarshal(body, &respJSON)
+						Expect(err).ShouldNot(HaveOccurred())
 
-					message, ok := respJSON["message"].(string)
-					Expect(ok).To(BeTrue())
+						message, ok := respJSON["message"].(string)
+						Expect(ok).To(BeTrue())
 
-					Expect(message).
-						Should(Equal("the request is not allowed: the following cluster filters are not authorized: " +
-							"managed2, managed3"))
+						Expect(message).
+							Should(Equal("the request is not allowed: the following cluster filters are not " +
+								"authorized: managed2, managed3"))
 
-					Expect(resp.StatusCode).Should(Equal(http.StatusForbidden))
-					Expect(err).ShouldNot(HaveOccurred())
+						Expect(resp.StatusCode).Should(Equal(http.StatusForbidden))
+						Expect(err).ShouldNot(HaveOccurred())
+					}
 				})
 			It("Should return a forbidden error when only unauthorized ID are passed as id",
 				func(ctx context.Context) {
