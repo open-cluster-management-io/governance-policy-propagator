@@ -213,8 +213,8 @@ github.com/stolostron/go-template-utils/v4 v4.0.1 h1:osMyNHBm9g7LKaC/zufR6G4lEMU
 github.com/stolostron/go-template-utils/v4 v4.0.1/go.mod h1:wX4y8C2+qExXeJlqRk7+9Xv4nekukaJ7UHS7/QsfySw=
 github.com/stolostron/kubernetes-dependency-watches v0.5.2 h1:TtctOgPn+TYo1dJ+dr9TLR2rlpy5aFQ/1dzfcYZUDi4=
 github.com/stolostron/kubernetes-dependency-watches v0.5.2/go.mod h1:5nwtuleCNR9Mno7SJRz6B2BavvXHbfR4rIwzKLkk9G8=
-github.com/stolostron/rbac-api-utils v0.0.0-20240227203157-d0f039286f99 h1:cPredF0PaBRYVadMe6+ZcvfgWct+QZMijZKWXDpwkb4=
-github.com/stolostron/rbac-api-utils v0.0.0-20240227203157-d0f039286f99/go.mod h1:zYGYkVgY+sL501na1x5RDCKMrHD+JAwb6oRFU8e9XlU=
+github.com/stolostron/rbac-api-utils v0.0.0-20240404212618-7f57fc664256 h1:BeTUZoAkKzPKSH0sG4a9PaakKHuJ0h9Cks9joBn3Ns8=
+github.com/stolostron/rbac-api-utils v0.0.0-20240404212618-7f57fc664256/go.mod h1:zYGYkVgY+sL501na1x5RDCKMrHD+JAwb6oRFU8e9XlU=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.4.0/go.mod h1:YvHI0jy2hoMjB+UWwv71VJQ9isScKT/TqJzVSSt89Yw=
 github.com/stretchr/objx v0.5.0/go.mod h1:Yh+to48EsGEfYuaHDzXPcE3xhTkx73EhmCGUpEOglKo=

@@ -16,7 +16,7 @@ require (
 	github.com/stolostron/go-log-utils v0.1.2
 	github.com/stolostron/go-template-utils/v4 v4.0.1
 	github.com/stolostron/kubernetes-dependency-watches v0.5.2
-	github.com/stolostron/rbac-api-utils v0.0.0-20240227203157-d0f039286f99
+	github.com/stolostron/rbac-api-utils v0.0.0-20240404212618-7f57fc664256
 	k8s.io/api v0.28.3
 	k8s.io/apimachinery v0.28.3
 	k8s.io/client-go v0.28.3
