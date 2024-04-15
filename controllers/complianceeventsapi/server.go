@@ -118,7 +118,6 @@ func init() {
 
 const (
 	postgresForeignKeyViolationCode = "23503"
-	postgresUniqueViolationCode     = "23505"
 )
 
 var (
