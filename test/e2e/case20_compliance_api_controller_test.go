@@ -27,7 +27,7 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
-var _ = Describe("Test governance-policy-database secret changes, DB annotations, and events", Serial, Ordered, func() {
+var _ = Describe("Test governance-policy-database secret changes and DB annotations", Serial, Ordered, func() {
 	const (
 		case20PolicyName string = "case20-policy"
 		case20PolicyYAML string = "../resources/case20_compliance_api_controller/policy.yaml"
@@ -64,48 +64,6 @@ var _ = Describe("Test governance-policy-database secret changes, DB annotations
 			clientHubDynamic, gvrPolicy, case20PolicyName, nsName, true, defaultTimeoutSeconds,
 		)
 		ExpectWithOffset(1, replicatedPolicy).NotTo(BeNil())
-	}
-
-	waitForDisabledEvent := func(ctx context.Context, after time.Time) {
-		afterStr := after.Format(time.RFC3339Nano)
-
-		By("Waiting for the disabled compliance event after " + afterStr)
-		EventuallyWithOffset(1, func(g Gomega) {
-			endpoint := fmt.Sprintf(
-				"https://localhost:%d/api/v1/compliance-events?cluster.name=local-cluster&event.compliance=Disabled"+
-					"&event.timestamp_after=%s&policy.name=%s",
-				complianceAPIPort,
-				afterStr,
-				case20PolicyName,
-			)
-
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-			g.Expect(err).ToNot(HaveOccurred())
-
-			req.Header.Set("Authorization", "Bearer "+clientToken)
-
-			resp, err := httpClient.Do(req)
-			if err != nil {
-				return
-			}
-
-			defer resp.Body.Close()
-
-			g.Expect(resp.StatusCode).To(Equal(http.StatusOK))
-
-			body, err := io.ReadAll(resp.Body)
-			g.Expect(err).ToNot(HaveOccurred())
-
-			result := map[string]any{}
-
-			err = json.Unmarshal(body, &result)
-			g.Expect(err).ToNot(HaveOccurred())
-
-			metadata, ok := result["metadata"].(map[string]interface{})
-			g.Expect(ok).To(BeTrue(), "The metadata key was the wrong type")
-
-			g.Expect(metadata["total"]).To(BeEquivalentTo(1))
-		}, defaultTimeoutSeconds*2, 1).Should(Succeed())
 	}
 
 	BeforeAll(func(ctx context.Context) {
@@ -182,44 +140,6 @@ var _ = Describe("Test governance-policy-database secret changes, DB annotations
 			)
 			g.Expect(policyID).ToNot(BeEmpty())
 		}, defaultTimeoutSeconds, 1).Should(Succeed())
-	})
-
-	It("Creates a disabled event for local-cluster", func(ctx context.Context) {
-		now := time.Now().UTC().Add(-1 * time.Second)
-
-		By("Deleting " + case20PolicyName)
-		utils.Kubectl("delete", "-f", case20PolicyYAML, "-n", nsName, "--kubeconfig="+kubeconfigHub)
-		plc := utils.GetWithTimeout(
-			clientHubDynamic, gvrPolicy, case20PolicyName, nsName, false, defaultTimeoutSeconds,
-		)
-		Expect(plc).To(BeNil())
-
-		waitForDisabledEvent(ctx, now)
-	})
-
-	It("Creates a disabled event for local-cluster when the database is down and restored", func(ctx context.Context) {
-		createCase20Policy(ctx)
-
-		bringDownDBConnection(ctx)
-
-		now := time.Now().UTC().Add(-1 * time.Second)
-
-		By("Deleting " + case20PolicyName)
-		utils.Kubectl("delete", "-f", case20PolicyYAML, "-n", nsName, "--kubeconfig="+kubeconfigHub)
-		plc := utils.GetWithTimeout(
-			clientHubDynamic, gvrPolicy, case20PolicyName, nsName, false, defaultTimeoutSeconds,
-		)
-		Expect(plc).To(BeNil())
-
-		By("Waiting for the replicated policy to be deleted")
-		replicatedPolicy := utils.GetWithTimeout(
-			clientHubDynamic, gvrPolicy, case20PolicyName, nsName, false, defaultTimeoutSeconds,
-		)
-		Expect(replicatedPolicy).To(BeNil())
-
-		restoreDBConnection(ctx)
-
-		waitForDisabledEvent(ctx, now)
 	})
 })
 

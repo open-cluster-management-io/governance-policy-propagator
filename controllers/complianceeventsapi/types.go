@@ -210,35 +210,6 @@ func (c *Cluster) GetOrCreate(ctx context.Context, db *sql.DB) error {
 	return getOrCreate(ctx, db, c)
 }
 
-// EventDetailsQueued is a slimmed down EventDetails that supports being put in a client-go work queue.
-// The client-go work queue rejects an EventDetails object because it is not hashable due to the Metadata field
-// using the JSONMap type.
-type EventDetailsQueued struct {
-	ClusterID      int32
-	PolicyID       int32
-	ParentPolicyID int32
-	Compliance     string
-	Message        string
-	Timestamp      time.Time
-	ReportedBy     string
-}
-
-func (e *EventDetailsQueued) EventDetails() *EventDetails {
-	return &EventDetails{
-		ClusterID:      e.ClusterID,
-		PolicyID:       e.PolicyID,
-		ParentPolicyID: &e.ParentPolicyID,
-		Compliance:     e.Compliance,
-		Message:        e.Message,
-		Timestamp:      e.Timestamp,
-		ReportedBy:     &e.ReportedBy,
-	}
-}
-
-func (e *EventDetailsQueued) InsertQuery() (string, []any) {
-	return e.EventDetails().InsertQuery()
-}
-
 type EventDetails struct {
 	KeyID          int32     `db:"id" json:"-"`
 	ClusterID      int32     `db:"cluster_id" json:"-"`

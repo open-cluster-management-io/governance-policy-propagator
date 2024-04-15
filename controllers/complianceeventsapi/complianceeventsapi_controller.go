@@ -20,7 +20,6 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
-	"github.com/lib/pq"
 	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -308,34 +307,6 @@ func MonitorDatabaseConnection(
 						},
 					},
 				}
-			case *EventDetailsQueued:
-				complianceEvent := v
-
-				err := RecordLocalClusterComplianceEvent(
-					ctx, complianceServerCtx, complianceEvent.EventDetails(),
-				)
-
-				requeue := errors.Is(err, ErrRetryable)
-
-				if requeue {
-					complianceServerCtx.Queue.Add(request)
-				}
-
-				if err != nil {
-					log.Info(
-						"Failed to record the queued compliance event",
-						"requeue", requeue,
-						"error", err.Error(),
-						"eventMessage", complianceEvent.Message,
-						"policyID", complianceEvent.PolicyID,
-					)
-				} else {
-					log.V(2).Info(
-						"Recorded the queued compliance event",
-						"eventMessage", complianceEvent.Message,
-						"policyID", complianceEvent.PolicyID,
-					)
-				}
 			}
 
 			complianceServerCtx.Queue.Done(request)
@@ -360,56 +331,6 @@ func MonitorDatabaseConnection(
 
 		complianceServerCtx.Lock.RUnlock()
 	}
-}
-
-// RecordLocalClusterComplianceEvent will record the input compliance event. It returns ErrRetryable if the compliance
-// event should be requeued to record again later.
-func RecordLocalClusterComplianceEvent(
-	ctx context.Context, complianceServerCtx *ComplianceServerCtx, complianceEvent *EventDetails,
-) error {
-	clusterFK, err := GetClusterForeignKey(
-		ctx,
-		complianceServerCtx.DB,
-		Cluster{ClusterID: complianceServerCtx.ClusterID, Name: "local-cluster"},
-	)
-	if err != nil {
-		return fmt.Errorf(
-			"%wfailed to get the cluster foreign key to generate a compliance event: %w", ErrRetryable, err,
-		)
-	}
-
-	complianceEvent.ClusterID = clusterFK
-
-	query, args := complianceEvent.InsertQuery()
-
-	_, err = complianceServerCtx.DB.ExecContext(ctx, query, args...)
-	if err != nil {
-		// If it's a unique constraint violation, then the event is a duplicate and can be ignored. If it's a foreign
-		// key violation, that means the database experienced data loss and the foreign key is invalid, so the
-		// compliance event can't be recorded.
-		var pqErr *pq.Error
-
-		if errors.As(err, &pqErr) {
-			if pqErr.Code == postgresUniqueViolationCode {
-				return nil
-			}
-
-			if pqErr.Code == postgresForeignKeyViolationCode {
-				return fmt.Errorf(
-					"failed to record the compliance event because the foreign keys no longer apply: %w", err,
-				)
-			}
-		}
-
-		// If the error was because the database was down, then queue it up for later
-		if complianceServerCtx.DB.PingContext(ctx) != nil {
-			return errors.Join(ErrRetryable, ErrDBConnectionFailed)
-		}
-
-		return fmt.Errorf("failed to record the compliance event: %w", err)
-	}
-
-	return nil
 }
 
 // MigrateDB will perform a database migration if required and send Kubernetes events if the migration fails.

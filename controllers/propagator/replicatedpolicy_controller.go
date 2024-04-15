@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	templates "github.com/stolostron/go-template-utils/v4/pkg/templates"
 	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
@@ -627,109 +626,9 @@ func (r *ReplicatedPolicyReconciler) cleanUpReplicated(ctx context.Context, repl
 		}
 	} else {
 		version.resourceVersion = "deleted"
-
-		// Normally the spec-sync controller handles this, however, if it's a self-managed hub policy, the spec-sync
-		// controller does not run. So this is a special case.
-		if replicatedPolicy.Namespace == "local-cluster" && r.ComplianceServerCtx.DB != nil {
-			r.recordDisabledEvents(ctx, replicatedPolicy)
-		}
 	}
 
 	return errors.Join(watcherErr, deleteErr)
-}
-
-// recordDisabledEvents will generate and record disabled compliance events in the compliance history database for each
-// policy template. On retryable errors, the generated compliance event is added to the ComplianceServerCtx queue
-// for MonitorDatabaseConnection to handle once the database is back up.
-func (r *ReplicatedPolicyReconciler) recordDisabledEvents(
-	ctx context.Context, replicatedPolicy *policiesv1.Policy,
-) {
-	log := log.WithValues("policy", replicatedPolicy.Name)
-
-	if replicatedPolicy.Annotations[ParentPolicyIDAnnotation] == "" {
-		return
-	}
-
-	parentPolicyID, err := strconv.ParseInt(replicatedPolicy.Annotations[ParentPolicyIDAnnotation], 10, 32)
-	if err != nil {
-		log.Error(err, "Failed to record a disabled compliance event due to an invalid parent policy ID")
-
-		return
-	}
-
-	dbConnectionDown := false
-
-	for _, template := range replicatedPolicy.Spec.PolicyTemplates {
-		plcTmplUnstruct := &unstructured.Unstructured{}
-
-		err := plcTmplUnstruct.UnmarshalJSON(template.ObjectDefinition.Raw)
-		if err != nil {
-			continue
-		}
-
-		policyIDStr := plcTmplUnstruct.GetAnnotations()[PolicyIDAnnotation]
-		if policyIDStr == "" {
-			continue
-		}
-
-		policyID, err := strconv.ParseInt(policyIDStr, 10, 32)
-		if err != nil {
-			log.Error(err, "Failed to record a disabled compliance event due to an invalid policy ID")
-
-			continue
-		}
-
-		complianceEvent := &complianceeventsapi.EventDetailsQueued{
-			ParentPolicyID: int32(parentPolicyID),
-			PolicyID:       int32(policyID),
-			Compliance:     "Disabled",
-			Message:        "The policy was removed because the parent policy no longer applies to this cluster",
-			Timestamp:      time.Now().UTC(),
-			ReportedBy:     "governance-policy-framework",
-		}
-
-		if dbConnectionDown {
-			log.Info(
-				"Failed to record the compliance event. Will requeue.",
-				"error", complianceeventsapi.ErrDBConnectionFailed.Error(),
-				"eventMessage", complianceEvent.Message,
-				"policyID", complianceEvent.PolicyID,
-			)
-
-			r.ComplianceServerCtx.Queue.Add(complianceEvent)
-
-			continue
-		}
-
-		err = complianceeventsapi.RecordLocalClusterComplianceEvent(
-			ctx, r.ComplianceServerCtx, complianceEvent.EventDetails(),
-		)
-
-		requeue := errors.Is(err, complianceeventsapi.ErrRetryable)
-		if requeue {
-			r.ComplianceServerCtx.Queue.Add(complianceEvent)
-		}
-
-		if errors.Is(err, complianceeventsapi.ErrDBConnectionFailed) {
-			dbConnectionDown = true
-		}
-
-		if err != nil {
-			log.Info(
-				"Failed to record the compliance event",
-				"requeue", requeue,
-				"error", err.Error(),
-				"eventMessage", complianceEvent.Message,
-				"policyID", complianceEvent.PolicyID,
-			)
-		} else {
-			log.V(2).Info(
-				"Recorded the compliance event",
-				"eventMessage", complianceEvent.Message,
-				"policyID", complianceEvent.PolicyID,
-			)
-		}
-	}
 }
 
 func (r *ReplicatedPolicyReconciler) singleClusterDecision(
