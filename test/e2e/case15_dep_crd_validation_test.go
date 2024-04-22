@@ -72,7 +72,6 @@ var _ = Describe("Test CRD validation", func() {
 		}{
 			"ConfigurationPolicy": {false, true},
 			"CertificatePolicy":   {false, true},
-			"IamPolicy":           {false, true},
 			"Policy":              {true, true},
 			"PolicySet":           {true, true},
 			"OtherType":           {true, true},
@@ -102,7 +101,6 @@ var _ = Describe("Test CRD validation", func() {
 		}{
 			"ConfigurationPolicy": {false, true},
 			"CertificatePolicy":   {false, true},
-			"IamPolicy":           {false, true},
 			"Policy":              {true, true},
 			"PolicySet":           {true, true},
 			"OtherType":           {true, true},
