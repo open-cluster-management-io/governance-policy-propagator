@@ -269,22 +269,6 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 			continue
 		}
 
-		if !isConfigurationPolicy(policyT) {
-			// has Templates but not a configuration policy
-			err := k8serrors.NewBadRequest("Templates are restricted to only Configuration Policies")
-			log.Error(err, "Not a Configuration Policy")
-
-			r.Recorder.Event(rootPlc, "Warning", "PolicyPropagation",
-				fmt.Sprintf(
-					"Policy %s/%s has templates but it is not a ConfigurationPolicy.",
-					rootPlc.GetName(),
-					rootPlc.GetNamespace(),
-				),
-			)
-
-			return err
-		}
-
 		log.V(1).Info("Found an object definition with templates")
 
 		templateContext := templateCtx{ManagedClusterName: clusterName}
@@ -426,12 +410,4 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 	log.V(1).Info("Successfully processed templates")
 
 	return nil
-}
-
-func isConfigurationPolicy(policyT *policiesv1.PolicyTemplate) bool {
-	// check if it is a configuration policy first
-	var jsonDef map[string]interface{}
-	_ = json.Unmarshal(policyT.ObjectDefinition.Raw, &jsonDef)
-
-	return jsonDef != nil && jsonDef["kind"] == "ConfigurationPolicy"
 }
