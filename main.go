@@ -44,6 +44,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	//+kubebuilder:scaffold:imports
@@ -250,9 +251,10 @@ func main() {
 
 	// Set default manager options
 	options := ctrl.Options{
-		Namespace:                  namespace,
-		Scheme:                     scheme,
-		MetricsBindAddress:         metricsAddr,
+		Scheme: scheme,
+		Metrics: server.Options{
+			BindAddress: metricsAddr,
+		},
 		HealthProbeBindAddress:     probeAddr,
 		LeaderElection:             enableLeaderElection,
 		LeaderElectionID:           "policy-propagator.open-cluster-management.io",
@@ -290,7 +292,9 @@ func main() {
 	}
 
 	if strings.Contains(namespace, ",") {
-		options.Cache.Namespaces = strings.Split(namespace, ",")
+		for _, ns := range strings.Split(namespace, ",") {
+			options.Cache.DefaultNamespaces[ns] = cache.Config{}
+		}
 	}
 
 	mgr, err := ctrl.NewManager(cfg, options)
