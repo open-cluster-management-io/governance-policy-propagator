@@ -11,7 +11,7 @@ import (
 var policyStatusGauge = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "policy_governance_info",
-		Help: "The compliance status of the named policy. 0 == Compliant. 1 == NonCompliant",
+		Help: "The compliance status of the named policy. 0 == Compliant. 1 == NonCompliant. -1 == Unknown/Pending",
 	},
 	[]string{
 		"type",              // "root" or "propagated"
