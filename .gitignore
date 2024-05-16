@@ -102,3 +102,6 @@ testbin/*
 kubeconfig*
 dev-tls.crt
 dev-tls.key
+dev-ca.crt
+
+__debug_bin*
