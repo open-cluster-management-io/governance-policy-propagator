@@ -15,7 +15,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stolostron/go-log-utils v0.1.2
 	github.com/stolostron/go-template-utils/v4 v4.1.0
-	github.com/stolostron/kubernetes-dependency-watches v0.6.0
+	github.com/stolostron/kubernetes-dependency-watches v0.7.0
 	github.com/stolostron/rbac-api-utils v0.0.0-20240404212618-7f57fc664256
 	k8s.io/api v0.29.2
 	k8s.io/apimachinery v0.29.2
