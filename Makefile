@@ -174,7 +174,7 @@ postgres: cert-manager
 
 webhook: cert-manager
 	-kubectl create ns $(KIND_NAMESPACE)
-	sed 's/namespace: open-cluster-management/namespace: $(KIND_NAMESPACE)/g' deploy/webhook.yaml | kubectl apply -f-
+	sed -E 's,open-cluster-management(.svc|/|$$),$(KIND_NAMESPACE)\1,g' deploy/webhook.yaml | kubectl apply -f -
 
 HUB_ONLY ?= none
 
@@ -187,7 +187,7 @@ kind-deploy-controller: manifests
 	fi
 	@echo installing $(IMG)
 	-kubectl create ns $(KIND_NAMESPACE)
-	kubectl apply -f deploy/operator.yaml -n $(KIND_NAMESPACE)
+	sed 's/namespace: open-cluster-management/namespace: $(KIND_NAMESPACE)/g' deploy/operator.yaml | kubectl apply -f - -n $(KIND_NAMESPACE)
 
 .PHONY: kind-deploy-controller-dev
 kind-deploy-controller-dev: kind-deploy-controller
@@ -236,7 +236,8 @@ install-resources:
 	kubectl create ns managed6
 	@echo deploying roles and service account
 	kubectl apply -k deploy/rbac -n $(KIND_NAMESPACE)
-	kubectl apply -f deploy/manager/service-account.yaml -n $(KIND_NAMESPACE)
+	sed 's/namespace: open-cluster-management/namespace: $(KIND_NAMESPACE)/' deploy/manager/service-account.yaml | \
+	  kubectl apply -f -
 	@echo creating cluster resources
 	kubectl apply -f test/resources/local-cluster.yaml
 	kubectl apply -f test/resources/managed1-cluster.yaml
