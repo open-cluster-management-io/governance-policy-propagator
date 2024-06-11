@@ -44,6 +44,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -111,6 +112,7 @@ func main() {
 
 	var (
 		metricsAddr                 string
+		secureMetrics               bool
 		enableLeaderElection        bool
 		probeAddr                   string
 		keyRotationDays             uint
@@ -128,6 +130,12 @@ func main() {
 	)
 
 	pflag.StringVar(&metricsAddr, "metrics-bind-address", ":8383", "The address the metric endpoint binds to.")
+	pflag.BoolVar(
+		&secureMetrics,
+		"secure-metrics",
+		false,
+		"Enable secure metrics endpoint with certificates at /var/run/metrics-cert",
+	)
 	pflag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	pflag.BoolVar(&enableLeaderElection, "leader-elect", true,
 		"Enable leader election for controller manager. "+
@@ -257,12 +265,20 @@ func main() {
 		}
 	}
 
+	metricsOptions := server.Options{
+		BindAddress: metricsAddr,
+	}
+
+	if secureMetrics {
+		metricsOptions.FilterProvider = filters.WithAuthenticationAndAuthorization
+		metricsOptions.SecureServing = true
+		metricsOptions.CertDir = "/var/run/metrics-cert"
+	}
+
 	// Set default manager options
 	options := ctrl.Options{
-		Scheme: scheme,
-		Metrics: server.Options{
-			BindAddress: metricsAddr,
-		},
+		Scheme:                     scheme,
+		Metrics:                    metricsOptions,
 		HealthProbeBindAddress:     probeAddr,
 		LeaderElection:             enableLeaderElection,
 		LeaderElectionID:           "policy-propagator.open-cluster-management.io",
