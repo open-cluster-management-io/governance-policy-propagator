@@ -57,6 +57,12 @@ rules:
   verbs:
   - create
 - apiGroups:
+  - authorization.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
   - cluster.open-cluster-management.io
   resources:
   - managedclusters
