@@ -20,6 +20,7 @@ func TestRunMain(t *testing.T) {
 		"--compliance-history-api-port=8385",
 		"--compliance-history-api-cert=dev-tls.crt",
 		"--compliance-history-api-key=dev-tls.key",
+		"--secure-metrics=false",
 	)
 
 	main()
