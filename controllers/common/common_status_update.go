@@ -194,7 +194,7 @@ func GetClusterDecisions(
 		}
 
 		if len(plcDecisions) == 0 {
-			log.Info("No placement decisions to process for this policy from this non-restricted binding",
+			log.V(1).Info("No placement decisions to process for this policy from this non-restricted binding",
 				"policyName", rootPolicy.GetName(), "bindingName", pb.GetName())
 		}
 
@@ -220,7 +220,7 @@ func GetClusterDecisions(
 		}
 
 		if len(plcDecisions) == 0 {
-			log.Info("No placement decisions to process for this policy from this restricted binding",
+			log.V(1).Info("No placement decisions to process for this policy from this restricted binding",
 				"policyName", rootPolicy.GetName(), "bindingName", pb.GetName())
 		}
 
