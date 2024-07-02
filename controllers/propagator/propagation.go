@@ -367,7 +367,8 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 				k8serrors.IsInternalError(tplErr) ||
 				k8serrors.IsServiceUnavailable(tplErr) ||
 				k8serrors.IsTimeout(tplErr) ||
-				k8serrors.IsTooManyRequests(tplErr) {
+				k8serrors.IsTooManyRequests(tplErr) ||
+				errors.Is(tplErr, k8sdepwatches.ErrWatchStopping) {
 				tplErr = fmt.Errorf("%w%w", ErrRetryable, tplErr)
 			}
 
