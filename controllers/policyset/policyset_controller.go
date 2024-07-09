@@ -306,8 +306,8 @@ func showCompliance(compliancesFound []string, unknown []string, pending []strin
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *PolicySetReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+func (r *PolicySetReconciler) SetupWithManager(mgr ctrl.Manager, plrsEnabled bool) error {
+	ctrlBldr := ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerName).
 		For(
 			&policyv1beta1.PolicySet{},
@@ -321,12 +321,15 @@ func (r *PolicySetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(placementBindingMapper(mgr.GetClient())),
 			builder.WithPredicates(pbPredicateFuncs)).
 		Watches(
-			&appsv1.PlacementRule{},
-			handler.EnqueueRequestsFromMapFunc(placementRuleMapper(mgr.GetClient()))).
-		Watches(
 			&clusterv1beta1.PlacementDecision{},
-			handler.EnqueueRequestsFromMapFunc(placementDecisionMapper(mgr.GetClient()))).
-		Complete(r)
+			handler.EnqueueRequestsFromMapFunc(placementDecisionMapper(mgr.GetClient())))
+
+	if plrsEnabled {
+		ctrlBldr = ctrlBldr.Watches(&appsv1.PlacementRule{},
+			handler.EnqueueRequestsFromMapFunc(placementRuleMapper(mgr.GetClient())))
+	}
+
+	return ctrlBldr.Complete(r)
 }
 
 // Helper function to filter out compliance statuses that are not in scope

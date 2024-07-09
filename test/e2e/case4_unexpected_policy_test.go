@@ -11,7 +11,7 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
 
-var _ = Describe("Test unexpect policy handling", func() {
+var _ = Describe("Test unexpect policy handling", Label("non-placement-rule"), func() {
 	const (
 		case4PolicyName string = "case4-test-policy"
 		case4PolicyYaml string = "../resources/case4_unexpected_policy/case4-test-policy.yaml"

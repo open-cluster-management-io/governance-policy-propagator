@@ -24,8 +24,9 @@ func (r *ReplicatedPolicyReconciler) SetupWithManager(
 	dependenciesSource source.Source,
 	updateSrc source.Source,
 	templateSrc source.Source,
+	plrsEnabled bool,
 ) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	ctrlBldr := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.Options{MaxConcurrentReconciles: int(maxConcurrentReconciles)}).
 		Named("replicated-policy").
 		For(
@@ -41,12 +42,14 @@ func (r *ReplicatedPolicyReconciler) SetupWithManager(
 		Watches(
 			&policiesv1.PlacementBinding{},
 			HandlerForBinding(mgr.GetClient()),
-		).
-		Watches(
-			&appsv1.PlacementRule{},
-			HandlerForRule(mgr.GetClient()),
-		).
-		Complete(r)
+		)
+
+	if plrsEnabled {
+		ctrlBldr = ctrlBldr.Watches(&appsv1.PlacementRule{},
+			HandlerForRule(mgr.GetClient()))
+	}
+
+	return ctrlBldr.Complete(r)
 }
 
 // replicatedPolicyPredicates triggers reconciliation if the policy is a replicated policy, and is

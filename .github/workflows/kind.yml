@@ -124,6 +124,11 @@ jobs:
     - name: E2E Tests for Webhook
       run: |
         KUBECONFIG=${PWD}/kubeconfig_hub make e2e-test-webhook
+    
+    - name: Tests without PlacementRule
+      run: |
+        KUBECONFIG=${PWD}/kubeconfig_hub_e2e kubectl delete crd placementrules.apps.open-cluster-management.io
+        KUBECONFIG=${PWD}/kubeconfig_hub make e2e-test-non-placement-rule
 
     - name: Debug
       if: ${{ failure() }}

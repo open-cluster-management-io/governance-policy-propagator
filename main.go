@@ -68,6 +68,11 @@ var (
 		Version:  "v1alpha1",
 		Resource: "clusterclaims",
 	}
+	crdGVR = schema.GroupVersionResource{
+		Group:    "apiextensions.k8s.io",
+		Version:  "v1",
+		Resource: "customresourcedefinitions",
+	}
 )
 
 func printVersion() {
@@ -119,6 +124,7 @@ func main() {
 		complianceAPIPort           string
 		complianceAPICert           string
 		complianceAPIKey            string
+		disablePlacementRule        bool
 	)
 
 	pflag.StringVar(&metricsAddr, "metrics-bind-address", ":8383", "The address the metric endpoint binds to.")
@@ -181,6 +187,8 @@ func main() {
 		&complianceAPIKey, "compliance-history-api-key", "",
 		"The path to the private key the compliance history API will use for HTTPS. If not set, HTTP will be used.",
 	)
+	pflag.BoolVar(&disablePlacementRule, "disable-placementrule", false,
+		"Disable watches for PlacementRules.")
 
 	pflag.Parse()
 
@@ -396,6 +404,25 @@ func main() {
 		clusterID = "unknown"
 	}
 
+	// Only check for the CRD if the flag was not set explicitly.
+	if !pflag.Lookup("disable-placementrule").Changed {
+		_, err = dynamicClient.Resource(crdGVR).Get(
+			controllerCtx, "placementrules.apps.open-cluster-management.io", metav1.GetOptions{},
+		)
+		if err != nil {
+			if !k8serrors.IsNotFound(err) {
+				log.Error(err, "Failed to check for the PlacementRule CRD")
+
+				os.Exit(1)
+			}
+
+			log.Info("PlacementRule CRD not found. Disabling PlacementRule watches. Restart the " +
+				"container if the CRD is installed later.")
+
+			disablePlacementRule = true
+		}
+	}
+
 	if err = (&automationctrl.PolicyAutomationReconciler{
 		Client:        mgr.GetClient(),
 		DynamicClient: dynamicClient,
@@ -410,7 +437,7 @@ func main() {
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor(policysetctrl.ControllerName),
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(mgr, !disablePlacementRule); err != nil {
 		log.Error(err, "Unable to create controller", "controller", policysetctrl.ControllerName)
 		os.Exit(1)
 	}
@@ -428,7 +455,7 @@ func main() {
 		Client:          mgr.GetClient(),
 		RootPolicyLocks: policiesLock,
 		Scheme:          mgr.GetScheme(),
-	}).SetupWithManager(mgr, policyStatusMaxConcurrency); err != nil {
+	}).SetupWithManager(mgr, policyStatusMaxConcurrency, !disablePlacementRule); err != nil {
 		log.Error(err, "Unable to create controller", "controller", rootpolicystatusctrl.ControllerName)
 		os.Exit(1)
 	}
@@ -525,8 +552,8 @@ func main() {
 		ComplianceServerCtx: complianceServerCtx,
 	}
 
-	if err = (replicatedPolicyCtrler).SetupWithManager(
-		mgr, replPolicyMaxConcurrency, dynamicWatcherSource, replicatedUpdatesSource, templatesSource,
+	if err = (replicatedPolicyCtrler).SetupWithManager(mgr, replPolicyMaxConcurrency,
+		dynamicWatcherSource, replicatedUpdatesSource, templatesSource, !disablePlacementRule,
 	); err != nil {
 		log.Error(err, "Unable to create the controller", "controller", "replicated-policy")
 		os.Exit(1)
