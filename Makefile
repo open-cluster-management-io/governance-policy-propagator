@@ -270,6 +270,10 @@ e2e-test-coverage-compliance-events-api: e2e-test-compliance-events-api
 e2e-test-policyautomation: E2E_LABEL_FILTER = --label-filter="policyautomation"
 e2e-test-policyautomation: e2e-test
 
+.PHONY: e2e-test-non-placement-rule
+e2e-test-non-placement-rule: E2E_LABEL_FILTER = --label-filter="non-placement-rule"
+e2e-test-non-placement-rule: e2e-test
+
 .PHONY: e2e-build-instrumented
 e2e-build-instrumented:
 	go test -covermode=atomic -coverpkg=$(shell cat go.mod | head -1 | cut -d ' ' -f 2)/... -c -tags e2e ./ -o build/_output/bin/$(IMG)-instrumented

@@ -30,8 +30,12 @@ var log = ctrl.Log.WithName(ControllerName)
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies/status,verbs=get;update;patch
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *RootPolicyStatusReconciler) SetupWithManager(mgr ctrl.Manager, maxConcurrentReconciles uint) error {
-	return ctrl.NewControllerManagedBy(mgr).
+func (r *RootPolicyStatusReconciler) SetupWithManager(
+	mgr ctrl.Manager,
+	maxConcurrentReconciles uint,
+	plrsEnabled bool,
+) error {
+	ctrlBldr := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.Options{MaxConcurrentReconciles: int(maxConcurrentReconciles)}).
 		Named(ControllerName).
 		For(
@@ -41,10 +45,6 @@ func (r *RootPolicyStatusReconciler) SetupWithManager(mgr ctrl.Manager, maxConcu
 		Watches(
 			&policiesv1.PlacementBinding{},
 			handler.EnqueueRequestsFromMapFunc(mapBindingToPolicies(mgr.GetClient())),
-		).
-		Watches(
-			&appsv1.PlacementRule{},
-			handler.EnqueueRequestsFromMapFunc(mapRuleToPolicies(mgr.GetClient())),
 		).
 		Watches(
 			&clusterv1beta1.PlacementDecision{},
@@ -57,8 +57,14 @@ func (r *RootPolicyStatusReconciler) SetupWithManager(mgr ctrl.Manager, maxConcu
 			&policiesv1.Policy{},
 			handler.EnqueueRequestsFromMapFunc(common.MapToRootPolicy(mgr.GetClient())),
 			builder.WithPredicates(policyStatusPredicate()),
-		).
-		Complete(r)
+		)
+
+	if plrsEnabled {
+		ctrlBldr = ctrlBldr.Watches(&appsv1.PlacementRule{},
+			handler.EnqueueRequestsFromMapFunc(mapRuleToPolicies(mgr.GetClient())))
+	}
+
+	return ctrlBldr.Complete(r)
 }
 
 // blank assignment to verify that RootPolicyStatusReconciler implements reconcile.Reconciler
