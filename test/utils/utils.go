@@ -136,13 +136,15 @@ func GetClusterLevelWithTimeout(
 	wantFound bool,
 	timeout int,
 ) *unstructured.Unstructured {
+	GinkgoHelper()
+
 	if timeout < 1 {
 		timeout = 1
 	}
 
 	var obj *unstructured.Unstructured
 
-	EventuallyWithOffset(1, func() error {
+	Eventually(func() error {
 		var err error
 		namespace := clientHubDynamic.Resource(gvr)
 
@@ -178,13 +180,15 @@ func GetWithTimeout(
 	wantFound bool,
 	timeout int,
 ) *unstructured.Unstructured {
+	GinkgoHelper()
+
 	if timeout < 1 {
 		timeout = 1
 	}
 
 	var obj *unstructured.Unstructured
 
-	EventuallyWithOffset(1, func() error {
+	Eventually(func() error {
 		var err error
 		namespace := clientHubDynamic.Resource(gvr).Namespace(namespace)
 
@@ -221,13 +225,15 @@ func ListWithTimeout(
 	wantFound bool,
 	timeout int,
 ) *unstructured.UnstructuredList {
+	GinkgoHelper()
+
 	if timeout < 1 {
 		timeout = 1
 	}
 
 	var list *unstructured.UnstructuredList
 
-	EventuallyWithOffset(1, func() error {
+	Eventually(func() error {
 		var err error
 		list, err = clientHubDynamic.Resource(gvr).List(context.TODO(), opts)
 		if err != nil {
@@ -259,13 +265,15 @@ func ListWithTimeoutByNamespace(
 	wantFound bool,
 	timeout int,
 ) *unstructured.UnstructuredList {
+	GinkgoHelper()
+
 	if timeout < 1 {
 		timeout = 1
 	}
 
 	var list *unstructured.UnstructuredList
 
-	EventuallyWithOffset(1, func() error {
+	Eventually(func() error {
 		var err error
 		list, err = clientHubDynamic.Resource(gvr).Namespace(ns).List(context.TODO(), opts)
 		if err != nil {
@@ -364,9 +372,11 @@ func GetMetrics(metricPatterns ...string) []string {
 func GetMatchingEvents(
 	client kubernetes.Interface, namespace, objName, reasonRegex, msgRegex string, timeout int,
 ) []corev1.Event {
+	GinkgoHelper()
+
 	var eventList *corev1.EventList
 
-	EventuallyWithOffset(1, func() error {
+	Eventually(func() error {
 		var err error
 		eventList, err = client.CoreV1().Events(namespace).List(context.TODO(), metav1.ListOptions{})
 
