@@ -37,12 +37,14 @@ var _ = Describe("Test governance-policy-database secret changes and DB annotati
 	nsName := fmt.Sprintf("case20-%d", seededRand.Int31())
 
 	createCase20Policy := func(ctx context.Context) {
+		GinkgoHelper()
+
 		By("Creating " + case20PolicyName)
 		utils.Kubectl("apply", "-f", case20PolicyYAML, "-n", nsName, "--kubeconfig="+kubeconfigHub)
 		plc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, case20PolicyName, nsName, true, defaultTimeoutSeconds,
 		)
-		ExpectWithOffset(1, plc).NotTo(BeNil())
+		Expect(plc).NotTo(BeNil())
 
 		By("Patching the placement with decision of cluster local-cluster")
 		pld := utils.GetWithTimeout(
@@ -57,13 +59,13 @@ var _ = Describe("Test governance-policy-database secret changes and DB annotati
 		_, err := clientHubDynamic.Resource(gvrPlacementDecision).Namespace(nsName).UpdateStatus(
 			ctx, pld, metav1.UpdateOptions{},
 		)
-		ExpectWithOffset(1, err).ToNot(HaveOccurred())
+		Expect(err).ToNot(HaveOccurred())
 
 		By("Waiting for the replicated policy")
 		replicatedPolicy := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, case20PolicyName, nsName, true, defaultTimeoutSeconds,
 		)
-		ExpectWithOffset(1, replicatedPolicy).NotTo(BeNil())
+		Expect(replicatedPolicy).NotTo(BeNil())
 	}
 
 	BeforeAll(func(ctx context.Context) {
@@ -144,8 +146,10 @@ var _ = Describe("Test governance-policy-database secret changes and DB annotati
 })
 
 func bringDownDBConnection(ctx context.Context) {
+	GinkgoHelper()
+
 	By("Setting the port to 12345")
-	EventuallyWithOffset(1, func(g Gomega) {
+	Eventually(func(g Gomega) {
 		namespacedSecret := clientHub.CoreV1().Secrets("open-cluster-management")
 		secret, err := namespacedSecret.Get(
 			ctx, complianceeventsapi.DBSecretName, metav1.GetOptions{},
@@ -159,7 +163,7 @@ func bringDownDBConnection(ctx context.Context) {
 	}, defaultTimeoutSeconds, 1).Should(Succeed())
 
 	By("Waiting for the database connection to be down")
-	EventuallyWithOffset(1, func(g Gomega) {
+	Eventually(func(g Gomega) {
 		req, err := http.NewRequestWithContext(
 			ctx, http.MethodGet, fmt.Sprintf("https://localhost:%d/api/v1/compliance-events/1", complianceAPIPort), nil,
 		)
@@ -189,8 +193,10 @@ func bringDownDBConnection(ctx context.Context) {
 }
 
 func restoreDBConnection(ctx context.Context) {
+	GinkgoHelper()
+
 	By("Restoring the database connection")
-	EventuallyWithOffset(1, func(g Gomega) {
+	Eventually(func(g Gomega) {
 		namespacedSecret := clientHub.CoreV1().Secrets("open-cluster-management")
 		secret, err := namespacedSecret.Get(
 			ctx, complianceeventsapi.DBSecretName, metav1.GetOptions{},
@@ -208,7 +214,7 @@ func restoreDBConnection(ctx context.Context) {
 	}, defaultTimeoutSeconds, 1).Should(Succeed())
 
 	By("Waiting for the database connection to be up")
-	EventuallyWithOffset(1, func(g Gomega) {
+	Eventually(func(g Gomega) {
 		req, err := http.NewRequestWithContext(
 			ctx,
 			http.MethodGet,

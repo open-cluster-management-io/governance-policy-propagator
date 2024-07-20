@@ -30,15 +30,17 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 	ansiblelistlen := 0
 	// Use this only when target_clusters managed1 managed2 managed3
 	getLastAnsiblejob := func() *unstructured.Unstructured {
+		GinkgoHelper()
+
 		ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
 			context.TODO(), metav1.ListOptions{},
 		)
-		ExpectWithOffset(1, err).ToNot(HaveOccurred())
+		Expect(err).ToNot(HaveOccurred())
 		for _, ansiblejob := range ansiblejobList.Items {
 			targetClusters, _, err := unstructured.NestedSlice(ansiblejob.Object,
 				"spec", "extra_vars", "target_clusters")
 			if err != nil {
-				ExpectWithOffset(1, err).ToNot(HaveOccurred())
+				Expect(err).ToNot(HaveOccurred())
 			}
 			for _, clusterName := range targetClusters {
 				if clusterName == "managed3" {
@@ -50,10 +52,12 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 		return nil
 	}
 	getLastAnsiblejobByTime := func() *unstructured.Unstructured {
+		GinkgoHelper()
+
 		ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
 			context.TODO(), metav1.ListOptions{},
 		)
-		ExpectWithOffset(1, err).ToNot(HaveOccurred())
+		Expect(err).ToNot(HaveOccurred())
 		sort.Slice(ansiblejobList.Items, func(i, j int) bool {
 			p1 := ansiblejobList.Items[i].GetCreationTimestamp()
 			p2 := ansiblejobList.Items[j].GetCreationTimestamp()
