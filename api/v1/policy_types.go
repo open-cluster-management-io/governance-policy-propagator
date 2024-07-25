@@ -66,6 +66,10 @@ type PolicyDependency struct {
 	Compliance ComplianceState `json:"compliance"`
 }
 
+type HubTemplateOptions struct {
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+}
+
 // PolicySpec defines the configurations of the policy engine resources to deliver to the managed
 // clusters.
 type PolicySpec struct {
@@ -98,6 +102,9 @@ type PolicySpec struct {
 	// PolicyDependencies is a list of dependency objects detailed with extra considerations for
 	// compliance that should be fulfilled before applying the policies to the managed clusters.
 	Dependencies []PolicyDependency `json:"dependencies,omitempty"`
+
+	// HubTemplateOptions changes the default behavior of hub templates.
+	HubTemplateOptions *HubTemplateOptions `json:"hubTemplateOptions,omitempty"`
 }
 
 // PlacementDecision is the cluster name returned by the placement resource.

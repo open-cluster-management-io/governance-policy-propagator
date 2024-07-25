@@ -24,7 +24,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"open-cluster-management.io/governance-policy-propagator/controllers/complianceeventsapi"
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
@@ -125,8 +124,6 @@ var _ = Describe("Test the compliance events API", Label("compliance-events-api"
 			_, err := db.ExecContext(ctx, "DROP TABLE IF EXISTS "+tableName+" CASCADE")
 			Expect(err).ToNot(HaveOccurred())
 		}
-
-		ctrllog.SetLogger(GinkgoLogr)
 
 		complianceServerCtx, err := complianceeventsapi.NewComplianceServerCtx(connectionURL, "unknown")
 		Expect(err).ToNot(HaveOccurred())

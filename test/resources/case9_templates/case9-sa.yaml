@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: case9-sa-configmap
+  namespace: default
+data:
+  city: Raleigh
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: case9-sa
+  namespace: policy-propagator-test
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: case9-sa
+  namespace: default
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - list
+      - watch
+    resourceNames:
+      - case9-sa-configmap
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: case9-sa
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - list
+      - watch
+    resourceNames:
+      - default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: case9-sa
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: case9-sa
+subjects:
+  - kind: ServiceAccount
+    name: case9-sa
+    namespace: policy-propagator-test
+  - kind: ServiceAccount
+    name: case9-sa-does-not-exist
+    namespace: policy-propagator-test
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: case9-sa
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: case9-sa
+subjects:
+  - kind: ServiceAccount
+    name: case9-sa
+    namespace: policy-propagator-test
+  - kind: ServiceAccount
+    name: case9-sa-does-not-exist
+    namespace: policy-propagator-test

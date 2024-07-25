@@ -24,6 +24,7 @@ func (r *ReplicatedPolicyReconciler) SetupWithManager(
 	dependenciesSource source.Source,
 	updateSrc source.Source,
 	templateSrc source.Source,
+	saTemplateSrc source.Source,
 	plrsEnabled bool,
 ) error {
 	ctrlBldr := ctrl.NewControllerManagedBy(mgr).
@@ -35,6 +36,7 @@ func (r *ReplicatedPolicyReconciler) SetupWithManager(
 		WatchesRawSource(dependenciesSource, &handler.EnqueueRequestForObject{}).
 		WatchesRawSource(updateSrc, &handler.EnqueueRequestForObject{}).
 		WatchesRawSource(templateSrc, &handler.EnqueueRequestForObject{}).
+		WatchesRawSource(saTemplateSrc, &handler.EnqueueRequestForObject{}).
 		Watches(
 			&clusterv1beta1.PlacementDecision{},
 			HandlerForDecision(mgr.GetClient()),
