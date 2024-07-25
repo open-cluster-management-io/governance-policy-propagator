@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 
-	templates "github.com/stolostron/go-template-utils/v4/pkg/templates"
 	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -35,8 +34,8 @@ type ReplicatedPolicyReconciler struct {
 	Propagator
 	ResourceVersions    *sync.Map
 	DynamicWatcher      k8sdepwatches.DynamicWatcher
-	TemplateResolver    *templates.TemplateResolver
 	ComplianceServerCtx *complianceeventsapi.ComplianceServerCtx
+	TemplateResolvers   *TemplateResolvers
 }
 
 func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
@@ -45,10 +44,11 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 
 	// Set the hub template watch metric after reconcile
 	defer func() {
-		hubTempWatches := r.TemplateResolver.GetWatchCount()
-		log.V(3).Info("Setting hub template watch metric", "value", hubTempWatches)
+		watchCount := r.TemplateResolvers.GetWatchCount()
 
-		hubTemplateActiveWatchesMetric.Set(float64(hubTempWatches))
+		log.V(3).Info("Setting hub template watch metric", "value", watchCount)
+
+		hubTemplateActiveWatchesMetric.Set(float64(watchCount))
 	}()
 
 	replicatedExists := true
@@ -231,33 +231,38 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 	// save the watcherError for later, so that the policy can still be updated now.
 	var watcherErr error
 
-	if policyHasTemplates(rootPolicy) {
-		if replicatedExists {
-			// If the replicated policy has an initialization vector specified, set it for processing
-			if initializationVector, ok := replicatedPolicy.Annotations[IVAnnotation]; ok {
-				tempAnnotations := desiredReplicatedPolicy.GetAnnotations()
-				if tempAnnotations == nil {
-					tempAnnotations = make(map[string]string)
-				}
-
-				tempAnnotations[IVAnnotation] = initializationVector
-
-				desiredReplicatedPolicy.SetAnnotations(tempAnnotations)
+	if replicatedExists {
+		// If the replicated policy has an initialization vector specified, set it for processing
+		if initializationVector, ok := replicatedPolicy.Annotations[IVAnnotation]; ok {
+			tempAnnotations := desiredReplicatedPolicy.GetAnnotations()
+			if tempAnnotations == nil {
+				tempAnnotations = make(map[string]string)
 			}
+
+			tempAnnotations[IVAnnotation] = initializationVector
+
+			desiredReplicatedPolicy.SetAnnotations(tempAnnotations)
+		}
+	}
+
+	// Any errors to expose to the user are logged and recorded in the processTemplates method. Only retry
+	// the request if it's determined to be a retryable error (i.e. don't retry syntax errors).
+	tmplErr := r.processTemplates(ctx, desiredReplicatedPolicy, decision.Cluster, rootPolicy)
+	if errors.Is(tmplErr, ErrRetryable) {
+		// Return the error if it's retryable, which will utilize controller-runtime's exponential backoff.
+		return reconcile.Result{}, tmplErr
+	} else if errors.Is(tmplErr, ErrSAMissing) {
+		saName := desiredReplicatedPolicy.Spec.HubTemplateOptions.ServiceAccountName
+		saObjID := k8sdepwatches.ObjectIdentifier{
+			Version:   "v1",
+			Kind:      "ServiceAccount",
+			Namespace: rootNS,
+			Name:      saName,
 		}
 
-		// Any errors to expose to the user are logged and recorded in the processTemplates method. Only retry
-		// the request if it's determined to be a retryable error (i.e. don't retry syntax errors).
-		err := r.processTemplates(ctx, desiredReplicatedPolicy, decision.Cluster, rootPolicy)
-		if errors.Is(err, ErrRetryable) {
-			// Return the error if it's retryable, which will utilize controller-runtime's exponential backoff.
-			return reconcile.Result{}, err
-		}
-	} else {
-		watcherErr := r.TemplateResolver.UncacheWatcher(instanceObjID)
-		if watcherErr != nil {
-			log.Error(watcherErr, "Failed to uncache objects related to the replicated policy's templates")
-		}
+		log.Info("Adding a watch for the missing hub templates service account", "serviceAccount", saObjID)
+
+		objsToWatch[saObjID] = true
 	}
 
 	r.setDBAnnotations(ctx, rootPolicy, desiredReplicatedPolicy, replicatedPolicy)
@@ -329,11 +334,21 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 	// whether it was updated or not, this resourceVersion can be cached
 	version.resourceVersion = replicatedPolicy.GetResourceVersion()
 
-	if watcherErr != nil {
-		log.Info("Requeueing for the dynamic watcher error")
+	var returnErr error
+
+	// Retry template errors due to permission issues. This isn't ideal, but there's no good event driven way to
+	// be notified when the permissions are given to the service account.
+	if k8serrors.IsForbidden(tmplErr) {
+		returnErr = tmplErr
 	}
 
-	return reconcile.Result{}, watcherErr
+	if watcherErr != nil {
+		log.Info("Requeueing for the dynamic watcher error")
+
+		returnErr = watcherErr
+	}
+
+	return reconcile.Result{}, returnErr
 }
 
 // getParentPolicyID needs to have the caller call r.ComplianceServerCtx.Lock.RLock.
@@ -604,7 +619,7 @@ func (r *ReplicatedPolicyReconciler) cleanUpReplicated(ctx context.Context, repl
 
 	watcherErr := r.DynamicWatcher.RemoveWatcher(objID)
 
-	uncacheErr := r.TemplateResolver.UncacheWatcher(objID)
+	uncacheErr := r.TemplateResolvers.RemoveReplicatedPolicy(objID)
 	if uncacheErr != nil {
 		if watcherErr == nil {
 			watcherErr = uncacheErr

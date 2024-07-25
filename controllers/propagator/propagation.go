@@ -12,13 +12,14 @@ import (
 	"sync"
 	"time"
 
-	templates "github.com/stolostron/go-template-utils/v4/pkg/templates"
+	templates "github.com/stolostron/go-template-utils/v6/pkg/templates"
 	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,7 +35,10 @@ const (
 	TriggerUpdateAnnotation = "policy.open-cluster-management.io/trigger-update"
 )
 
-var ErrRetryable = errors.New("")
+var (
+	ErrRetryable = errors.New("")
+	ErrSAMissing = errors.New("the hubTemplatesOptions.serviceAccountName does not exist")
+)
 
 type Propagator struct {
 	client.Client
@@ -152,17 +156,6 @@ func (r *RootPolicyReconciler) handleRootPolicy(ctx context.Context, instance *p
 	return nil
 }
 
-// a helper to quickly check if there are any templates in any of the policy templates
-func policyHasTemplates(instance *policiesv1.Policy) bool {
-	for _, policyT := range instance.Spec.PolicyTemplates {
-		if templates.HasTemplate(policyT.ObjectDefinition.Raw, TemplateStartDelim, false) {
-			return true
-		}
-	}
-
-	return false
-}
-
 type templateCtx struct {
 	ManagedClusterName   string
 	ManagedClusterLabels map[string]string
@@ -196,6 +189,8 @@ func addManagedClusterLabels(clusterName string) func(templates.CachingQueryAPI,
 // policy.open-cluster-management.io/trigger-update is used to trigger reprocessing of the templates
 // and ensure that replicated-policies in the cluster are updated only if there is a change. This
 // annotation is deleted from the replicated policies and not propagated to the cluster namespaces.
+// If hubTemplateOptions.serviceAccountName specifes a service account which does not exist, an ErrSAMissing
+// error is returned for the caller to add a watch on the missing service account.
 func (r *ReplicatedPolicyReconciler) processTemplates(
 	ctx context.Context,
 	replicatedPlc *policiesv1.Policy, clusterName string, rootPlc *policiesv1.Policy,
@@ -205,7 +200,93 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 		"policyNamespace", rootPlc.GetNamespace(),
 		"cluster", clusterName,
 	)
+
 	log.V(1).Info("Processing templates")
+
+	watcher := k8sdepwatches.ObjectIdentifier{
+		Group:     policiesv1.GroupVersion.Group,
+		Version:   policiesv1.GroupVersion.Version,
+		Kind:      replicatedPlc.Kind,
+		Namespace: replicatedPlc.GetNamespace(),
+		Name:      replicatedPlc.GetName(),
+	}
+
+	var saNSName types.NamespacedName
+	var templateResolverOptions templates.ResolveOptions
+
+	if replicatedPlc.Spec.HubTemplateOptions != nil && replicatedPlc.Spec.HubTemplateOptions.ServiceAccountName != "" {
+		saNSName = types.NamespacedName{
+			Namespace: rootPlc.Namespace,
+			Name:      replicatedPlc.Spec.HubTemplateOptions.ServiceAccountName,
+		}
+
+		templateResolverOptions = templates.ResolveOptions{
+			Watcher: &watcher,
+		}
+	} else {
+		saNSName = defaultSANamespacedName
+		templateResolverOptions = templates.ResolveOptions{
+			ClusterScopedAllowList: []templates.ClusterScopedObjectIdentifier{
+				{
+					Group: "cluster.open-cluster-management.io",
+					Kind:  "ManagedCluster",
+					Name:  clusterName,
+				},
+			},
+			LookupNamespace: rootPlc.GetNamespace(),
+			Watcher:         &watcher,
+		}
+	}
+
+	templateResolver, err := r.TemplateResolvers.GetResolver(watcher, saNSName)
+	if err != nil {
+		log.Error(err, "Failed to get the template resolver", "serviceAccount", saNSName)
+
+		for i, policyT := range replicatedPlc.Spec.PolicyTemplates {
+			if !templates.HasTemplate(policyT.ObjectDefinition.Raw, TemplateStartDelim, false) {
+				continue
+			}
+
+			var setErr error
+
+			if errors.Is(err, ErrSAMissing) {
+				setErr = setTemplateError(
+					policyT,
+					fmt.Errorf(
+						"the service account in hubTemplateOptions.serviceAccountName (%s) does not exist", saNSName,
+					),
+				)
+			} else {
+				setErr = setTemplateError(
+					policyT,
+					fmt.Errorf(
+						"failed to set up the template resolver for the service account in hubTemplateOptions."+
+							"serviceAccountName (%s): %v",
+						saNSName, err,
+					),
+				)
+			}
+
+			if setErr != nil {
+				log.Error(setErr, "Failed to set the hub template error", "policyTemplateIndex", i)
+			}
+		}
+
+		return err
+	}
+
+	err = templateResolver.StartQueryBatch(watcher)
+	if err != nil {
+		log.Error(err, "Failed to start a query batch for the templating")
+
+		return err
+	}
+
+	defer func() {
+		if err := templateResolver.EndQueryBatch(watcher); err != nil {
+			log.Error(err, "Failed to end the query batch for the templating")
+		}
+	}()
 
 	annotations := replicatedPlc.GetAnnotations()
 
@@ -230,46 +311,15 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 		replicatedPlc.SetAnnotations(annotations)
 	}
 
-	plcGVK := replicatedPlc.GroupVersionKind()
-
-	templateResolverOptions := templates.ResolveOptions{
-		ClusterScopedAllowList: []templates.ClusterScopedObjectIdentifier{
-			{
-				Group: "cluster.open-cluster-management.io",
-				Kind:  "ManagedCluster",
-				Name:  clusterName,
-			},
-		},
-		DisableAutoCacheCleanUp: true,
-		LookupNamespace:         rootPlc.GetNamespace(),
-		Watcher: &k8sdepwatches.ObjectIdentifier{
-			Group:     plcGVK.Group,
-			Version:   plcGVK.Version,
-			Kind:      plcGVK.Kind,
-			Namespace: replicatedPlc.GetNamespace(),
-			Name:      replicatedPlc.GetName(),
-		},
-	}
-
-	var templateResult templates.TemplateResult
-	var cacheCleanUp templates.CacheCleanUpFunc
-
-	defer func() {
-		if cacheCleanUp != nil {
-			err := cacheCleanUp()
-			if err != nil {
-				log.Error(err, "Failed to perform the cache clean up after template resolution")
-			}
-		}
-	}()
-
 	// A policy can have multiple policy templates within it, iterate and process each
-	for _, policyT := range replicatedPlc.Spec.PolicyTemplates {
+	for i, policyT := range replicatedPlc.Spec.PolicyTemplates {
 		if !templates.HasTemplate(policyT.ObjectDefinition.Raw, TemplateStartDelim, false) {
 			continue
 		}
 
-		log.V(1).Info("Found an object definition with templates")
+		log := log.WithValues("policyTemplateIndex", i)
+
+		log.V(1).Info("Resolving templates on the policy template")
 
 		templateContext := templateCtx{ManagedClusterName: clusterName}
 
@@ -313,16 +363,9 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 			}
 		}
 
-		var tplErr error
-
-		templateResult, tplErr = r.TemplateResolver.ResolveTemplate(
+		templateResult, tplErr := templateResolver.ResolveTemplate(
 			policyT.ObjectDefinition.Raw, templateContext, &templateResolverOptions,
 		)
-
-		if templateResult.CacheCleanUp != nil {
-			cacheCleanUp = templateResult.CacheCleanUp
-		}
-
 		if tplErr != nil {
 			log.Error(tplErr, "Failed to resolve templates")
 
@@ -336,29 +379,10 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 					tplErr.Error(),
 				),
 			)
-			// Set an annotation on the policyTemplate(e.g. ConfigurationPolicy) to the template processing error msg
-			// managed clusters will use this when creating a violation
-			policyTObjectUnstructured := &unstructured.Unstructured{}
 
-			jsonErr := json.Unmarshal(policyT.ObjectDefinition.Raw, policyTObjectUnstructured)
-			if jsonErr != nil {
-				// it shouldn't get here but if it did just log a msg
-				// it's all right, a generic msg will be used on the managedcluster
-				log.Error(jsonErr, "Error unmarshalling the object definition to JSON")
-			} else {
-				policyTAnnotations := policyTObjectUnstructured.GetAnnotations()
-				if policyTAnnotations == nil {
-					policyTAnnotations = make(map[string]string)
-				}
-				policyTAnnotations["policy.open-cluster-management.io/hub-templates-error"] = tplErr.Error()
-				policyTObjectUnstructured.SetAnnotations(policyTAnnotations)
-
-				updatedPolicyT, jsonErr := json.Marshal(policyTObjectUnstructured)
-				if jsonErr != nil {
-					log.Error(jsonErr, "Failed to marshall the policy template to JSON")
-				} else {
-					policyT.ObjectDefinition.Raw = updatedPolicyT
-				}
+			err := setTemplateError(policyT, tplErr)
+			if err != nil {
+				log.Error(err, "Failed to set the hub template error on the replicated policy")
 			}
 
 			// If the failure was due to a Kubernetes API error that could be recoverable, let's retry it.
@@ -407,8 +431,6 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 			}
 		}
 	}
-
-	log.V(1).Info("Successfully processed templates")
 
 	return nil
 }

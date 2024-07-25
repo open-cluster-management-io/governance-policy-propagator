@@ -1,0 +1,20 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: case9-sa-policy
+spec:
+  hubTemplateOptions:
+    serviceAccountName: case9-sa-does-not-exist
+  remediationAction: inform
+  disabled: false
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: case9-sa-policy
+          labels:
+            configmap: '{{hub fromConfigMap "default" "case9-sa-configmap" "city" hub}}'
+            namespace: '{{hub (lookup "v1" "Namespace" "" "default").metadata.name hub}}'        
+        spec:
+          severity: critical

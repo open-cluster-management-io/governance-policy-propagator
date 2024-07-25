@@ -23,6 +23,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"open-cluster-management.io/governance-policy-propagator/test/utils"
 )
@@ -54,6 +56,7 @@ var (
 	defaultTimeoutSeconds int
 	defaultImageRegistry  string
 	clientToken           string
+	clientHubCtrlRuntime  client.Client
 )
 
 func TestE2e(t *testing.T) {
@@ -76,6 +79,9 @@ func init() {
 }
 
 var _ = BeforeSuite(func() {
+	By("Setup the controller-runtime logger")
+	ctrllog.SetLogger(GinkgoLogr)
+
 	By("Setup Hub client")
 	gvrPolicy = schema.GroupVersionResource{
 		Group: "policy.open-cluster-management.io", Version: "v1", Resource: "policies",
@@ -109,6 +115,13 @@ var _ = BeforeSuite(func() {
 	}
 	clientHub = NewKubeClient("", kubeconfigHub, "")
 	clientHubDynamic = NewKubeClientDynamic("", kubeconfigHub, "")
+
+	config, err := LoadConfig("", kubeconfigHub, "")
+	Expect(err).ToNot(HaveOccurred())
+
+	clientHubCtrlRuntime, err = client.New(config, client.Options{})
+	Expect(err).ToNot(HaveOccurred())
+
 	defaultImageRegistry = "quay.io/open-cluster-management"
 	testNamespace = "policy-propagator-test"
 	defaultTimeoutSeconds = 30

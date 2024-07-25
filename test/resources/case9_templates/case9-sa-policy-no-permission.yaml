@@ -1,0 +1,19 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: case9-sa-policy
+spec:
+  hubTemplateOptions:
+    serviceAccountName: case9-sa
+  remediationAction: inform
+  disabled: false
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: case9-sa-policy
+          annotations:
+            secret: '{{hub fromSecret "open-cluster-management" "postgres-cert" "tls.crt" hub}}'        
+        spec:
+          severity: critical

@@ -1,0 +1,42 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: case9-sa-policy
+spec:
+  hubTemplateOptions:
+    serviceAccountName: case9-sa
+  remediationAction: inform
+  disabled: false
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: case9-sa-policy
+          labels:
+            configmap: '{{hub fromConfigMap "default" "case9-sa-configmap" "city" hub}}'
+            namespace: '{{hub (lookup "v1" "Namespace" "" "default").metadata.name hub}}'   
+        spec:
+          severity: critical
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: case9-sa-policy
+placementRef:
+  apiGroup: apps.open-cluster-management.io
+  kind: PlacementRule
+  name: case9-sa-policy
+subjects:
+- apiGroup: policy.open-cluster-management.io
+  kind: Policy
+  name: case9-sa-policy
+---
+apiVersion: apps.open-cluster-management.io/v1
+kind: PlacementRule
+metadata:
+  name: case9-sa-policy
+spec:
+  clusterSelector:
+    matchExpressions:
+      []

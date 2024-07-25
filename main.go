@@ -19,7 +19,7 @@ import (
 	"github.com/go-logr/zapr"
 	"github.com/spf13/pflag"
 	"github.com/stolostron/go-log-utils/zaputil"
-	templates "github.com/stolostron/go-template-utils/v4/pkg/templates"
+	templates "github.com/stolostron/go-template-utils/v6/pkg/templates"
 	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -380,6 +380,7 @@ func main() {
 		templates.Config{
 			AdditionalIndentation: 8,
 			DisabledFunctions:     []string{},
+			SkipBatchManagement:   true,
 			StartDelim:            propagatorctrl.TemplateStartDelim,
 			StopDelim:             propagatorctrl.TemplateStopDelim,
 		},
@@ -515,7 +516,7 @@ func main() {
 
 	log.V(1).Info("Starting the compliance events API and controller")
 
-	client := kubernetes.NewForConfigOrDie(mgr.GetConfig())
+	k8sClient := kubernetes.NewForConfigOrDie(mgr.GetConfig())
 
 	tempDir, err := os.MkdirTemp("", "compliance-events-store")
 	if err != nil {
@@ -549,7 +550,7 @@ func main() {
 	complianceServerCtx := startComplianceEventsAPI(
 		controllerCtx,
 		cfg,
-		client,
+		k8sClient,
 		clusterID,
 		complianceEventsNamespace,
 		net.JoinHostPort(complianceAPIHost, complianceAPIPort),
@@ -560,16 +561,30 @@ func main() {
 		replicatedPolicyUpdates,
 	)
 
+	log.Info("Starting the template resolver service")
+
+	resolvers, saTemplatesSource := propagatorctrl.NewTemplateResolvers(
+		controllerCtx, mgr.GetConfig(), mgr.GetClient(), templateResolver, replicatedPolicyUpdates,
+	)
+
+	wg.Add(1)
+
+	go func() {
+		resolvers.WaitForShutdown()
+
+		wg.Done()
+	}()
+
 	replicatedPolicyCtrler := &propagatorctrl.ReplicatedPolicyReconciler{
 		Propagator:          propagator,
 		ResourceVersions:    replicatedResourceVersions,
 		DynamicWatcher:      dynamicWatcher,
-		TemplateResolver:    templateResolver,
 		ComplianceServerCtx: complianceServerCtx,
+		TemplateResolvers:   resolvers,
 	}
 
-	if err = (replicatedPolicyCtrler).SetupWithManager(mgr, replPolicyMaxConcurrency,
-		dynamicWatcherSource, replicatedUpdatesSource, templatesSource, !disablePlacementRule,
+	if err = replicatedPolicyCtrler.SetupWithManager(mgr, replPolicyMaxConcurrency,
+		dynamicWatcherSource, replicatedUpdatesSource, templatesSource, saTemplatesSource, !disablePlacementRule,
 	); err != nil {
 		log.Error(err, "Unable to create the controller", "controller", "replicated-policy")
 		os.Exit(1)
