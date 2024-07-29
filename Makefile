@@ -128,7 +128,7 @@ manifests: kustomize controller-gen ## Generate WebhookConfiguration, ClusterRol
 	mv deploy/crds/policy.open-cluster-management.io_policies.yaml deploy/crds/kustomize/policy.open-cluster-management.io_policies.yaml
 	@printf -- "---\n" > deploy/crds/policy.open-cluster-management.io_policies.yaml
 	$(KUSTOMIZE) build deploy/crds/kustomize >> deploy/crds/policy.open-cluster-management.io_policies.yaml
-	$(SED) -i 's/ description: |-/ description: >-/g' deploy/crds/policy.open-cluster-management.io_policies.yaml
+	$(SED) -i 's/ description: |-/ description: >-/g' deploy/crds/policy.open-cluster-management.io_*.yaml
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
