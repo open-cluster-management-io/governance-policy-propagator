@@ -468,9 +468,11 @@ var _ = Describe("Test policy templates", func() {
 				utils.Kubectl("delete", "secret",
 					case9EncryptionSecretName,
 					"-n", managedCluster,
+					"--ignore-not-found",
 					"--kubeconfig="+kubeconfigHub)
 				utils.Kubectl("delete", "-f", case9PolicyYamlCopy,
 					"-n", testNamespace,
+					"--ignore-not-found",
 					"--kubeconfig="+kubeconfigHub)
 			})
 		}
@@ -543,6 +545,13 @@ var _ = Describe("Test policy templates", func() {
 				"-n", testNamespace, "delete", "sa", "case9-sa-does-not-exist",
 				"--ignore-not-found", "--kubeconfig="+kubeconfigHub,
 			)
+
+			for i := 0; i < 3; i++ {
+				utils.Kubectl(
+					"delete", "secret", "policy-encryption-key", "-n", fmt.Sprintf("managed%d", i+1),
+					"--ignore-not-found", "--kubeconfig="+kubeconfigHub,
+				)
+			}
 		})
 
 		It("Template resolution with a custom service account", func(ctx SpecContext) {

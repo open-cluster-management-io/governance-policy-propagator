@@ -28,10 +28,12 @@ var _ = Describe("Test policy status aggregation", func() {
 			utils.Kubectl("delete",
 				"-f", faultyPBYaml,
 				"-n", testNamespace,
+				"--ignore-not-found",
 				"--kubeconfig="+kubeconfigHub)
 			utils.Kubectl("delete",
 				"-f", case2PolicyYaml,
 				"-n", testNamespace,
+				"--ignore-not-found",
 				"--kubeconfig="+kubeconfigHub)
 			opt := metav1.ListOptions{}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 10)
@@ -285,7 +287,15 @@ var _ = Describe("Test policy status aggregation", func() {
 
 		AfterAll(func() {
 			By("Cleaning up")
-			utils.Kubectl("delete", "-f", case2PolicyYaml, "-n", testNamespace, "--kubeconfig="+kubeconfigHub)
+			utils.Kubectl(
+				"delete",
+				"-f",
+				case2PolicyYaml,
+				"-n",
+				testNamespace,
+				"--ignore-not-found",
+				"--kubeconfig="+kubeconfigHub,
+			)
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, metav1.ListOptions{}, 0, false, 10)
 		})
 

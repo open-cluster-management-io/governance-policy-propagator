@@ -189,7 +189,7 @@ func addManagedClusterLabels(clusterName string) func(templates.CachingQueryAPI,
 // policy.open-cluster-management.io/trigger-update is used to trigger reprocessing of the templates
 // and ensure that replicated-policies in the cluster are updated only if there is a change. This
 // annotation is deleted from the replicated policies and not propagated to the cluster namespaces.
-// If hubTemplateOptions.serviceAccountName specifes a service account which does not exist, an ErrSAMissing
+// If hubTemplateOptions.serviceAccountName specifies a service account which does not exist, an ErrSAMissing
 // error is returned for the caller to add a watch on the missing service account.
 func (r *ReplicatedPolicyReconciler) processTemplates(
 	ctx context.Context,

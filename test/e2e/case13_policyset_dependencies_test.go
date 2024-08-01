@@ -59,8 +59,11 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 
 		DeferCleanup(func() {
 			By("Running cleanup")
-			utils.Kubectl("delete", "-f", case13PolicyYaml, "-n", testNamespace, "--kubeconfig="+kubeconfigHub)
-			utils.Kubectl("delete", "-f", case13Set2Yaml, "--kubeconfig="+kubeconfigHub)
+			utils.Kubectl(
+				"delete", "-f", case13PolicyYaml, "-n", testNamespace,
+				"--ignore-not-found", "--kubeconfig="+kubeconfigHub,
+			)
+			utils.Kubectl("delete", "-f", case13Set2Yaml, "--ignore-not-found", "--kubeconfig="+kubeconfigHub)
 			time.Sleep(5 * time.Second) // this helps everything get cleaned up completely
 		})
 	}

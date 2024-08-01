@@ -4,6 +4,7 @@
 package utils
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -296,11 +297,22 @@ func ListWithTimeoutByNamespace(
 
 // Kubectl execute kubectl cli
 func Kubectl(args ...string) {
+	GinkgoHelper()
+
 	cmd := exec.Command("kubectl", args...)
+
+	var stderr bytes.Buffer
+
+	cmd.Stderr = &stderr
 
 	err := cmd.Start()
 	if err != nil {
 		Fail(fmt.Sprintf("Error: %v", err))
+	}
+
+	err = cmd.Wait()
+	if err != nil {
+		Fail(fmt.Sprintf("`kubctl %s` failed: %s", strings.Join(args, " "), stderr.String()))
 	}
 }
 

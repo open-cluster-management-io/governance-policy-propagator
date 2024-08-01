@@ -67,6 +67,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 		utils.Kubectl("delete",
 			"-f", case3PolicyYaml,
 			"-n", testNamespace,
+			"--ignore-not-found",
 			"--kubeconfig="+kubeconfigHub)
 		opt := metav1.ListOptions{}
 		utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)

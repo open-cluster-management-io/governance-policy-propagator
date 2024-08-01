@@ -373,6 +373,7 @@ var _ = Describe("Test policy propagation", func() {
 			utils.Kubectl("delete",
 				"-f", case6PolicyYaml,
 				"-n", testNamespace,
+				"--ignore-not-found",
 				"--kubeconfig="+kubeconfigHub)
 			opt := metav1.ListOptions{}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 30)
@@ -530,13 +531,15 @@ var _ = Describe("Test policy propagation", func() {
 		AfterAll(func() {
 			utils.Kubectl("delete",
 				"-f", "../resources/case6_placement_propagation/case6-test-policy2.yaml",
-				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
+				"-n", testNamespace, "--ignore-not-found", "--kubeconfig="+kubeconfigHub)
 			opt := metav1.ListOptions{}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 10)
 		})
 	})
 
 	Describe("Handling propagation to terminating clusters", Ordered, func() {
+		var finalizerRemoved bool
+
 		BeforeAll(func() {
 			By("Creating " + case6PolicyYaml)
 			utils.Kubectl("apply",
@@ -588,6 +591,8 @@ var _ = Describe("Test policy propagation", func() {
 			utils.Kubectl("patch", "namespace", "test6-extra", "--type=json",
 				`-p=[{"op":"remove","path":"/metadata/finalizers"}]`, "--kubeconfig="+kubeconfigHub)
 
+			finalizerRemoved = true
+
 			By("Verifying that the namespace is removed")
 			ns := utils.GetClusterLevelWithTimeout(clientHubDynamic, gvrNamespace, "test6-extra", false,
 				defaultTimeoutSeconds)
@@ -605,14 +610,20 @@ var _ = Describe("Test policy propagation", func() {
 			utils.Kubectl("delete",
 				"-f", case6PolicyYaml,
 				"-n", testNamespace,
+				"--ignore-not-found",
 				"--kubeconfig="+kubeconfigHub)
 			opt := metav1.ListOptions{}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 10)
 
-			utils.Kubectl("patch", "namespace", "test6-extra", "--type=json",
-				`-p=[{"op":"remove","path":"/metadata/finalizers"}]`, "--kubeconfig="+kubeconfigHub)
-			utils.Kubectl("delete", "namespace", "test6-extra", "--timeout=2s", "--kubeconfig="+kubeconfigHub)
-			utils.Kubectl("delete", "managedcluster", "test6-extra", "--kubeconfig="+kubeconfigHub)
+			if !finalizerRemoved {
+				utils.Kubectl("patch", "namespace", "test6-extra", "--type=json",
+					`-p=[{"op":"remove","path":"/metadata/finalizers"}]`, "--kubeconfig="+kubeconfigHub)
+			}
+
+			utils.Kubectl("delete", "namespace", "test6-extra", "--ignore-not-found", "--kubeconfig="+kubeconfigHub)
+			utils.Kubectl(
+				"delete", "managedcluster", "test6-extra", "--ignore-not-found", "--kubeconfig="+kubeconfigHub,
+			)
 		})
 	})
 })

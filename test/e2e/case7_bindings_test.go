@@ -224,24 +224,29 @@ var _ = Describe("Test policy propagation", func() {
 			utils.Kubectl("delete",
 				"-f", case7PolicyYaml,
 				"-n", testNamespace,
+				"--ignore-not-found",
 				"--kubeconfig="+kubeconfigHub)
 			opt := metav1.ListOptions{}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 10)
 			utils.Kubectl("delete",
 				"-f", case7BindingYaml1,
 				"-n", testNamespace,
+				"--ignore-not-found",
 				"--kubeconfig="+kubeconfigHub)
 			utils.Kubectl("delete",
 				"-f", case7BindingYaml2,
 				"-n", testNamespace,
+				"--ignore-not-found",
 				"--kubeconfig="+kubeconfigHub)
 			utils.Kubectl("delete",
 				"-f", case7BindingYaml3,
 				"-n", testNamespace,
+				"--ignore-not-found",
 				"--kubeconfig="+kubeconfigHub)
 			utils.Kubectl("delete",
 				"-f", case7BindingYaml4,
 				"-n", testNamespace,
+				"--ignore-not-found",
 				"--kubeconfig="+kubeconfigHub)
 		})
 	})
