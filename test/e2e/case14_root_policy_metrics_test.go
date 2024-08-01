@@ -110,6 +110,7 @@ var _ = Describe("Test root policy metrics", Ordered, func() {
 			utils.Kubectl("delete",
 				"-f", policyYaml,
 				"-n", testNamespace,
+				"--ignore-not-found",
 				"--kubeconfig="+kubeconfigHub)
 			opt := metav1.ListOptions{}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, defaultTimeoutSeconds)
