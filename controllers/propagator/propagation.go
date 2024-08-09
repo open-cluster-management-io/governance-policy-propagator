@@ -159,6 +159,7 @@ func (r *RootPolicyReconciler) handleRootPolicy(ctx context.Context, instance *p
 type templateCtx struct {
 	ManagedClusterName   string
 	ManagedClusterLabels map[string]string
+	PolicyMetadata       map[string]interface{}
 }
 
 func addManagedClusterLabels(clusterName string) func(templates.CachingQueryAPI, interface{}) (interface{}, error) {
@@ -321,7 +322,15 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 
 		log.V(1).Info("Resolving templates on the policy template")
 
-		templateContext := templateCtx{ManagedClusterName: clusterName}
+		templateContext := templateCtx{
+			ManagedClusterName: clusterName,
+			PolicyMetadata: map[string]interface{}{
+				"annotations": rootPlc.Annotations,
+				"labels":      rootPlc.Labels,
+				"name":        rootPlc.Name,
+				"namespace":   rootPlc.Namespace,
+			},
+		}
 
 		if strings.Contains(string(policyT.ObjectDefinition.Raw), "ManagedClusterLabels") {
 			templateResolverOptions.ContextTransformers = append(
