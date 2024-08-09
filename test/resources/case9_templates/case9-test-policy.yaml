@@ -2,6 +2,8 @@ apiVersion: policy.open-cluster-management.io/v1
 kind: Policy
 metadata:
   name: case9-test-policy
+  labels:
+    team: panthers
 spec:
   remediationAction: inform
   disabled: false
@@ -38,6 +40,8 @@ spec:
                     {{hub .ManagedClusterLabels.vendor hub}}
                   label-vendor-test-two: |
                     {{hub (lookup "cluster.open-cluster-management.io/v1" "ManagedCluster" "" .ManagedClusterName).metadata.labels.vendor hub}}
+                  root-policy-label: '{{hub .PolicyMetadata.labels.team hub}}'
+                  root-policy-namespace: '{{hub .PolicyMetadata.namespace hub}}'
 ---
 apiVersion: policy.open-cluster-management.io/v1
 kind: PlacementBinding
