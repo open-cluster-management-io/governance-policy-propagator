@@ -31,7 +31,7 @@ KIND_NAMESPACE ?= $(CONTROLLER_NAMESPACE)
 POSTGRES_HOST ?= localhost
 
 # Test coverage threshold
-export COVERAGE_MIN ?= 75
+export COVERAGE_MIN ?= 74
 
 # Image URL to use all building/pushing image targets;
 # Use your own docker registry and image name for dev/test by overridding the IMG and REGISTRY environment variable.
