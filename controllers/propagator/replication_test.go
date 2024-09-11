@@ -185,10 +185,14 @@ func TestCanonicalizeDependencies(t *testing.T) {
 			input: []policiesv1.PolicyDependency{
 				depPol("red", "colors", "Compliant"),
 				depPol("blue", "colors", "NonCompliant"),
+				depPol("1.2", "colors", "NonCompliant"),
+				depPol("colors.1.2", "", "NonCompliant"),
 			},
 			want: []policiesv1.PolicyDependency{
 				depPol("colors.red", "", "Compliant"),
 				depPol("colors.blue", "", "NonCompliant"),
+				depPol("colors.1.2", "", "NonCompliant"),
+				depPol("colors.1.2", "", "NonCompliant"),
 			},
 		},
 		"policies without namespaces": {
@@ -225,7 +229,7 @@ func TestCanonicalizeDependencies(t *testing.T) {
 			}
 
 			if !reflect.DeepEqual(test.want, got) {
-				t.Fatalf("expected: %v, got: %v", test.want, got)
+				t.Fatalf("%s\nexpected:\n%v\ngot:\n%v", name, test.want, got)
 			}
 		})
 	}
