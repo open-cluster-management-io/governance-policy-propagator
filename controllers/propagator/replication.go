@@ -182,20 +182,21 @@ func (r *Propagator) canonicalizeDependencies(
 				})
 			}
 		} else if depIsPolicy(dep) {
-			split := strings.Split(dep.Name, ".")
-			if len(split) == 2 { // assume it's already in the correct <namespace>.<name> format
-				deps = append(deps, dep)
-			} else {
-				if dep.Namespace == "" {
-					// use the namespace from the dependent policy when otherwise not provided
-					dep.Namespace = defaultNamespace
+			if dep.Namespace == "" {
+				split := strings.Split(dep.Name, ".")
+				if len(split) >= 2 { // assume the name is already in the correct <namespace>.<name> format
+					deps = append(deps, dep)
+
+					continue
 				}
-
-				dep.Name = dep.Namespace + "." + dep.Name
-				dep.Namespace = ""
-
-				deps = append(deps, dep)
+				// use the namespace from the dependent policy when otherwise not provided
+				dep.Namespace = defaultNamespace
 			}
+
+			dep.Name = dep.Namespace + "." + dep.Name
+			dep.Namespace = ""
+
+			deps = append(deps, dep)
 		} else {
 			deps = append(deps, dep)
 		}
