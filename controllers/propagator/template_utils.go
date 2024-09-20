@@ -25,6 +25,7 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
@@ -120,7 +121,7 @@ func NewTemplateResolvers(
 	mgrClient client.Client,
 	defaultTemplateResolver *templates.TemplateResolver,
 	replicatedPolicyUpdates chan event.GenericEvent,
-) (*TemplateResolvers, *source.Channel) {
+) (*TemplateResolvers, source.TypedSource[reconcile.Request]) {
 	dynamicWatcherReconciler, dynamicWatcherSource := k8sdepwatches.NewControllerRuntimeSource()
 
 	return &TemplateResolvers{

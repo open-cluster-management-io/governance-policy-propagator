@@ -338,7 +338,7 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 
 	// Retry template errors due to permission issues. This isn't ideal, but there's no good event driven way to
 	// be notified when the permissions are given to the service account.
-	if k8serrors.IsForbidden(tmplErr) {
+	if k8serrors.IsForbidden(tmplErr) || k8serrors.IsUnauthorized(tmplErr) {
 		returnErr = tmplErr
 	}
 

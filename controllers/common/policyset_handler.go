@@ -43,7 +43,7 @@ func mapPolicySetToRequests(object client.Object) []reconcile.Request {
 
 // Create implements EventHandler
 func (e *EnqueueRequestsFromPolicySet) Create(_ context.Context, evt event.CreateEvent,
-	q workqueue.RateLimitingInterface,
+	q workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 	for _, policy := range mapPolicySetToRequests(evt.Object) {
 		q.Add(policy)
@@ -53,7 +53,7 @@ func (e *EnqueueRequestsFromPolicySet) Create(_ context.Context, evt event.Creat
 // Update implements EventHandler
 // Enqueues the diff between the new and old policy sets in the UpdateEvent
 func (e *EnqueueRequestsFromPolicySet) Update(_ context.Context, evt event.UpdateEvent,
-	q workqueue.RateLimitingInterface,
+	q workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 	//nolint:forcetypeassert
 	newPolicySet := evt.ObjectNew.(*policiesv1beta1.PolicySet)
@@ -97,7 +97,7 @@ func (e *EnqueueRequestsFromPolicySet) Update(_ context.Context, evt event.Updat
 
 // Delete implements EventHandler
 func (e *EnqueueRequestsFromPolicySet) Delete(_ context.Context, evt event.DeleteEvent,
-	q workqueue.RateLimitingInterface,
+	q workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 	for _, policy := range mapPolicySetToRequests(evt.Object) {
 		q.Add(policy)
@@ -106,7 +106,7 @@ func (e *EnqueueRequestsFromPolicySet) Delete(_ context.Context, evt event.Delet
 
 // Generic implements EventHandler
 func (e *EnqueueRequestsFromPolicySet) Generic(_ context.Context, evt event.GenericEvent,
-	q workqueue.RateLimitingInterface,
+	q workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 	for _, policy := range mapPolicySetToRequests(evt.Object) {
 		q.Add(policy)

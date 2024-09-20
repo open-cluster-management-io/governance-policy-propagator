@@ -72,7 +72,7 @@ type ComplianceServerCtx struct {
 	// A read lock should be used when the DB is accessed.
 	Lock           sync.RWMutex
 	DB             *sql.DB
-	Queue          workqueue.Interface
+	Queue          workqueue.TypedInterface[types.NamespacedName]
 	needsMigration bool
 	// Required to run a migration after the database connection changed or the feature was enabled.
 	connectionURL string
@@ -103,7 +103,7 @@ func NewComplianceServerCtx(dbConnectionURL string, clusterID string) (*Complian
 
 	return &ComplianceServerCtx{
 		Lock:          sync.RWMutex{},
-		Queue:         workqueue.New(),
+		Queue:         workqueue.NewTyped[types.NamespacedName](),
 		connectionURL: dbConnectionURL,
 		DB:            db,
 		ClusterID:     clusterID,
@@ -293,20 +293,17 @@ func MonitorDatabaseConnection(
 		for complianceServerCtx.Queue.Len() > 0 {
 			request, shutdown := complianceServerCtx.Queue.Get()
 
-			switch v := request.(type) {
-			case types.NamespacedName:
-				reconcileRequests <- event.GenericEvent{
-					Object: &common.GuttedObject{
-						TypeMeta: metav1.TypeMeta{
-							APIVersion: policyv1.GroupVersion.String(),
-							Kind:       "Policy",
-						},
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      v.Name,
-							Namespace: v.Namespace,
-						},
+			reconcileRequests <- event.GenericEvent{
+				Object: &common.GuttedObject{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: policyv1.GroupVersion.String(),
+						Kind:       "Policy",
 					},
-				}
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      request.Name,
+						Namespace: request.Namespace,
+					},
+				},
 			}
 
 			complianceServerCtx.Queue.Done(request)

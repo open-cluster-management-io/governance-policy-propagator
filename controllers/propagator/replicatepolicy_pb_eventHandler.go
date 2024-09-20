@@ -27,14 +27,14 @@ type handlerForBinding struct {
 
 // Create implements EventHandler.
 func (e *handlerForBinding) Create(ctx context.Context,
-	evt event.CreateEvent, q workqueue.RateLimitingInterface,
+	evt event.CreateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 	e.mapAndEnqueue(ctx, q, evt.Object)
 }
 
 // Update implements EventHandler. Update only targeted(modified) objects
 func (e *handlerForBinding) Update(ctx context.Context,
-	evt event.UpdateEvent, q workqueue.RateLimitingInterface,
+	evt event.UpdateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 	log.V(1).Info("Detect placementBinding and update targeted replicated-policies")
 	//nolint:forcetypeassert
@@ -73,20 +73,20 @@ func (e *handlerForBinding) Update(ctx context.Context,
 
 // Delete implements EventHandler.
 func (e *handlerForBinding) Delete(ctx context.Context,
-	evt event.DeleteEvent, q workqueue.RateLimitingInterface,
+	evt event.DeleteEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 	e.mapAndEnqueue(ctx, q, evt.Object)
 }
 
 // Generic implements EventHandler.
 func (e *handlerForBinding) Generic(ctx context.Context,
-	evt event.GenericEvent, q workqueue.RateLimitingInterface,
+	evt event.GenericEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 	e.mapAndEnqueue(ctx, q, evt.Object)
 }
 
 func (e *handlerForBinding) mapAndEnqueue(ctx context.Context,
-	q workqueue.RateLimitingInterface, obj client.Object,
+	q workqueue.TypedRateLimitingInterface[reconcile.Request], obj client.Object,
 ) {
 	pBinding := obj.(*policiesv1.PlacementBinding)
 	reqs := e.getMappedReplicatedPolicy(ctx, pBinding)
