@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var _ handler.EventHandler = &EnqueueRequestsFromMapFunc{}
@@ -24,34 +25,34 @@ type EnqueueRequestsFromMapFunc struct {
 
 // Create implements EventHandler
 func (e *EnqueueRequestsFromMapFunc) Create(ctx context.Context, evt event.CreateEvent,
-	q workqueue.RateLimitingInterface,
+	q workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 	e.mapAndEnqueue(ctx, q, evt.Object)
 }
 
 // Update implements EventHandler
 func (e *EnqueueRequestsFromMapFunc) Update(ctx context.Context, evt event.UpdateEvent,
-	q workqueue.RateLimitingInterface,
+	q workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 	e.mapAndEnqueue(ctx, q, evt.ObjectNew)
 }
 
 // Delete implements EventHandler
 func (e *EnqueueRequestsFromMapFunc) Delete(ctx context.Context, evt event.DeleteEvent,
-	q workqueue.RateLimitingInterface,
+	q workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 	e.mapAndEnqueue(ctx, q, evt.Object)
 }
 
 // Generic implements EventHandler
 func (e *EnqueueRequestsFromMapFunc) Generic(ctx context.Context, evt event.GenericEvent,
-	q workqueue.RateLimitingInterface,
+	q workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 	e.mapAndEnqueue(ctx, q, evt.Object)
 }
 
-func (e *EnqueueRequestsFromMapFunc) mapAndEnqueue(ctx context.Context, q workqueue.RateLimitingInterface,
-	object client.Object,
+func (e *EnqueueRequestsFromMapFunc) mapAndEnqueue(
+	ctx context.Context, q workqueue.TypedRateLimitingInterface[reconcile.Request], object client.Object,
 ) {
 	for _, req := range e.ToRequests(ctx, object) {
 		q.Add(req)

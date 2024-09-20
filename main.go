@@ -43,6 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -354,10 +355,7 @@ func main() {
 	bufferSize := 1024
 
 	replicatedPolicyUpdates := make(chan event.GenericEvent, bufferSize)
-	replicatedUpdatesSource := &source.Channel{
-		Source:         replicatedPolicyUpdates,
-		DestBufferSize: bufferSize,
-	}
+	replicatedUpdatesSource := source.Channel(replicatedPolicyUpdates, &handler.EnqueueRequestForObject{})
 
 	propagator := propagatorctrl.Propagator{
 		Client:                  mgr.GetClient(),

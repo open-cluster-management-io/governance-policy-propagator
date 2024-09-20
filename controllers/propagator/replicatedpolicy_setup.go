@@ -10,7 +10,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -33,10 +32,10 @@ func (r *ReplicatedPolicyReconciler) SetupWithManager(
 		For(
 			&policiesv1.Policy{},
 			builder.WithPredicates(replicatedPolicyPredicates(r.ResourceVersions))).
-		WatchesRawSource(dependenciesSource, &handler.EnqueueRequestForObject{}).
-		WatchesRawSource(updateSrc, &handler.EnqueueRequestForObject{}).
-		WatchesRawSource(templateSrc, &handler.EnqueueRequestForObject{}).
-		WatchesRawSource(saTemplateSrc, &handler.EnqueueRequestForObject{}).
+		WatchesRawSource(dependenciesSource).
+		WatchesRawSource(updateSrc).
+		WatchesRawSource(templateSrc).
+		WatchesRawSource(saTemplateSrc).
 		Watches(
 			&clusterv1beta1.PlacementDecision{},
 			HandlerForDecision(mgr.GetClient()),
