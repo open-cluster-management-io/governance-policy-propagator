@@ -116,12 +116,12 @@ func main() {
 		secureMetrics               bool
 		enableLeaderElection        bool
 		probeAddr                   string
-		keyRotationDays             uint
-		keyRotationMaxConcurrency   uint
-		policyMetricsMaxConcurrency uint
-		policyStatusMaxConcurrency  uint
-		rootPolicyMaxConcurrency    uint
-		replPolicyMaxConcurrency    uint
+		keyRotationDays             uint32
+		keyRotationMaxConcurrency   uint16
+		policyMetricsMaxConcurrency uint16
+		policyStatusMaxConcurrency  uint16
+		rootPolicyMaxConcurrency    uint16
+		replPolicyMaxConcurrency    uint16
 		enableWebhooks              bool
 		complianceAPIHost           string
 		complianceAPIPort           string
@@ -143,37 +143,37 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	pflag.BoolVar(&enableWebhooks, "enable-webhooks", true,
 		"Enable the policy validating webhook")
-	pflag.UintVar(
+	pflag.Uint32Var(
 		&keyRotationDays,
 		"encryption-key-rotation",
 		30,
 		"The number of days until the policy encryption key is rotated",
 	)
-	pflag.UintVar(
+	pflag.Uint16Var(
 		&keyRotationMaxConcurrency,
 		"key-rotation-max-concurrency",
 		10,
 		"The maximum number of concurrent reconciles for the policy-encryption-keys controller",
 	)
-	pflag.UintVar(
+	pflag.Uint16Var(
 		&policyMetricsMaxConcurrency,
 		"policy-metrics-max-concurrency",
 		5,
 		"The maximum number of concurrent reconciles for the policy-metrics controller",
 	)
-	pflag.UintVar(
+	pflag.Uint16Var(
 		&policyStatusMaxConcurrency,
 		"policy-status-max-concurrency",
 		5,
 		"The maximum number of concurrent reconciles for the policy-status controller",
 	)
-	pflag.UintVar(
+	pflag.Uint16Var(
 		&rootPolicyMaxConcurrency,
 		"root-policy-max-concurrency",
 		2,
 		"The maximum number of concurrent reconciles for the root-policy controller",
 	)
-	pflag.UintVar(
+	pflag.Uint16Var(
 		&replPolicyMaxConcurrency,
 		"replicated-policy-max-concurrency",
 		10,

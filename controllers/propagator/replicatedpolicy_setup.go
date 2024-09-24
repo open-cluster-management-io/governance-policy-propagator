@@ -19,7 +19,7 @@ import (
 
 func (r *ReplicatedPolicyReconciler) SetupWithManager(
 	mgr ctrl.Manager,
-	maxConcurrentReconciles uint,
+	maxConcurrentReconciles uint16,
 	dependenciesSource source.Source,
 	updateSrc source.Source,
 	templateSrc source.Source,

@@ -196,7 +196,7 @@ func (r *PolicyAutomationReconciler) getViolationContext(
 
 	policyViolationsLimit := policyAutomation.Spec.Automation.PolicyViolationsLimit
 	if policyViolationsLimit == nil {
-		policyViolationsLimit = new(uint)
+		policyViolationsLimit = new(uint16)
 		*policyViolationsLimit = policyv1beta1.DefaultPolicyViolationsLimit
 	}
 

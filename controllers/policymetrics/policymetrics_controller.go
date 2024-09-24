@@ -24,7 +24,7 @@ const ControllerName string = "policy-metrics"
 var log = ctrl.Log.WithName(ControllerName)
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *MetricReconciler) SetupWithManager(mgr ctrl.Manager, maxConcurrentReconciles uint) error {
+func (r *MetricReconciler) SetupWithManager(mgr ctrl.Manager, maxConcurrentReconciles uint16) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		// The work queue prevents the same item being reconciled concurrently:
 		// https://github.com/kubernetes-sigs/controller-runtime/issues/1416#issuecomment-899833144

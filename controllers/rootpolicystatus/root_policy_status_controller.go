@@ -32,7 +32,7 @@ var log = ctrl.Log.WithName(ControllerName)
 // SetupWithManager sets up the controller with the Manager.
 func (r *RootPolicyStatusReconciler) SetupWithManager(
 	mgr ctrl.Manager,
-	maxConcurrentReconciles uint,
+	maxConcurrentReconciles uint16,
 	plrsEnabled bool,
 ) error {
 	ctrlBldr := ctrl.NewControllerManagedBy(mgr).
