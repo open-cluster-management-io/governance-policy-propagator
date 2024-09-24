@@ -38,7 +38,7 @@ var (
 )
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *EncryptionKeysReconciler) SetupWithManager(mgr ctrl.Manager, maxConcurrentReconciles uint) error {
+func (r *EncryptionKeysReconciler) SetupWithManager(mgr ctrl.Manager, maxConcurrentReconciles uint16) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		// The work queue prevents the same item being reconciled concurrently:
 		// https://github.com/kubernetes-sigs/controller-runtime/issues/1416#issuecomment-899833144
@@ -55,7 +55,7 @@ var _ reconcile.Reconciler = &EncryptionKeysReconciler{}
 // for all managed clusters.
 type EncryptionKeysReconciler struct { //nolint:golint,revive
 	client.Client
-	KeyRotationDays uint
+	KeyRotationDays uint32
 	Scheme          *runtime.Scheme
 }
 

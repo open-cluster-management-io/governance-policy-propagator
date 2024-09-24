@@ -53,7 +53,7 @@ type AutomationDef struct {
 	// is "1000".
 	//
 	// +kubebuilder:validation:Minimum=0
-	PolicyViolationsLimit *uint `json:"policyViolationsLimit,omitempty"`
+	PolicyViolationsLimit *uint16 `json:"policyViolationsLimit,omitempty"`
 }
 
 // PolicyAutomationSpec defines how and when automation is initiated for the referenced policy.
