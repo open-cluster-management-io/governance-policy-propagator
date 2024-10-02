@@ -68,7 +68,7 @@ type PolicyAutomationSpec struct {
 	// "noncompliant".
 	//
 	// +kubebuilder:validation:Enum={noncompliant}
-	// +kubebuilder:validation:Required
+	// +kubebuilder:default=noncompliant
 	EventHook string `json:"eventHook,omitempty"`
 
 	// RescanAfter is reserved for future use and should not be set.
