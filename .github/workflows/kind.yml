@@ -104,17 +104,6 @@ jobs:
         name: coverage_e2e
         path: coverage_e2e.out
 
-    - name: E2E Tests for Compliance Events API
-      run: |
-        KUBECONFIG=${PWD}/kubeconfig_hub make e2e-test-coverage-compliance-events-api
-
-    - name: Upload Compliance Events API Test Coverage
-      if: ${{ github.event_name == 'pull_request' && matrix.kind == 'latest'}}
-      uses: actions/upload-artifact@v4
-      with:
-        name: coverage_e2e_compliance_events_api
-        path: coverage_e2e_compliance_events_api.out
-
     - name: Verify Deployment Configuration
       run: |
         make webhook
@@ -219,11 +208,6 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: coverage_e2e
-
-    - name: Download Compliance Events Coverage Result
-      uses: actions/download-artifact@v4
-      with:
-        name: coverage_e2e_compliance_events_api
 
     - name: Download PolicyAutomation Coverage Result
       uses: actions/download-artifact@v4

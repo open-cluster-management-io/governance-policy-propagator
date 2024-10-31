@@ -28,10 +28,9 @@ CONTROLLER_NAMESPACE ?= open-cluster-management
 # Handle KinD configuration
 CLUSTER_NAME ?= hub
 KIND_NAMESPACE ?= $(CONTROLLER_NAMESPACE)
-POSTGRES_HOST ?= localhost
 
 # Test coverage threshold
-export COVERAGE_MIN ?= 74
+export COVERAGE_MIN ?= 71
 
 # Image URL to use all building/pushing image targets;
 # Use your own docker registry and image name for dev/test by overridding the IMG and REGISTRY environment variable.
@@ -143,11 +142,10 @@ generate-operator-yaml: kustomize manifests
 ############################################################
 
 .PHONY: kind-bootstrap-cluster
-kind-bootstrap-cluster: POSTGRES_HOST=postgres
 kind-bootstrap-cluster: kind-bootstrap-cluster-dev webhook kind-deploy-controller install-resources
 
 .PHONY: kind-bootstrap-cluster-dev
-kind-bootstrap-cluster-dev: kind-create-cluster install-crds kind-controller-kubeconfig postgres
+kind-bootstrap-cluster-dev: kind-create-cluster install-crds kind-controller-kubeconfig
 
 cert-manager:
 	@echo Installing cert-manager
@@ -155,29 +153,6 @@ cert-manager:
 	@echo "Waiting until the pods are up"
 	kubectl wait deployment -n cert-manager cert-manager --for condition=Available=True --timeout=180s
 	kubectl wait --for=condition=Ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=180s 
-
-postgres: cert-manager
-	@echo "Installing Postgres"
-	-kubectl create ns $(KIND_NAMESPACE)
-	sed 's/open-cluster-management/$(KIND_NAMESPACE)/g' build/kind/postgres.yaml | kubectl apply --timeout=180s -f-
-
-	@echo "Waiting until the pods are up"
-	@sleep 3
-	kubectl -n $(KIND_NAMESPACE) wait --for=condition=Ready pod -l app=postgres
-
-	@echo "Creating the governance-policy-database secret"
-	@kubectl -n $(KIND_NAMESPACE) get secret governance-policy-database || \
-	kubectl -n $(KIND_NAMESPACE) create secret generic governance-policy-database \
-		--from-literal="user=grc" \
-		--from-literal="password=grc" \
-		--from-literal="host=$(POSTGRES_HOST)" \
-		--from-literal="dbname=ocm-compliance-history" \
-		--from-literal="ca=$$(kubectl -n $(KIND_NAMESPACE) get secret postgres-cert -o json | jq -r '.data["ca.crt"]' | base64 -d)"
-	
-	@echo "Copying the compliance API certificates locally"
-	kubectl -n $(KIND_NAMESPACE) get secret compliance-api-cert -o json | jq -r '.data["tls.crt"]' | base64 -d > dev-tls.crt
-	kubectl -n $(KIND_NAMESPACE) get secret compliance-api-cert -o json | jq -r '.data["ca.crt"]' | base64 -d >> dev-ca.crt
-	kubectl -n $(KIND_NAMESPACE) get secret compliance-api-cert -o json | jq -r '.data["tls.key"]' | base64 -d > dev-tls.key
 
 webhook: cert-manager
 	-kubectl create ns $(KIND_NAMESPACE)
@@ -206,10 +181,6 @@ kind-deploy-controller-dev: kind-deploy-controller
 	kind load docker-image $(REGISTRY)/$(IMG):$(TAG) --name $(KIND_NAME)
 	kubectl rollout restart deployment/$(IMG) -n $(KIND_NAMESPACE)
 	kubectl rollout status -n $(KIND_NAMESPACE) deployment $(IMG) --timeout=180s
-
-# Specify KIND_VERSION to indicate the version tag of the KinD image
-.PHONY: kind-create-cluster
-kind-create-cluster: KIND_ARGS += --config build/kind/kind-config.yaml
 
 .PHONY: kind-delete-cluster
 kind-delete-cluster:
@@ -256,7 +227,7 @@ install-resources:
 	@echo setting a Hub cluster DNS name
 	kubectl apply -f test/resources/case5_policy_automation/cluster-dns.yaml
 
-E2E_LABEL_FILTER = --label-filter="!webhook && !compliance-events-api && !policyautomation"
+E2E_LABEL_FILTER = --label-filter="!webhook && !policyautomation"
 .PHONY: e2e-test
 e2e-test: e2e-dependencies
 	$(GINKGO) -v --fail-fast $(E2E_TEST_ARGS) $(E2E_LABEL_FILTER) test/e2e -- $(E2E_TEST_CODE_ARGS)
@@ -264,14 +235,6 @@ e2e-test: e2e-dependencies
 .PHONY: e2e-test-webhook
 e2e-test-webhook: E2E_LABEL_FILTER = --label-filter="webhook"
 e2e-test-webhook: e2e-test
-
-.PHONY: e2e-test-compliance-events-api
-e2e-test-compliance-events-api: E2E_LABEL_FILTER = --label-filter="compliance-events-api"
-e2e-test-compliance-events-api: e2e-test
-
-.PHONY: e2e-test-coverage-compliance-events-api
-e2e-test-coverage-compliance-events-api: E2E_TEST_ARGS = --json-report=report_e2e_compliance_events_api.json --covermode=atomic --coverpkg=open-cluster-management.io/governance-policy-propagator/controllers/complianceeventsapi --coverprofile=coverage_e2e_compliance_events_api.out --output-dir=.
-e2e-test-coverage-compliance-events-api: e2e-test-compliance-events-api
 
 .PHONY: e2e-test-policyautomation
 e2e-test-policyautomation: E2E_LABEL_FILTER = --label-filter="policyautomation"
@@ -296,7 +259,6 @@ e2e-stop-instrumented:
 
 .PHONY: e2e-test-coverage
 e2e-test-coverage: E2E_TEST_ARGS = --json-report=report_e2e.json --output-dir=.
-e2e-test-coverage: E2E_TEST_CODE_ARGS = --compliance-api-port=8385
 e2e-test-coverage: e2e-run-instrumented e2e-test e2e-stop-instrumented
 
 .PHONY: e2e-test-coverage-policyautomation

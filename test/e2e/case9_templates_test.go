@@ -86,9 +86,6 @@ var _ = Describe("Test policy templates", func() {
 					defaultTimeoutSeconds,
 				)
 
-				err := utils.RemovePolicyTemplateDBAnnotations(replicatedPlc)
-				g.Expect(err).ToNot(HaveOccurred())
-
 				return replicatedPlc.Object["spec"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
 		})
@@ -108,9 +105,6 @@ var _ = Describe("Test policy templates", func() {
 					true,
 					defaultTimeoutSeconds,
 				)
-
-				err := utils.RemovePolicyTemplateDBAnnotations(replicatedPlc)
-				g.Expect(err).ToNot(HaveOccurred())
 
 				return replicatedPlc.Object["spec"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
@@ -142,9 +136,6 @@ var _ = Describe("Test policy templates", func() {
 					true,
 					defaultTimeoutSeconds,
 				)
-
-				err := utils.RemovePolicyTemplateDBAnnotations(replicatedPlc)
-				g.Expect(err).ToNot(HaveOccurred())
 
 				return replicatedPlc.Object["spec"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
@@ -235,9 +226,6 @@ var _ = Describe("Test policy templates", func() {
 						true,
 						defaultTimeoutSeconds,
 					)
-
-					err := utils.RemovePolicyTemplateDBAnnotations(replicatedPlc)
-					g.Expect(err).ToNot(HaveOccurred())
 
 					return replicatedPlc.Object["spec"]
 				}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
@@ -387,9 +375,6 @@ var _ = Describe("Test policy templates", func() {
 						true,
 						defaultTimeoutSeconds,
 					)
-
-					err := utils.RemovePolicyTemplateDBAnnotations(replicatedPlc)
-					g.Expect(err).ToNot(HaveOccurred())
 
 					return replicatedPlc.Object["spec"]
 				}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))

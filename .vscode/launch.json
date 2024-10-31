@@ -1,8 +1,6 @@
 {
     "version": "0.2.0",
     "configurations": [
-        // If you are running the compliance API tests (case 20) with this, pass the `--compliance-api-port=8385` to
-        // Ginkgo.
         {
             "name": "Launch Controller",
             "type": "go",
@@ -14,14 +12,10 @@
                 "--log-level=4",
                 "-v=4",
                 "--enable-webhooks=false",
-                "--compliance-history-api-port=8385",
-                "--compliance-history-api-cert=dev-tls.crt",
-                "--compliance-history-api-key=dev-tls.key"
             ],
             "env": {
                 "WATCH_NAMESPACE": "",
                 "KUBECONFIG": "${workspaceFolder}/kubeconfig_hub",
-                "WATCH_NAMESPACE_COMPLIANCE_EVENTS_STORE": "open-cluster-management"
             }
         },
         // Set FDescribe or FIt on the test to debug. Then set the desired breakpoint.

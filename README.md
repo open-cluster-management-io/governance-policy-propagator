@@ -85,26 +85,6 @@ in particular, the details in `./deploy/manager/manager.yaml`. When any of those
 deployment yaml `./deploy/operator.yaml` must be regenerated through the `make generate-operator-yaml` target. The
 `./deploy/operator.yaml` SHOULD NOT be manually updated.
 
-## Running the Compliance Events API
-
-Create the KinD cluster and install Postgres with the following commands:
-
-```bash
-make kind-bootstrap-cluster-dev
-```
-
-You can connect to the Postgres server with the following command:
-
-```bash
-psql "host=localhost dbname=ocm-compliance-history user=grc password=grc"
-```
-
-Run the Governance Policy Propagator with the following command:
-
-```bash
-WATCH_NAMESPACE="" WATCH_NAMESPACE_COMPLIANCE_EVENTS_STORE="open-cluster-management" go run main.go --leader-elect=false  --enable-webhooks=false
-```
-
 ## References
 
 - The `governance-policy-propagator` is part of the `open-cluster-management` community. For more information, visit:

@@ -29,14 +29,10 @@ spec:
             - "--health-probe-bind-address=:8081"
             - "--metrics-bind-address=:8383"
             - "--leader-elect"
-            - "--compliance-history-api-host=0.0.0.0"
           ports:
             - containerPort: 8383
               protocol: TCP
               name: http
-            - containerPort: 8384
-              protocol: TCP
-              name: compliance-api
             - containerPort: 9443
               protocol: TCP
               name: webhook-http
@@ -54,24 +50,8 @@ spec:
                   fieldPath: metadata.name
             - name: OPERATOR_NAME
               value: "governance-policy-propagator"
-            - name: WATCH_NAMESPACE_COMPLIANCE_EVENTS_STORE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
       volumes:
       - name: cert
         secret:
           defaultMode: 420
           secretName: propagator-webhook-server-cert
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: governance-compliance-api
-spec:
-  ports:
-  - port: 8384
-    protocol: TCP
-    targetPort: 8384
-  selector:
-    name: governance-policy-propagator
