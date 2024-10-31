@@ -5,11 +5,8 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
-	"errors"
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"runtime"
 	"strconv"
@@ -24,16 +21,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
@@ -53,7 +47,6 @@ import (
 	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	policyv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
 	automationctrl "open-cluster-management.io/governance-policy-propagator/controllers/automation"
-	"open-cluster-management.io/governance-policy-propagator/controllers/complianceeventsapi"
 	encryptionkeysctrl "open-cluster-management.io/governance-policy-propagator/controllers/encryptionkeys"
 	metricsctrl "open-cluster-management.io/governance-policy-propagator/controllers/policymetrics"
 	policysetctrl "open-cluster-management.io/governance-policy-propagator/controllers/policyset"
@@ -63,13 +56,8 @@ import (
 )
 
 var (
-	scheme          = k8sruntime.NewScheme()
-	log             = ctrl.Log.WithName("setup")
-	clusterClaimGVR = schema.GroupVersionResource{
-		Group:    "cluster.open-cluster-management.io",
-		Version:  "v1alpha1",
-		Resource: "clusterclaims",
-	}
+	scheme = k8sruntime.NewScheme()
+	log    = ctrl.Log.WithName("setup")
 	crdGVR = schema.GroupVersionResource{
 		Group:    "apiextensions.k8s.io",
 		Version:  "v1",
@@ -123,10 +111,6 @@ func main() {
 		rootPolicyMaxConcurrency    uint16
 		replPolicyMaxConcurrency    uint16
 		enableWebhooks              bool
-		complianceAPIHost           string
-		complianceAPIPort           string
-		complianceAPICert           string
-		complianceAPIKey            string
 		disablePlacementRule        bool
 	)
 
@@ -178,23 +162,6 @@ func main() {
 		"replicated-policy-max-concurrency",
 		10,
 		"The maximum number of concurrent reconciles for the replicated-policy controller",
-	)
-	pflag.StringVar(
-		&complianceAPIHost, "compliance-history-api-host", "localhost",
-		"The hostname that the event history API will listen on",
-	)
-	pflag.StringVar(
-		&complianceAPIPort, "compliance-history-api-port", "8384",
-		"The port that the compliance history API will listen on",
-	)
-	pflag.StringVar(
-		&complianceAPICert, "compliance-history-api-cert", "",
-		"The path to the certificate the compliance history API will use for HTTPS (CA cert, if any, concatenated "+
-			"after server cert). If not set, HTTP will be used.",
-	)
-	pflag.StringVar(
-		&complianceAPIKey, "compliance-history-api-key", "",
-		"The path to the private key the compliance history API will use for HTTPS. If not set, HTTP will be used.",
 	)
 	pflag.BoolVar(&disablePlacementRule, "disable-placementrule", false,
 		"Disable watches for PlacementRules.")
@@ -400,25 +367,6 @@ func main() {
 
 	dynamicClient := dynamic.NewForConfigOrDie(mgr.GetConfig())
 
-	var clusterID string
-
-	idClusterClaim, err := dynamicClient.Resource(clusterClaimGVR).Get(controllerCtx, "id.k8s.io", metav1.GetOptions{})
-	if err != nil && !k8serrors.IsNotFound(err) {
-		log.Error(err, "Failed to find the cluster ID")
-
-		os.Exit(1)
-	}
-
-	if err == nil {
-		clusterID, _, _ = unstructured.NestedString(idClusterClaim.Object, "spec", "value")
-	}
-
-	if clusterID == "" {
-		log.Info("The id.k8s.io cluster claim is not set. Using the cluster ID of unknown.")
-
-		clusterID = "unknown"
-	}
-
 	// Only check for the CRD if the flag was not set explicitly.
 	if !pflag.Lookup("disable-placementrule").Changed {
 		_, err = dynamicClient.Resource(crdGVR).Get(
@@ -512,54 +460,9 @@ func main() {
 	// This is important to avoid adding watches before the dynamic watcher is ready
 	<-dynamicWatcher.Started()
 
-	log.V(1).Info("Starting the compliance events API and controller")
-
-	k8sClient := kubernetes.NewForConfigOrDie(mgr.GetConfig())
-
-	tempDir, err := os.MkdirTemp("", "compliance-events-store")
-	if err != nil {
-		log.Error(err, "Failed to create a temporary directory")
-		os.Exit(1)
-	}
-
-	defer func() {
-		err := os.RemoveAll(tempDir)
-		if err != nil {
-			log.Error(err, "Failed to clean up the temporary directory", "path", tempDir)
-		}
-	}()
-
-	complianceEventsNamespace, _ := os.LookupEnv(complianceeventsapi.WatchNamespaceEnvVar)
-	if complianceEventsNamespace == "" {
-		namespace, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
-		if err == nil {
-			complianceEventsNamespace = string(namespace)
-		} else {
-			log.Info("Could not detect the controller namespace. Assuming open-cluster-management.")
-
-			complianceEventsNamespace = "open-cluster-management"
-		}
-	}
+	log.Info("Starting the template resolver service")
 
 	wg := sync.WaitGroup{}
-
-	log.Info("Starting the compliance events API")
-
-	complianceServerCtx := startComplianceEventsAPI(
-		controllerCtx,
-		cfg,
-		k8sClient,
-		clusterID,
-		complianceEventsNamespace,
-		net.JoinHostPort(complianceAPIHost, complianceAPIPort),
-		complianceAPICert,
-		complianceAPIKey,
-		&wg,
-		tempDir,
-		replicatedPolicyUpdates,
-	)
-
-	log.Info("Starting the template resolver service")
 
 	resolvers, saTemplatesSource := propagatorctrl.NewTemplateResolvers(
 		controllerCtx, mgr.GetConfig(), mgr.GetClient(), templateResolver, replicatedPolicyUpdates,
@@ -574,11 +477,10 @@ func main() {
 	}()
 
 	replicatedPolicyCtrler := &propagatorctrl.ReplicatedPolicyReconciler{
-		Propagator:          propagator,
-		ResourceVersions:    replicatedResourceVersions,
-		DynamicWatcher:      dynamicWatcher,
-		ComplianceServerCtx: complianceServerCtx,
-		TemplateResolvers:   resolvers,
+		Propagator:        propagator,
+		ResourceVersions:  replicatedResourceVersions,
+		DynamicWatcher:    dynamicWatcher,
+		TemplateResolvers: resolvers,
 	}
 
 	if err = replicatedPolicyCtrler.SetupWithManager(mgr, replPolicyMaxConcurrency,
@@ -602,154 +504,6 @@ func main() {
 	}()
 
 	wg.Wait()
-}
-
-func startComplianceEventsAPI(
-	ctx context.Context,
-	cfg *rest.Config,
-	client *kubernetes.Clientset,
-	clusterID string,
-	controllerNamespace string,
-	complianceAPIAddr string,
-	complianceAPICert string,
-	complianceAPIKey string,
-	wg *sync.WaitGroup,
-	tempDir string,
-	reconcileRequests chan<- event.GenericEvent,
-) *complianceeventsapi.ComplianceServerCtx {
-	var dbConnectionURL string
-
-	dbSecret, err := client.CoreV1().Secrets(controllerNamespace).Get(
-		ctx, complianceeventsapi.DBSecretName, metav1.GetOptions{},
-	)
-	if k8serrors.IsNotFound(err) {
-		log.Info(
-			"Could not start the compliance events API. To enable this functionality, ensure the Postgres "+
-				"connection secret is valid in the controller namespace.",
-			"secretName", complianceeventsapi.DBSecretName,
-			"namespace", controllerNamespace,
-		)
-	} else if err != nil {
-		log.Error(
-			err,
-			"Failed to determine if the secret was defined",
-			"secretName", complianceeventsapi.DBSecretName,
-			"namespace", controllerNamespace,
-		)
-
-		os.Exit(1)
-	} else {
-		var err error
-
-		dbConnectionURL, err = complianceeventsapi.ParseDBSecret(dbSecret, tempDir)
-		if err != nil {
-			log.Error(
-				err,
-				"Fix the connection details to enable the compliance events API feature",
-				"secret", complianceeventsapi.DBSecretName,
-				"namespace", controllerNamespace,
-			)
-		}
-	}
-
-	complianceServerCtx, err := complianceeventsapi.NewComplianceServerCtx(dbConnectionURL, clusterID)
-	if err == nil {
-		// If the migration failed, MigrateDB will log it and MonitorDatabaseConnection will fix it.
-		err := complianceServerCtx.MigrateDB(ctx, client, controllerNamespace)
-		if err != nil {
-			log.Info("Will periodically retry the migration until it is successful")
-		}
-	} else if !errors.Is(err, complianceeventsapi.ErrInvalidConnectionURL) {
-		log.Error(err, "Unexpected error")
-
-		os.Exit(1)
-	}
-
-	reconciler := complianceeventsapi.ComplianceDBSecretReconciler{
-		Client: client, ComplianceServerCtx: complianceServerCtx, TempDir: tempDir, ConnectionURL: dbConnectionURL,
-	}
-
-	dbSecretDynamicWatcher, err := k8sdepwatches.New(
-		cfg, &reconciler, &k8sdepwatches.Options{EnableCache: true},
-	)
-	if err != nil {
-		log.Error(err, "Failed to instantiate the dynamic watcher for the compliance events database secret reconciler")
-		os.Exit(1)
-	}
-
-	reconciler.DynamicWatcher = dbSecretDynamicWatcher
-
-	var cert *tls.Certificate
-
-	if complianceAPICert != "" && complianceAPIKey != "" {
-		certTemp, err := tls.LoadX509KeyPair(complianceAPICert, complianceAPIKey)
-		if err != nil {
-			log.Error(
-				err,
-				"Failed to parse the provided TLS certificate and key",
-				"cert", complianceAPICert,
-				"key", complianceAPIKey,
-			)
-			os.Exit(1)
-		}
-
-		cert = &certTemp
-	} else {
-		log.Info("The compliance events history API will listen on HTTP since no certificate was provided")
-	}
-
-	complianceAPI := complianceeventsapi.NewComplianceAPIServer(complianceAPIAddr, cfg, cert)
-
-	wg.Add(1)
-
-	go func() {
-		if err := complianceAPI.Start(ctx, complianceServerCtx); err != nil {
-			log.Error(err, "Failed to start the compliance API server")
-
-			os.Exit(1)
-		}
-
-		wg.Done()
-	}()
-
-	wg.Add(1)
-
-	go func() {
-		err := dbSecretDynamicWatcher.Start(ctx)
-		if err != nil {
-			log.Error(
-				err,
-				"Unable to start the compliance events database secret watcher",
-				"controller", complianceeventsapi.ControllerName,
-			)
-			os.Exit(1)
-		}
-
-		wg.Done()
-	}()
-
-	<-dbSecretDynamicWatcher.Started()
-
-	go complianceeventsapi.MonitorDatabaseConnection(
-		ctx, complianceServerCtx, client, controllerNamespace, reconcileRequests,
-	)
-
-	watcherSecret := k8sdepwatches.ObjectIdentifier{
-		Version:   "v1",
-		Kind:      "Secret",
-		Namespace: controllerNamespace,
-		Name:      complianceeventsapi.DBSecretName,
-	}
-	if err := dbSecretDynamicWatcher.AddWatcher(watcherSecret, watcherSecret); err != nil {
-		log.Error(
-			err,
-			"Unable to start the compliance events database secret watcher",
-			"controller", complianceeventsapi.ControllerName,
-		)
-		os.Exit(1)
-	}
-
-	return complianceServerCtx
 }
 
 // reportMetrics returns a bool on whether to report GRC metrics from the propagator

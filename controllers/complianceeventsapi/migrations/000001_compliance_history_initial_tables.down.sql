@@ -1,8 +1,0 @@
-BEGIN;
-
-DROP TABLE IF EXISTS compliance_events;
-DROP TABLE IF EXISTS policies;
-DROP TABLE IF EXISTS parent_policies;
-DROP TABLE IF EXISTS clusters;
-
-COMMIT;

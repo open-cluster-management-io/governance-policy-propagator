@@ -4,13 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 
 	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
@@ -20,22 +18,15 @@ import (
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	"open-cluster-management.io/governance-policy-propagator/controllers/common"
-	"open-cluster-management.io/governance-policy-propagator/controllers/complianceeventsapi"
-)
-
-const (
-	ParentPolicyIDAnnotation = "policy.open-cluster-management.io/parent-policy-compliance-db-id"
-	PolicyIDAnnotation       = "policy.open-cluster-management.io/policy-compliance-db-id"
 )
 
 var _ reconcile.Reconciler = &ReplicatedPolicyReconciler{}
 
 type ReplicatedPolicyReconciler struct {
 	Propagator
-	ResourceVersions    *sync.Map
-	DynamicWatcher      k8sdepwatches.DynamicWatcher
-	ComplianceServerCtx *complianceeventsapi.ComplianceServerCtx
-	TemplateResolvers   *TemplateResolvers
+	ResourceVersions  *sync.Map
+	DynamicWatcher    k8sdepwatches.DynamicWatcher
+	TemplateResolvers *TemplateResolvers
 }
 
 func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
@@ -265,8 +256,6 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 		objsToWatch[saObjID] = true
 	}
 
-	r.setDBAnnotations(ctx, rootPolicy, desiredReplicatedPolicy, replicatedPolicy)
-
 	if len(objsToWatch) != 0 {
 		refObjs := make([]k8sdepwatches.ObjectIdentifier, 0, len(objsToWatch))
 		for objToWatch := range objsToWatch {
@@ -349,261 +338,6 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 	}
 
 	return reconcile.Result{}, returnErr
-}
-
-// getParentPolicyID needs to have the caller call r.ComplianceServerCtx.Lock.RLock.
-func (r *ReplicatedPolicyReconciler) getParentPolicyID(
-	ctx context.Context,
-	rootPolicy *policiesv1.Policy,
-	existingReplicatedPolicy *policiesv1.Policy,
-) (int32, error) {
-	dbParentPolicy := complianceeventsapi.ParentPolicyFromPolicyObj(rootPolicy)
-
-	// Check the cache first.
-	cachedParentPolicyID, ok := r.ComplianceServerCtx.ParentPolicyToID.Load(dbParentPolicy.Key())
-	if ok {
-		return cachedParentPolicyID.(int32), nil
-	}
-
-	// Try the database second before checking the replicated policy to be able to recover if the compliance history
-	// database is restored from backup and the IDs on the replicated policy no longer exist.
-	var dbErr error
-
-	if r.ComplianceServerCtx.DB != nil {
-		err := dbParentPolicy.GetOrCreate(ctx, r.ComplianceServerCtx.DB)
-		if err == nil {
-			r.ComplianceServerCtx.ParentPolicyToID.Store(dbParentPolicy.Key(), dbParentPolicy.KeyID)
-
-			return dbParentPolicy.KeyID, nil
-		}
-
-		if r.ComplianceServerCtx.DB.PingContext(ctx) != nil {
-			dbErr = complianceeventsapi.ErrDBConnectionFailed
-		} else {
-			dbErr = fmt.Errorf("%w: failed to get the database ID of the parent policy", err)
-		}
-	} else {
-		dbErr = complianceeventsapi.ErrDBConnectionFailed
-	}
-
-	// Check if the existing replicated policy already has the annotation set and has the same
-	// categories, controls, and standards as the current root policy.
-	var parentPolicyIDFromRepl string
-	if existingReplicatedPolicy != nil {
-		parentPolicyIDFromRepl = existingReplicatedPolicy.Annotations[ParentPolicyIDAnnotation]
-	}
-
-	if parentPolicyIDFromRepl != "" {
-		dbParentPolicyFromRepl := complianceeventsapi.ParentPolicyFromPolicyObj(existingReplicatedPolicy)
-		dbParentPolicyFromRepl.Name = rootPolicy.Name
-		dbParentPolicyFromRepl.Namespace = rootPolicy.Namespace
-
-		if dbParentPolicy.Key() == dbParentPolicyFromRepl.Key() {
-			parentPolicyID, err := strconv.ParseInt(parentPolicyIDFromRepl, 10, 32)
-			if err == nil && parentPolicyID != 0 {
-				r.ComplianceServerCtx.ParentPolicyToID.Store(dbParentPolicy.Key(), int32(parentPolicyID))
-
-				return int32(parentPolicyID), nil
-			}
-		}
-	}
-
-	return 0, dbErr
-}
-
-// getPolicyID needs to have the caller call r.ComplianceServerCtx.Lock.RLock.
-func (r *ReplicatedPolicyReconciler) getPolicyID(
-	ctx context.Context,
-	replPolicy *policiesv1.Policy,
-	existingReplPolicy *policiesv1.Policy,
-	replTemplateIdx int,
-	skipDB bool,
-) (int32, *unstructured.Unstructured, error) {
-	// Start by checking the cache.
-	plcTemplate := replPolicy.Spec.PolicyTemplates[replTemplateIdx]
-	plcTmplUnstruct := &unstructured.Unstructured{}
-
-	err := plcTmplUnstruct.UnmarshalJSON(plcTemplate.ObjectDefinition.Raw)
-	if err != nil {
-		return 0, plcTmplUnstruct, err
-	}
-
-	dbPolicy := complianceeventsapi.PolicyFromUnstructured(*plcTmplUnstruct)
-	if err := dbPolicy.Validate(); err != nil {
-		return 0, plcTmplUnstruct, err
-	}
-
-	var policyID int32
-
-	cachedPolicyID, ok := r.ComplianceServerCtx.PolicyToID.Load(dbPolicy.Key())
-	if ok {
-		policyID = cachedPolicyID.(int32)
-
-		return policyID, plcTmplUnstruct, nil
-	}
-
-	// Try the database second before checking the replicated policy to be able to recover if the compliance history
-	// database is restored from backup and the IDs on the replicated policy no longer exist.
-	var dbErr error
-	if skipDB || r.ComplianceServerCtx.DB == nil {
-		dbErr = complianceeventsapi.ErrDBConnectionFailed
-	} else {
-		err = dbPolicy.GetOrCreate(ctx, r.ComplianceServerCtx.DB)
-		if err == nil {
-			r.ComplianceServerCtx.PolicyToID.Store(dbPolicy.Key(), dbPolicy.KeyID)
-
-			return dbPolicy.KeyID, plcTmplUnstruct, nil
-		}
-
-		dbErr = err
-	}
-
-	// Check if the existing policy template matches the existing one
-	var existingPlcTemplate *policiesv1.PolicyTemplate
-
-	existingPlcTmplUnstruct := unstructured.Unstructured{}
-
-	var existingAnnotation string
-	var existingDBPolicy *complianceeventsapi.Policy
-
-	// Try the existing policy template first before trying the database.
-	if existingReplPolicy != nil && len(existingReplPolicy.Spec.PolicyTemplates) >= replTemplateIdx+1 {
-		existingPlcTemplate = existingReplPolicy.Spec.PolicyTemplates[replTemplateIdx]
-
-		err = existingPlcTmplUnstruct.UnmarshalJSON(existingPlcTemplate.ObjectDefinition.Raw)
-		if err == nil {
-			existingAnnotations := existingPlcTmplUnstruct.GetAnnotations()
-			existingAnnotation = existingAnnotations[PolicyIDAnnotation]
-
-			if existingAnnotation != "" {
-				existingDBPolicy = complianceeventsapi.PolicyFromUnstructured(existingPlcTmplUnstruct)
-			}
-		}
-	}
-
-	// This is a continuation from the above if statement but this was broken up here to make it less indented.
-	if existingAnnotation != "" {
-		if err := existingDBPolicy.Validate(); err == nil {
-			if dbPolicy.Key() == existingDBPolicy.Key() {
-				policyID, err := strconv.ParseInt(existingAnnotation, 10, 32)
-				if err == nil && policyID != 0 {
-					r.ComplianceServerCtx.PolicyToID.Store(dbPolicy.Key(), int32(policyID))
-
-					return int32(policyID), plcTmplUnstruct, nil
-				}
-			}
-		}
-	}
-
-	return 0, plcTmplUnstruct, dbErr
-}
-
-// setDBAnnotations sets the parent policy ID on the replicated policy and the policy ID for each policy template.
-// If the DB connection is unavailable, it queues up a reconcile for when the DB becomes available.
-func (r *ReplicatedPolicyReconciler) setDBAnnotations(
-	ctx context.Context,
-	rootPolicy *policiesv1.Policy,
-	replicatedPolicy *policiesv1.Policy,
-	existingReplicatedPolicy *policiesv1.Policy,
-) {
-	r.ComplianceServerCtx.Lock.RLock()
-	defer r.ComplianceServerCtx.Lock.RUnlock()
-
-	// Assume the database is connected unless told otherwise.
-	dbAvailable := true
-	var requeueForDB bool
-
-	annotations := replicatedPolicy.GetAnnotations()
-	if annotations == nil {
-		annotations = map[string]string{}
-	}
-
-	parentPolicyID, err := r.getParentPolicyID(ctx, rootPolicy, existingReplicatedPolicy)
-	if err != nil {
-		if errors.Is(err, complianceeventsapi.ErrDBConnectionFailed) {
-			dbAvailable = false
-		} else {
-			log.Error(
-				err, "Failed to get the parent policy ID", "name", rootPolicy.Name, "namespace", rootPolicy.Namespace,
-			)
-		}
-
-		requeueForDB = true
-
-		// Remove it if the user accidentally provided the annotation
-		if annotations[ParentPolicyIDAnnotation] != "" {
-			delete(annotations, PolicyIDAnnotation)
-			replicatedPolicy.SetAnnotations(annotations)
-		}
-	} else {
-		annotations[ParentPolicyIDAnnotation] = strconv.FormatInt(int64(parentPolicyID), 10)
-		replicatedPolicy.SetAnnotations(annotations)
-	}
-
-	for i, plcTemplate := range replicatedPolicy.Spec.PolicyTemplates {
-		if plcTemplate == nil {
-			continue
-		}
-
-		policyID, plcTmplUnstruct, err := r.getPolicyID(
-			ctx, replicatedPolicy, existingReplicatedPolicy, i, !dbAvailable,
-		)
-		if err != nil {
-			if errors.Is(err, complianceeventsapi.ErrDBConnectionFailed) {
-				dbAvailable = false
-			} else {
-				log.Error(
-					err,
-					"Failed to get the policy ID for the policy template",
-					"name", plcTmplUnstruct.GetName(),
-					"namespace", plcTmplUnstruct.GetNamespace(),
-					"index", i,
-				)
-			}
-
-			requeueForDB = true
-			tmplAnnotations := plcTmplUnstruct.GetAnnotations()
-
-			if tmplAnnotations[PolicyIDAnnotation] == "" {
-				continue
-			}
-
-			// Remove it if the user accidentally provided the annotation
-			delete(tmplAnnotations, PolicyIDAnnotation)
-			plcTmplUnstruct.SetAnnotations(tmplAnnotations)
-		} else {
-			tmplAnnotations := plcTmplUnstruct.GetAnnotations()
-			if tmplAnnotations == nil {
-				tmplAnnotations = map[string]string{}
-			}
-
-			tmplAnnotations[PolicyIDAnnotation] = strconv.FormatInt(int64(policyID), 10)
-			plcTmplUnstruct.SetAnnotations(tmplAnnotations)
-		}
-
-		updatedTemplate, err := plcTmplUnstruct.MarshalJSON()
-		if err != nil {
-			log.Error(
-				err, "Failed to set the annotation on the policy template", "index", i, "anotation", PolicyIDAnnotation,
-			)
-
-			continue
-		}
-
-		replicatedPolicy.Spec.PolicyTemplates[i].ObjectDefinition.Raw = updatedTemplate
-	}
-
-	if requeueForDB {
-		log.V(2).Info(
-			"The compliance events database is not available. Queuing this replicated policy to be reprocessed if the "+
-				"database becomes available.",
-			"namespace", replicatedPolicy.Namespace,
-			"name", replicatedPolicy.Name,
-		)
-		r.ComplianceServerCtx.Queue.Add(
-			types.NamespacedName{Namespace: replicatedPolicy.Namespace, Name: replicatedPolicy.Name},
-		)
-	}
 }
 
 func (r *ReplicatedPolicyReconciler) cleanUpReplicated(ctx context.Context, replicatedPolicy *policiesv1.Policy) error {

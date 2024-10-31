@@ -498,9 +498,6 @@ var _ = Describe("Test policy propagation", func() {
 					defaultTimeoutSeconds,
 				)
 
-				err := utils.RemovePolicyTemplateDBAnnotations(replicatedPlc)
-				g.Expect(err).ToNot(HaveOccurred())
-
 				return replicatedPlc.Object["spec"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(rootPlc.Object["spec"]))
 		})
@@ -572,9 +569,6 @@ var _ = Describe("Test policy propagation", func() {
 					true,
 					defaultTimeoutSeconds,
 				)
-
-				err := utils.RemovePolicyTemplateDBAnnotations(replicatedPlc)
-				g.Expect(err).ToNot(HaveOccurred())
 
 				return replicatedPlc.Object["spec"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
