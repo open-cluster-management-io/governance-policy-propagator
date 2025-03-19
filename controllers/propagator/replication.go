@@ -146,7 +146,8 @@ func (r *Propagator) canonicalizeDependencies(
 	deps := make([]policiesv1.PolicyDependency, 0)
 
 	for _, dep := range rawDeps {
-		if depIsPolicySet(dep) {
+		switch {
+		case depIsPolicySet(dep):
 			plcset := &policiesv1beta1.PolicySet{}
 
 			if dep.Namespace == "" {
@@ -181,15 +182,16 @@ func (r *Propagator) canonicalizeDependencies(
 					Compliance: dep.Compliance,
 				})
 			}
-		} else if depIsPolicy(dep) {
+
+		case depIsPolicy(dep):
 			if dep.Namespace == "" {
 				split := strings.Split(dep.Name, ".")
-				if len(split) >= 2 { // assume the name is already in the correct <namespace>.<name> format
+				if len(split) >= 2 { // assume the name is already in <namespace>.<name> format
 					deps = append(deps, dep)
 
 					continue
 				}
-				// use the namespace from the dependent policy when otherwise not provided
+				// use the namespace from the dependent policy when not provided
 				dep.Namespace = defaultNamespace
 			}
 
@@ -197,7 +199,8 @@ func (r *Propagator) canonicalizeDependencies(
 			dep.Namespace = ""
 
 			deps = append(deps, dep)
-		} else {
+
+		default:
 			deps = append(deps, dep)
 		}
 	}

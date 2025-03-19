@@ -15,7 +15,7 @@ import (
 )
 
 func policyMapper(_ client.Client) handler.MapFunc {
-	return func(ctx context.Context, object client.Object) []reconcile.Request {
+	return func(_ context.Context, object client.Object) []reconcile.Request {
 		log := log.WithValues("policyName", object.GetName(), "namespace", object.GetNamespace())
 		log.V(2).Info("Reconcile Request for Policy")
 

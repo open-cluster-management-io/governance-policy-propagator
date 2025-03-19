@@ -22,7 +22,7 @@ import (
 func policyStatusPredicate() predicate.Funcs {
 	return predicate.Funcs{
 		// Creations are handled by the main policy controller.
-		CreateFunc: func(e event.CreateEvent) bool { return false },
+		CreateFunc: func(_ event.CreateEvent) bool { return false },
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			//nolint:forcetypeassert
 			oldPolicy := e.ObjectOld.(*policiesv1.Policy)
@@ -33,7 +33,7 @@ func policyStatusPredicate() predicate.Funcs {
 			return oldPolicy.Generation == updatedPolicy.Generation
 		},
 		// Deletions are handled by the main policy controller.
-		DeleteFunc: func(e event.DeleteEvent) bool { return false },
+		DeleteFunc: func(_ event.DeleteEvent) bool { return false },
 	}
 }
 

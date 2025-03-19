@@ -23,10 +23,10 @@ var policySetPredicateFuncs = predicate.Funcs{
 			policySetObjOld.Spec.Policies,
 		)
 	},
-	CreateFunc: func(e event.CreateEvent) bool {
+	CreateFunc: func(_ event.CreateEvent) bool {
 		return true
 	},
-	DeleteFunc: func(e event.DeleteEvent) bool {
+	DeleteFunc: func(_ event.DeleteEvent) bool {
 		return true
 	},
 }

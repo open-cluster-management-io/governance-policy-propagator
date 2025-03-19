@@ -30,9 +30,11 @@ func TestParseRootPolicyLabel(t *testing.T) {
 			if (err != nil) != expected.shouldErr {
 				t.Fatal("expected error, got nil")
 			}
+
 			if name != expected.name {
 				t.Fatalf("expected name '%v', got '%v'", expected.name, name)
 			}
+
 			if namespace != expected.namespace {
 				t.Fatalf("expected namespace '%v', got '%v'", expected.namespace, namespace)
 			}

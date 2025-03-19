@@ -28,11 +28,13 @@ var _ = Describe("Test root policy metrics", Ordered, func() {
 		It("should record root policy duration before the policy is created", func() {
 			durationMetric := utils.GetMetrics(
 				"ocm_handle_root_policy_duration_seconds_bucket_bucket", fmt.Sprintf(`le=\"%d\"`, 10))
-			Expect(len(durationMetric) != 0)
+			Expect(durationMetric).ShouldNot(BeEmpty())
+
 			numEvals, err := strconv.Atoi(durationMetric[0])
-			Expect(err == nil)
+			Expect(err).ShouldNot(HaveOccurred())
+
 			prePolicyDuration = numEvals
-			Expect(prePolicyDuration > -1)
+			Expect(prePolicyDuration).Should(BeNumerically(">", -1))
 		})
 
 		It("should be created in user ns", func() {
@@ -65,7 +67,7 @@ var _ = Describe("Test root policy metrics", Ordered, func() {
 			Expect(plc).ToNot(BeNil())
 
 			yamlPlc := utils.ParseYaml(replicatedPolicyYaml)
-			Eventually(func(g Gomega) interface{} {
+			Eventually(func() interface{} {
 				replicatedPlc := utils.GetWithTimeout(
 					clientHubDynamic,
 					gvrPolicy,
@@ -93,7 +95,7 @@ var _ = Describe("Test root policy metrics", Ordered, func() {
 				}
 
 				return numEvals > prePolicyDuration
-			}, defaultTimeoutSeconds, 1).Should(Equal(true))
+			}, defaultTimeoutSeconds, 1).Should(BeTrue())
 		})
 
 		It("should correctly report root policy hub template watches when propagated", func() {

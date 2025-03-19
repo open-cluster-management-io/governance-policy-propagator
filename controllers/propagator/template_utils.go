@@ -497,7 +497,7 @@ func GetToken(
 		}
 	}()
 
-	if _, writeErr = tokenFile.Write([]byte(tokenReq.Status.Token)); writeErr != nil {
+	if _, writeErr = tokenFile.WriteString(tokenReq.Status.Token); writeErr != nil {
 		log.Error(err, "Failed to write the service account token file")
 
 		return "", writeErr

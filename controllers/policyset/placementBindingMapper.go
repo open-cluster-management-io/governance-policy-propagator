@@ -15,7 +15,7 @@ import (
 )
 
 func placementBindingMapper(_ client.Client) handler.MapFunc {
-	return func(ctx context.Context, obj client.Object) []reconcile.Request {
+	return func(_ context.Context, obj client.Object) []reconcile.Request {
 		//nolint:forcetypeassert
 		object := obj.(*policiesv1.PlacementBinding)
 		var result []reconcile.Request

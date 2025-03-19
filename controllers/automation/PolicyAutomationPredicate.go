@@ -34,7 +34,7 @@ var policyAuomtationPredicateFuncs = predicate.Funcs{
 
 		return policyAutomationNew.Spec.PolicyRef != ""
 	},
-	DeleteFunc: func(e event.DeleteEvent) bool {
+	DeleteFunc: func(_ event.DeleteEvent) bool {
 		return false
 	},
 }

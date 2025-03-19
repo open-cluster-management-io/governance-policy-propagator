@@ -122,16 +122,18 @@ func CreateAnsibleJob(policyAutomation *policyv1beta1.PolicyAutomation,
 	typesOf := values.Type()
 	// add every violationContext fields into mapExtraVars as well as the empty values,
 	// or when the whole violationContext is empty
-	for i := 0; i < values.NumField(); i++ {
+	for i := range values.NumField() {
 		tag := typesOf.Field(i).Tag
 		value := values.Field(i).Interface()
 
 		var fieldName string
-		if tag.Get("ansibleJob") != "" {
+
+		switch {
+		case tag.Get("ansibleJob") != "":
 			fieldName = tag.Get("ansibleJob")
-		} else if tag.Get("json") != "" {
+		case tag.Get("json") != "":
 			fieldName = strings.SplitN(tag.Get("json"), ",", 2)[0]
-		} else {
+		default:
 			fieldName = typesOf.Field(i).Name
 		}
 

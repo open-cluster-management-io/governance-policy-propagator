@@ -126,11 +126,14 @@ func (r *MetricReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 		return reconcile.Result{}, err
 	}
 
-	if pol.Status.ComplianceState == policiesv1.Compliant {
+	switch pol.Status.ComplianceState {
+	case policiesv1.Compliant:
 		statusMetric.Set(0)
-	} else if pol.Status.ComplianceState == policiesv1.NonCompliant {
+	case policiesv1.NonCompliant:
 		statusMetric.Set(1)
-	} else {
+	case policiesv1.Pending:
+		statusMetric.Set(-1)
+	default:
 		statusMetric.Set(-1)
 	}
 

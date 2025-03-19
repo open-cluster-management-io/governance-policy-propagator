@@ -78,8 +78,6 @@ var _ = Describe("Test CRD validation", func() {
 		}
 
 		for kind, tc := range tests {
-			kind := kind
-			tc := tc
 
 			It("checks creating a policy with a "+kind+" dependency with a namespace", func() {
 				pol := addDependency(basicPolicy(), "foo", "default", kind)
@@ -107,8 +105,6 @@ var _ = Describe("Test CRD validation", func() {
 		}
 
 		for kind, tc := range tests {
-			kind := kind
-			tc := tc
 
 			It("checks creating a policy with a "+kind+" extraDependency with a namespace", func() {
 				pol := addExtraDependency(basicPolicy(), "foo", "default", kind)

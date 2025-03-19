@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"sync"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -76,7 +77,7 @@ var _ = Describe("Test policy templates", func() {
 			Expect(plc).ToNot(BeNil())
 
 			yamlPlc := utils.ParseYaml(case9ReplicatedPolicyYamlM1)
-			Eventually(func(g Gomega) interface{} {
+			Eventually(func() interface{} {
 				replicatedPlc := utils.GetWithTimeout(
 					clientHubDynamic,
 					gvrPolicy,
@@ -96,7 +97,7 @@ var _ = Describe("Test policy templates", func() {
 
 			By("Verifying the policy is updated")
 			yamlPlc := utils.ParseYaml(case9ReplicatedPolicyYamlM1Update)
-			Eventually(func(g Gomega) interface{} {
+			Eventually(func() interface{} {
 				replicatedPlc := utils.GetWithTimeout(
 					clientHubDynamic,
 					gvrPolicy,
@@ -127,7 +128,7 @@ var _ = Describe("Test policy templates", func() {
 			Expect(plc).ToNot(BeNil())
 
 			yamlPlc := utils.ParseYaml(case9ReplicatedPolicyYamlM2)
-			Eventually(func(g Gomega) interface{} {
+			Eventually(func() interface{} {
 				replicatedPlc := utils.GetWithTimeout(
 					clientHubDynamic,
 					gvrPolicy,
@@ -155,7 +156,7 @@ var _ = Describe("Test policy templates", func() {
 
 	Describe("Test encrypted policy templates", Ordered, func() {
 		for i := 1; i <= 2; i++ {
-			managedCluster := "managed" + fmt.Sprint(i)
+			managedCluster := "managed" + strconv.Itoa(i)
 
 			It("should be created in user ns", func() {
 				By("Creating " + case9PolicyYamlEncrypted)
@@ -217,7 +218,7 @@ var _ = Describe("Test policy templates", func() {
 
 				By("Verifying the replicated policy against a snapshot")
 				yamlPlc := utils.ParseYaml(case9PolicyYamlEncryptedRepl + managedCluster + ".yaml")
-				Eventually(func(g Gomega) interface{} {
+				Eventually(func() interface{} {
 					replicatedPlc = utils.GetWithTimeout(
 						clientHubDynamic,
 						gvrPolicy,
@@ -304,7 +305,7 @@ var _ = Describe("Test policy templates", func() {
 
 	Describe("Test encrypted policy templates with secret copy", Ordered, func() {
 		for i := 1; i <= 2; i++ {
-			managedCluster := "managed" + fmt.Sprint(i)
+			managedCluster := "managed" + strconv.Itoa(i)
 
 			It("should be created in user ns", func() {
 				By("Creating " + case9PolicyYamlCopy)
@@ -366,7 +367,7 @@ var _ = Describe("Test policy templates", func() {
 
 				By("Verifying the replicated policy against a snapshot")
 				yamlPlc := utils.ParseYaml(case9PolicyYamlCopiedRepl + managedCluster + ".yaml")
-				Eventually(func(g Gomega) interface{} {
+				Eventually(func() interface{} {
 					replicatedPlc = utils.GetWithTimeout(
 						clientHubDynamic,
 						gvrPolicy,
@@ -515,7 +516,7 @@ var _ = Describe("Test policy templates", func() {
 	})
 
 	Describe("Test a custom service account", Ordered, func() {
-		AfterAll(func(ctx context.Context) {
+		AfterAll(func(_ context.Context) {
 			utils.Kubectl("delete", "-f", case9SAYaml, "--kubeconfig="+kubeconfigHub, "--ignore-not-found")
 			utils.Kubectl(
 				"-n",
@@ -531,7 +532,7 @@ var _ = Describe("Test policy templates", func() {
 				"--ignore-not-found", "--kubeconfig="+kubeconfigHub,
 			)
 
-			for i := 0; i < 3; i++ {
+			for i := range 3 {
 				utils.Kubectl(
 					"delete", "secret", "policy-encryption-key", "-n", fmt.Sprintf("managed%d", i+1),
 					"--ignore-not-found", "--kubeconfig="+kubeconfigHub,
@@ -556,7 +557,7 @@ var _ = Describe("Test policy templates", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			By("Verifying the replicated policy has the correct values")
-			for i := 0; i < 3; i++ {
+			for i := range 3 {
 				cluster := fmt.Sprintf("managed%d", i+1)
 
 				By("Checking the policy for " + cluster)
@@ -585,12 +586,12 @@ var _ = Describe("Test policy templates", func() {
 			}
 		})
 
-		It("Template resolution fails when the SA doesn't have permission", func(ctx SpecContext) {
+		It("Template resolution fails when the SA doesn't have permission", func() {
 			By("Updating the policy")
 			utils.Kubectl("-n", testNamespace, "apply", "-f", case9SAPolicyNoPermYaml, "--kubeconfig="+kubeconfigHub)
 
 			By("Verifying the replicated policy has an error")
-			for i := 0; i < 3; i++ {
+			for i := range 3 {
 				cluster := fmt.Sprintf("managed%d", i+1)
 
 				By("Checking the policy for " + cluster)
@@ -627,7 +628,7 @@ var _ = Describe("Test policy templates", func() {
 			utils.Kubectl("-n", testNamespace, "apply", "-f", case9SAPolicyYaml, "--kubeconfig="+kubeconfigHub)
 
 			By("Verifying the replicated policy has no error")
-			for i := 0; i < 3; i++ {
+			for i := range 3 {
 				cluster := fmt.Sprintf("managed%d", i+1)
 
 				By("Checking the policy for " + cluster)
@@ -653,12 +654,12 @@ var _ = Describe("Test policy templates", func() {
 			}
 		})
 
-		It("Template resolution fails when the SA changes and does not exist", func(ctx SpecContext) {
+		It("Template resolution fails when the SA changes and does not exist", func() {
 			By("Updating the policy")
 			utils.Kubectl("-n", testNamespace, "apply", "-f", case9SAPolicyMissingSAYaml, "--kubeconfig="+kubeconfigHub)
 
 			By("Verifying the replicated policy has an error")
-			for i := 0; i < 3; i++ {
+			for i := range 3 {
 				cluster := fmt.Sprintf("managed%d", i+1)
 
 				By("Checking the policy for " + cluster)
@@ -693,7 +694,7 @@ var _ = Describe("Test policy templates", func() {
 			utils.Kubectl("-n", testNamespace, "create", "sa", "case9-sa-does-not-exist", "--kubeconfig="+kubeconfigHub)
 
 			By("Verifying the replicated policy has the correct values")
-			for i := 0; i < 3; i++ {
+			for i := range 3 {
 				cluster := fmt.Sprintf("managed%d", i+1)
 
 				By("Checking the policy for " + cluster)
@@ -729,7 +730,7 @@ var _ = Describe("Test policy templates", func() {
 	})
 
 	Describe("Test token issuance and refresh", Ordered, func() {
-		BeforeAll(func(ctx SpecContext) {
+		BeforeAll(func() {
 			utils.Kubectl("apply", "-f", case9SATokenYaml, "--kubeconfig="+kubeconfigHub)
 
 			DeferCleanup(func() {
@@ -788,7 +789,7 @@ var _ = Describe("Test policy templates", func() {
 				ExpirationSeconds: 600, // 10 minutes
 				MinRefreshMins:    9.8,
 				MaxRefreshMins:    9.9,
-				OnFailedRefresh: func(err error) {
+				OnFailedRefresh: func(_ error) {
 				},
 			}
 
