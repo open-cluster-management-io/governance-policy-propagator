@@ -246,18 +246,18 @@ func TestReconcileRotateKey(t *testing.T) {
 	tests := []struct{ Annotation string }{{""}, {"2020-04-15T01:02:03Z"}, {"not-a-timestamp"}}
 
 	for _, test := range tests {
-		test := test
-
 		t.Run(
 			fmt.Sprintf(`annotation="%s"`, test.Annotation),
 			func(t *testing.T) {
 				t.Parallel()
 
 				encryptionSecret := generateSecret()
+
 				if test.Annotation != "" {
 					annotations := map[string]string{propagator.LastRotatedAnnotation: test.Annotation}
 					encryptionSecret.SetAnnotations(annotations)
 				}
+
 				originalKey := encryptionSecret.Data["key"]
 
 				r := getReconciler(encryptionSecret)
@@ -478,11 +478,11 @@ func TestReconcileAPIFails(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		test := test
 		t.Run(
 			test.Name,
 			func(t *testing.T) {
 				t.Parallel()
+
 				encryptionSecret := generateSecret()
 				originalKey := encryptionSecret.Data["key"]
 				r := getReconciler(encryptionSecret)

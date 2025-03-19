@@ -488,7 +488,7 @@ var _ = Describe("Test policy propagation", func() {
 				context.TODO(), rootPlc, metav1.UpdateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
-			Eventually(func(g Gomega) interface{} {
+			Eventually(func() interface{} {
 				replicatedPlc := utils.GetWithTimeout(
 					clientHubDynamic,
 					gvrPolicy,
@@ -560,7 +560,7 @@ var _ = Describe("Test policy propagation", func() {
 			)
 			Expect(rootPlc).NotTo(BeNil())
 			yamlPlc := utils.ParseYaml("../resources/case1_propagation/case1-test-policy2.yaml")
-			Eventually(func(g Gomega) interface{} {
+			Eventually(func() interface{} {
 				replicatedPlc := utils.GetWithTimeout(
 					clientHubDynamic,
 					gvrPolicy,

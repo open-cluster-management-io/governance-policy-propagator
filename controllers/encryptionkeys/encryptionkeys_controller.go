@@ -120,6 +120,7 @@ func (r *EncryptionKeysReconciler) Reconcile(ctx context.Context, request ctrl.R
 		nextRotation, err = r.getNextRotationFromNow(secret)
 		if err != nil {
 			log.Error(err, "The annotation cannot be parsed. Will rotate the key now.")
+
 			nextRotation = 0
 		}
 	}

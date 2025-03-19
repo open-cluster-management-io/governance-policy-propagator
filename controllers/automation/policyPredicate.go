@@ -24,10 +24,10 @@ var policyPredicateFuncs = predicate.Funcs{
 
 		return !cmp.Equal(plcObjNew.Status.Status, plcObjOld.Status.Status)
 	},
-	CreateFunc: func(e event.CreateEvent) bool {
+	CreateFunc: func(_ event.CreateEvent) bool {
 		return false
 	},
-	DeleteFunc: func(e event.DeleteEvent) bool {
+	DeleteFunc: func(_ event.DeleteEvent) bool {
 		return false
 	},
 }

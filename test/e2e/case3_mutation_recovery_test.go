@@ -137,7 +137,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 		rootPlc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, case3PolicyName, testNamespace, true, defaultTimeoutSeconds,
 		)
-		Eventually(func(g Gomega) interface{} {
+		Eventually(func() interface{} {
 			plc = utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds,
 			)

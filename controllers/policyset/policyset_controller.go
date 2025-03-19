@@ -87,7 +87,7 @@ func (r *PolicySetReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 	r.Recorder.Event(
 		instance,
 		"Normal",
-		fmt.Sprintf("policySet: %s", instance.GetName()),
+		"policySet: "+instance.GetName(),
 		fmt.Sprintf("Status successfully updated for policySet %s in namespace %s", instance.GetName(),
 			instance.GetNamespace()),
 	)
@@ -176,6 +176,7 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 
 			// create list of all relevant clusters
 			clusters := []string{}
+
 			for pbName := range placementsByBinding {
 				pbNamespacedName := types.NamespacedName{
 					Name:      pbName,
@@ -196,6 +197,7 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 				}
 
 				var clusterDecisions []string
+
 				clusterDecisions, err = common.GetDecisions(ctx, r.Client, pb)
 				if err != nil {
 					log.Error(
@@ -215,11 +217,13 @@ func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *poli
 			} else {
 				if plcComplianceState == policyv1.Pending {
 					pendingPolicies = append(pendingPolicies, string(childPlcName))
+
 					if aggregatedCompliance != policyv1.NonCompliant {
 						aggregatedCompliance = policyv1.Pending
 					}
 				} else {
 					compliancesFound = append(compliancesFound, string(childPlcName))
+
 					if plcComplianceState == policyv1.NonCompliant {
 						aggregatedCompliance = policyv1.NonCompliant
 					}
@@ -262,8 +266,7 @@ func getStatusMessage(
 
 	if len(pendingPolicies) > 0 {
 		allReporting = false
-		statusMessage += fmt.Sprintf("Policies awaiting pending dependencies: %s",
-			strings.Join(pendingPolicies, ", "))
+		statusMessage += "Policies awaiting pending dependencies: " + strings.Join(pendingPolicies, ", ")
 		separator = "; "
 	}
 
@@ -342,16 +345,20 @@ func complianceInRelevantClusters(
 
 	for i := range status {
 		if clusterInList(relevantClusters, status[i].ClusterName) {
-			if status[i].ComplianceState == policyv1.NonCompliant {
+			switch status[i].ComplianceState {
+			case policyv1.NonCompliant:
 				compliance = policyv1.NonCompliant
 				complianceFound = true
-			} else if status[i].ComplianceState == policyv1.Pending {
+			case policyv1.Pending:
 				complianceFound = true
+
 				if compliance != policyv1.NonCompliant {
 					compliance = policyv1.Pending
 				}
-			} else if status[i].ComplianceState != "" {
+			case policyv1.Compliant:
 				complianceFound = true
+				// Do nothing if compliance state is empty.
+			case "":
 			}
 		}
 	}

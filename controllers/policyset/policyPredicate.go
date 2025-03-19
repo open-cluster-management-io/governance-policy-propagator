@@ -20,10 +20,10 @@ var policyPredicateFuncs = predicate.Funcs{
 
 		return !equality.Semantic.DeepEqual(policyObjNew.Status, policyObjOld.Status)
 	},
-	CreateFunc: func(e event.CreateEvent) bool {
+	CreateFunc: func(_ event.CreateEvent) bool {
 		return true
 	},
-	DeleteFunc: func(e event.DeleteEvent) bool {
+	DeleteFunc: func(_ event.DeleteEvent) bool {
 		return true
 	},
 }

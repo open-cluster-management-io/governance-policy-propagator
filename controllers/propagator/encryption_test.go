@@ -111,6 +111,7 @@ func TestGetInitializationVector(t *testing.T) {
 			test.description,
 			func(t *testing.T) {
 				t.Parallel()
+
 				initializationVector, err := r.getInitializationVector(policyName, clusterName, subTest.annotations)
 
 				Expect(err).ToNot(HaveOccurred())
