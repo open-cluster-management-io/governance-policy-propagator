@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	templates "github.com/stolostron/go-template-utils/v6/pkg/templates"
+	templates "github.com/stolostron/go-template-utils/v7/pkg/templates"
 	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	templates "github.com/stolostron/go-template-utils/v6/pkg/templates"
+	templates "github.com/stolostron/go-template-utils/v7/pkg/templates"
 	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
