@@ -7,4 +7,5 @@ metadata:
     vendor: auto-detect
   name: managed3
   namespace: managed3
-spec: {}
+spec:
+  hubAcceptsClient: true

@@ -6,4 +6,5 @@ metadata:
     name: local-cluster
     vendor: auto-detect
   name: local-cluster
-spec: {}
+spec:
+  hubAcceptsClient: true

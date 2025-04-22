@@ -7,4 +7,5 @@ metadata:
     vendor: auto-detect
   name: managed1
   namespace: managed1
-spec: {}
+spec:
+  hubAcceptsClient: true
