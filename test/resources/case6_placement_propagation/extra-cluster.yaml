@@ -13,4 +13,5 @@ metadata:
     name: test6-extra
     vendor: auto-detect
   name: test6-extra
-spec: {}
+spec:
+  hubAcceptsClient: true
