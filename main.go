@@ -16,7 +16,7 @@ import (
 	"github.com/go-logr/zapr"
 	"github.com/spf13/pflag"
 	"github.com/stolostron/go-log-utils/zaputil"
-	templates "github.com/stolostron/go-template-utils/v6/pkg/templates"
+	templates "github.com/stolostron/go-template-utils/v7/pkg/templates"
 	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
