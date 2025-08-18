@@ -20,7 +20,7 @@ jobs:
     name: Unit Tests
     steps:
     - name: Checkout Governance Policy Propagator
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -75,7 +75,7 @@ jobs:
     name: KinD tests
     steps:
     - name: Checkout Governance Policy Propagator
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -145,7 +145,7 @@ jobs:
     name: PolicyAutomation tests
     steps:
     - name: Checkout Governance Policy Propagator
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -192,7 +192,7 @@ jobs:
 
     steps:
     - name: Checkout Governance Policy Propagator
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -200,17 +200,17 @@ jobs:
         go-version: stable
 
     - name: Download Unit Coverage Result
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
       with:
         name: coverage_unit
     
     - name: Download E2E Coverage Result
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
       with:
         name: coverage_e2e
 
     - name: Download PolicyAutomation Coverage Result
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
       with:
         name: coverage_e2e_policyautomation
     
