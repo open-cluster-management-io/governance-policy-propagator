@@ -4,7 +4,6 @@
 package propagator
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"testing"
@@ -24,18 +23,18 @@ const (
 	keySize     = 256
 )
 
-func TestGetEncryptionKeyNoSecret(_ *testing.T) {
+func TestGetEncryptionKeyNoSecret(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	client := fake.NewClientBuilder().Build()
 	r := Propagator{Client: client}
-	key, err := r.getEncryptionKey(context.TODO(), clusterName)
+	key, err := r.getEncryptionKey(t.Context(), clusterName)
 
 	Expect(err).ToNot(HaveOccurred())
 	// Verify that the generated key is 256 bits.
 	Expect(key).To(HaveLen(keySize / 8))
 
-	ctx := context.TODO()
+	ctx := t.Context()
 	objectKey := types.NamespacedName{
 		Name:      EncryptionKeySecret,
 		Namespace: clusterName,
@@ -48,7 +47,7 @@ func TestGetEncryptionKeyNoSecret(_ *testing.T) {
 	Expect(encryptionSecret.Data["key"]).To(HaveLen(keySize / 8))
 }
 
-func TestGetEncryptionKeySecretExists(_ *testing.T) {
+func TestGetEncryptionKeySecretExists(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	// Generate an AES-256 key and stored it as a secret.
@@ -69,7 +68,7 @@ func TestGetEncryptionKeySecretExists(_ *testing.T) {
 	client := fake.NewClientBuilder().WithObjects(encryptionSecret).Build()
 
 	r := Propagator{Client: client}
-	key, err = r.getEncryptionKey(context.TODO(), clusterName)
+	key, err = r.getEncryptionKey(t.Context(), clusterName)
 
 	Expect(err).ToNot(HaveOccurred())
 	// Verify that the returned key is 256 bits.

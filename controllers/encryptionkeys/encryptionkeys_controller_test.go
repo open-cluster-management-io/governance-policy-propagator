@@ -211,9 +211,9 @@ func getReconciler(encryptionSecret *corev1.Secret) *EncryptionKeysReconciler {
 	}
 }
 
-func assertTriggerUpdate(r *EncryptionKeysReconciler) {
+func assertTriggerUpdate(ctx context.Context, r *EncryptionKeysReconciler) {
 	policyList := v1.PolicyList{}
-	err := r.List(context.TODO(), &policyList)
+	err := r.List(ctx, &policyList)
 	Expect(err).ToNot(HaveOccurred())
 
 	for _, policy := range policyList.Items {
@@ -228,9 +228,9 @@ func assertTriggerUpdate(r *EncryptionKeysReconciler) {
 	}
 }
 
-func assertNoTriggerUpdate(r *EncryptionKeysReconciler) {
+func assertNoTriggerUpdate(ctx context.Context, r *EncryptionKeysReconciler) {
 	policyList := v1.PolicyList{}
-	err := r.List(context.TODO(), &policyList)
+	err := r.List(ctx, &policyList)
 	Expect(err).ToNot(HaveOccurred())
 
 	for _, policy := range policyList.Items {
@@ -266,18 +266,18 @@ func TestReconcileRotateKey(t *testing.T) {
 					Namespace: clusterName, Name: propagator.EncryptionKeySecret,
 				}
 				request := ctrl.Request{NamespacedName: secretID}
-				result, err := r.Reconcile(context.TODO(), request)
+				result, err := r.Reconcile(t.Context(), request)
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Requeue).To(BeFalse())
 				Expect(getRequeueAfterDays(result)).To(Equal(30))
 
-				err = r.Get(context.TODO(), secretID, encryptionSecret)
+				err = r.Get(t.Context(), secretID, encryptionSecret)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(bytes.Equal(encryptionSecret.Data["key"], originalKey)).To(BeFalse())
 				Expect(bytes.Equal(encryptionSecret.Data["previousKey"], originalKey)).To(BeTrue())
 
-				assertTriggerUpdate(r)
+				assertTriggerUpdate(t.Context(), r)
 			},
 		)
 	}
@@ -300,17 +300,17 @@ func TestReconcileNoRotation(t *testing.T) {
 		Namespace: clusterName, Name: propagator.EncryptionKeySecret,
 	}
 	request := ctrl.Request{NamespacedName: secretID}
-	result, err := r.Reconcile(context.TODO(), request)
+	result, err := r.Reconcile(t.Context(), request)
 
 	Expect(err).ToNot(HaveOccurred())
 	Expect(getRequeueAfterDays(result)).To(Equal(30))
 
-	err = r.Get(context.TODO(), secretID, encryptionSecret)
+	err = r.Get(t.Context(), secretID, encryptionSecret)
 	Expect(err).ToNot(HaveOccurred())
 	Expect(bytes.Equal(encryptionSecret.Data["key"], originalKey)).To(BeTrue())
 	Expect(bytes.Equal(encryptionSecret.Data["previousKey"], originalKey)).To(BeFalse())
 
-	assertNoTriggerUpdate(r)
+	assertNoTriggerUpdate(t.Context(), r)
 }
 
 func TestReconcileNotFound(t *testing.T) {
@@ -323,13 +323,13 @@ func TestReconcileNotFound(t *testing.T) {
 		Namespace: clusterName, Name: propagator.EncryptionKeySecret,
 	}
 	request := ctrl.Request{NamespacedName: secretID}
-	result, err := r.Reconcile(context.TODO(), request)
+	result, err := r.Reconcile(t.Context(), request)
 
 	Expect(err).ToNot(HaveOccurred())
 	Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
 
 	policyList := v1.PolicyList{}
-	err = r.List(context.TODO(), &policyList)
+	err = r.List(t.Context(), &policyList)
 	Expect(err).ToNot(HaveOccurred())
 
 	for _, policy := range policyList.Items {
@@ -357,18 +357,18 @@ func TestReconcileManualRotation(t *testing.T) {
 		Namespace: clusterName, Name: propagator.EncryptionKeySecret,
 	}
 	request := ctrl.Request{NamespacedName: secretID}
-	result, err := r.Reconcile(context.TODO(), request)
+	result, err := r.Reconcile(t.Context(), request)
 
 	Expect(err).ToNot(HaveOccurred())
 	Expect(result.Requeue).To(BeFalse())
 	Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
 
-	err = r.Get(context.TODO(), secretID, encryptionSecret)
+	err = r.Get(t.Context(), secretID, encryptionSecret)
 	Expect(err).ToNot(HaveOccurred())
 	Expect(bytes.Equal(encryptionSecret.Data["key"], originalKey)).To(BeTrue())
 	Expect(bytes.Equal(encryptionSecret.Data["previousKey"], originalPrevKey)).To(BeTrue())
 
-	assertTriggerUpdate(r)
+	assertTriggerUpdate(t.Context(), r)
 }
 
 func TestReconcileInvalidKey(t *testing.T) {
@@ -389,18 +389,18 @@ func TestReconcileInvalidKey(t *testing.T) {
 		Namespace: clusterName, Name: propagator.EncryptionKeySecret,
 	}
 	request := ctrl.Request{NamespacedName: secretID}
-	result, err := r.Reconcile(context.TODO(), request)
+	result, err := r.Reconcile(t.Context(), request)
 
 	Expect(err).ToNot(HaveOccurred())
 	Expect(result.Requeue).To(BeFalse())
 	Expect(getRequeueAfterDays(result)).To(Equal(30))
 
-	err = r.Get(context.TODO(), secretID, encryptionSecret)
+	err = r.Get(t.Context(), secretID, encryptionSecret)
 	Expect(err).ToNot(HaveOccurred())
 	Expect(bytes.Equal(encryptionSecret.Data["key"], originalKey)).To(BeFalse())
 	Expect(encryptionSecret.Data["previousKey"]).To(BeEmpty())
 
-	assertTriggerUpdate(r)
+	assertTriggerUpdate(t.Context(), r)
 }
 
 func TestReconcileInvalidPreviousKey(t *testing.T) {
@@ -421,18 +421,18 @@ func TestReconcileInvalidPreviousKey(t *testing.T) {
 		Namespace: clusterName, Name: propagator.EncryptionKeySecret,
 	}
 	request := ctrl.Request{NamespacedName: secretID}
-	result, err := r.Reconcile(context.TODO(), request)
+	result, err := r.Reconcile(t.Context(), request)
 
 	Expect(err).ToNot(HaveOccurred())
 	Expect(result.Requeue).To(BeFalse())
 	Expect(getRequeueAfterDays(result)).To(Equal(30))
 
-	err = r.Get(context.TODO(), secretID, encryptionSecret)
+	err = r.Get(t.Context(), secretID, encryptionSecret)
 	Expect(err).ToNot(HaveOccurred())
 	Expect(bytes.Equal(encryptionSecret.Data["key"], originalKey)).To(BeTrue())
 	Expect(encryptionSecret.Data["previousKey"]).To(BeEmpty())
 
-	assertNoTriggerUpdate(r)
+	assertNoTriggerUpdate(t.Context(), r)
 }
 
 func TestReconcileSecretNotFiltered(t *testing.T) {
@@ -450,13 +450,13 @@ func TestReconcileSecretNotFiltered(t *testing.T) {
 
 	secretID := types.NamespacedName{Namespace: clusterName, Name: "random-secret"}
 	request := ctrl.Request{NamespacedName: secretID}
-	result, err := r.Reconcile(context.TODO(), request)
+	result, err := r.Reconcile(t.Context(), request)
 
 	Expect(err).ToNot(HaveOccurred())
 	Expect(result.Requeue).To(BeFalse())
 	Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
 
-	assertNoTriggerUpdate(r)
+	assertNoTriggerUpdate(t.Context(), r)
 }
 
 func TestReconcileAPIFails(t *testing.T) {
@@ -497,7 +497,7 @@ func TestReconcileAPIFails(t *testing.T) {
 
 				secretID := types.NamespacedName{Namespace: clusterName, Name: propagator.EncryptionKeySecret}
 				request := ctrl.Request{NamespacedName: secretID}
-				result, err := r.Reconcile(context.TODO(), request)
+				result, err := r.Reconcile(t.Context(), request)
 
 				if !test.ExpectedRotation {
 					Expect(err).Should(HaveOccurred())
@@ -512,7 +512,7 @@ func TestReconcileAPIFails(t *testing.T) {
 				// Revert back the fake client to verify the secret and that no policy updates were triggered
 				r.Client = erroringClient.Client
 
-				err = r.Get(context.TODO(), client.ObjectKeyFromObject(encryptionSecret), encryptionSecret)
+				err = r.Get(t.Context(), client.ObjectKeyFromObject(encryptionSecret), encryptionSecret)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				if test.ExpectedRotation {
@@ -523,7 +523,7 @@ func TestReconcileAPIFails(t *testing.T) {
 
 				// Revert back the fake client to verify no policy updates were triggered
 				r.Client = erroringClient.Client
-				assertNoTriggerUpdate(r)
+				assertNoTriggerUpdate(t.Context(), r)
 			},
 		)
 	}
