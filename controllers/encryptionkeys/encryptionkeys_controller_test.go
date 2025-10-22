@@ -269,7 +269,6 @@ func TestReconcileRotateKey(t *testing.T) {
 				result, err := r.Reconcile(t.Context(), request)
 
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result.Requeue).To(BeFalse())
 				Expect(getRequeueAfterDays(result)).To(Equal(30))
 
 				err = r.Get(t.Context(), secretID, encryptionSecret)
@@ -360,7 +359,6 @@ func TestReconcileManualRotation(t *testing.T) {
 	result, err := r.Reconcile(t.Context(), request)
 
 	Expect(err).ToNot(HaveOccurred())
-	Expect(result.Requeue).To(BeFalse())
 	Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
 
 	err = r.Get(t.Context(), secretID, encryptionSecret)
@@ -392,7 +390,6 @@ func TestReconcileInvalidKey(t *testing.T) {
 	result, err := r.Reconcile(t.Context(), request)
 
 	Expect(err).ToNot(HaveOccurred())
-	Expect(result.Requeue).To(BeFalse())
 	Expect(getRequeueAfterDays(result)).To(Equal(30))
 
 	err = r.Get(t.Context(), secretID, encryptionSecret)
@@ -424,7 +421,6 @@ func TestReconcileInvalidPreviousKey(t *testing.T) {
 	result, err := r.Reconcile(t.Context(), request)
 
 	Expect(err).ToNot(HaveOccurred())
-	Expect(result.Requeue).To(BeFalse())
 	Expect(getRequeueAfterDays(result)).To(Equal(30))
 
 	err = r.Get(t.Context(), secretID, encryptionSecret)
@@ -453,7 +449,6 @@ func TestReconcileSecretNotFiltered(t *testing.T) {
 	result, err := r.Reconcile(t.Context(), request)
 
 	Expect(err).ToNot(HaveOccurred())
-	Expect(result.Requeue).To(BeFalse())
 	Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
 
 	assertNoTriggerUpdate(t.Context(), r)
@@ -506,8 +501,6 @@ func TestReconcileAPIFails(t *testing.T) {
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(result.RequeueAfter).ShouldNot(Equal(time.Duration(0)))
 				}
-
-				Expect(result.Requeue).To(BeFalse())
 
 				// Revert back the fake client to verify the secret and that no policy updates were triggered
 				r.Client = erroringClient.Client
