@@ -54,7 +54,7 @@ jobs:
     
     - name: Upload Unit Test Coverage
       if: ${{ github.event_name == 'pull_request' }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: coverage_unit
         path: coverage_unit.out
@@ -99,7 +99,7 @@ jobs:
 
     - name: Upload E2E Test Coverage
       if: ${{ github.event_name == 'pull_request' && matrix.kind == 'latest'}}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: coverage_e2e
         path: coverage_e2e.out
@@ -166,7 +166,7 @@ jobs:
 
     - name: Upload PolicyAutomation Test Coverage
       if: ${{ github.event_name == 'pull_request' && matrix.kind == 'latest'}}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: coverage_e2e_policyautomation
         path: coverage_e2e_policyautomation.out
@@ -200,17 +200,17 @@ jobs:
         go-version: stable
 
     - name: Download Unit Coverage Result
-      uses: actions/download-artifact@v5
+      uses: actions/download-artifact@v6
       with:
         name: coverage_unit
     
     - name: Download E2E Coverage Result
-      uses: actions/download-artifact@v5
+      uses: actions/download-artifact@v6
       with:
         name: coverage_e2e
 
     - name: Download PolicyAutomation Coverage Result
-      uses: actions/download-artifact@v5
+      uses: actions/download-artifact@v6
       with:
         name: coverage_e2e_policyautomation
     
