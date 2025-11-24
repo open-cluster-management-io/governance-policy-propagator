@@ -20,7 +20,7 @@ jobs:
     name: Unit Tests
     steps:
     - name: Checkout Governance Policy Propagator
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
     
     - name: Set up Go
       uses: actions/setup-go@v6
@@ -75,7 +75,7 @@ jobs:
     name: KinD tests
     steps:
     - name: Checkout Governance Policy Propagator
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Set up Go
       uses: actions/setup-go@v6
@@ -145,7 +145,7 @@ jobs:
     name: PolicyAutomation tests
     steps:
     - name: Checkout Governance Policy Propagator
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Set up Go
       uses: actions/setup-go@v6
@@ -192,7 +192,7 @@ jobs:
 
     steps:
     - name: Checkout Governance Policy Propagator
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Set up Go
       uses: actions/setup-go@v6
