@@ -4,7 +4,6 @@
 package e2e
 
 import (
-	"context"
 	"sort"
 	"time"
 
@@ -29,11 +28,11 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 
 	ansiblelistlen := 0
 	// Use this only when target_clusters managed1 managed2 managed3
-	getLastAnsiblejob := func() *unstructured.Unstructured {
+	getLastAnsiblejob := func(ctx SpecContext) *unstructured.Unstructured {
 		GinkgoHelper()
 
 		ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-			context.TODO(), metav1.ListOptions{},
+			ctx, metav1.ListOptions{},
 		)
 		Expect(err).ToNot(HaveOccurred())
 		for _, ansiblejob := range ansiblejobList.Items {
@@ -51,11 +50,11 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 
 		return nil
 	}
-	getLastAnsiblejobByTime := func() *unstructured.Unstructured {
+	getLastAnsiblejobByTime := func(ctx SpecContext) *unstructured.Unstructured {
 		GinkgoHelper()
 
 		ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-			context.TODO(), metav1.ListOptions{},
+			ctx, metav1.ListOptions{},
 		)
 		Expect(err).ToNot(HaveOccurred())
 		sort.Slice(ansiblejobList.Items, func(i, j int) bool {
@@ -80,8 +79,8 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 		return len(extraVars["target_clusters"].([]interface{}))
 	}
 	// Use this only when target_clusters managed1 managed2 managed3
-	getLastJobCompliant := func() string {
-		ansiblejob := getLastAnsiblejob()
+	getLastJobCompliant := func(ctx SpecContext) string {
+		ansiblejob := getLastAnsiblejob(ctx)
 		lastCompliant, _, err := unstructured.NestedString(ansiblejob.Object,
 			"spec", "extra_vars", "policy_violations", "managed3", "compliant")
 
@@ -90,7 +89,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 		return lastCompliant
 	}
 
-	BeforeAll(func() {
+	BeforeAll(func(ctx SpecContext) {
 		ansiblelistlen = 0
 		By("Create policy/pb/plc in ns:" + testNamespace + " and then update pb/plc")
 		By("Creating " + case5PolicyName + " in user ns")
@@ -112,7 +111,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 		)
 		plr.Object["status"] = utils.GeneratePlrStatus("managed1", "managed2", "managed3")
 		_, err = clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
-			context.TODO(), plr, metav1.UpdateOptions{},
+			ctx, plr, metav1.UpdateOptions{},
 		)
 		Expect(err).ToNot(HaveOccurred())
 		opt := metav1.ListOptions{
@@ -121,7 +120,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 		utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 3, true, defaultTimeoutSeconds)
 	})
 
-	cleanupPolicyAutomation := func() {
+	cleanupPolicyAutomation := func(ctx SpecContext) {
 		By("Removing config map")
 		_, err := utils.KubectlWithOutput(
 			"delete", "policyautomation", "-n", testNamespace, automationName, "--kubeconfig="+kubeconfigHub,
@@ -131,7 +130,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 		By("Ansiblejob should also be removed")
 		Eventually(func() interface{} {
 			ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-				context.TODO(), metav1.ListOptions{},
+				ctx, metav1.ListOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -148,7 +147,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 				ComplianceState: policiesv1.Compliant,
 			}
 			_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
-				context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
+				ctx, &replicatedPlc, metav1.UpdateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 		}
@@ -170,7 +169,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 	}
 
 	Describe("Test PolicyAutomation spec.mode", Ordered, func() {
-		It("Test mode = disable", func() {
+		It("Test mode = disable", func(ctx SpecContext) {
 			By("Creating an policyAutomation with mode=disable")
 			_, err := utils.KubectlWithOutput("apply",
 				"-f", "../resources/case5_policy_automation/case5-policy-automation-disable.yaml",
@@ -179,7 +178,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			By("Should not create any ansiblejob when mode = disable")
 			Consistently(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).List(
-					context.TODO(), metav1.ListOptions{},
+					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -187,15 +186,15 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			}, 30, 1).Should(Equal(0))
 		})
 
-		It("Test mode = once", func() {
+		It("Test mode = once", func(ctx SpecContext) {
 			By("Patching policyAutomation with mode=once")
 			policyAutomation, err := clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).Get(
-				context.TODO(), automationName, metav1.GetOptions{},
+				ctx, automationName, metav1.GetOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 			policyAutomation.Object["spec"].(map[string]interface{})["mode"] = string(policyv1beta1.Once)
 			policyAutomation, err = clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).Update(
-				context.TODO(), policyAutomation, metav1.UpdateOptions{},
+				ctx, policyAutomation, metav1.UpdateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -206,7 +205,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			By("Should still not create any ansiblejob when mode = once and policy is pending")
 			Consistently(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).List(
-					context.TODO(), metav1.ListOptions{},
+					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -215,7 +214,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			By("Should still not create any ansiblejob when mode = once and policy is Compliant")
 			Consistently(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).List(
-					context.TODO(), metav1.ListOptions{},
+					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -246,7 +245,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					Details:         mockDetails,
 				}
 				_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
-					context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
+					ctx, &replicatedPlc, metav1.UpdateOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 			}
@@ -254,7 +253,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			var ansiblejobList *unstructured.UnstructuredList
 			Eventually(func() interface{} {
 				ansiblejobList, err = clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-					context.TODO(), metav1.ListOptions{},
+					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
@@ -265,7 +264,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			}, 30, 1).Should(Equal(1))
 			Consistently(func() interface{} {
 				ansiblejobList, err = clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-					context.TODO(), metav1.ListOptions{},
+					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
@@ -302,7 +301,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			By("Job TTL should match default (1 day)")
 			Eventually(func(g Gomega) interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-					context.TODO(), metav1.ListOptions{},
+					ctx, metav1.ListOptions{},
 				)
 				g.Expect(err).ToNot(HaveOccurred())
 
@@ -311,7 +310,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 
 			By("Mode should be set to disabled after ansiblejob is created")
 			policyAutomation, err = clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).Get(
-				context.TODO(), automationName, metav1.GetOptions{},
+				ctx, automationName, metav1.GetOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(
@@ -321,20 +320,20 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			By("Change mode to once again, should create one more ansiblejob")
 			Eventually(func(g Gomega) {
 				policyAutomation, err = clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).Get(
-					context.TODO(), automationName, metav1.GetOptions{},
+					ctx, automationName, metav1.GetOptions{},
 				)
 				g.Expect(err).ToNot(HaveOccurred())
 
 				policyAutomation.Object["spec"].(map[string]interface{})["mode"] = string(policyv1beta1.Once)
 				_, err = clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).Update(
-					context.TODO(), policyAutomation, metav1.UpdateOptions{},
+					ctx, policyAutomation, metav1.UpdateOptions{},
 				)
 				g.Expect(err).ToNot(HaveOccurred())
 			}).Should(Succeed())
 
 			Eventually(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-					context.TODO(), metav1.ListOptions{},
+					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
@@ -354,7 +353,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					ComplianceState: policiesv1.Compliant,
 				}
 				_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
-					context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
+					ctx, &replicatedPlc, metav1.UpdateOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 			}
@@ -382,7 +381,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			By("Ansiblejob should also be removed")
 			Eventually(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-					context.TODO(), metav1.ListOptions{},
+					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -391,7 +390,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 		})
 
 		// Create two events then two ansiblejobs for each event
-		It("Test mode = everyEvent without delayAfterRunSeconds", func() {
+		It("Test mode = everyEvent without delayAfterRunSeconds", func(ctx SpecContext) {
 			By("Creating an policyAutomation with mode=everyEvent")
 			_, err := utils.KubectlWithOutput("apply",
 				"-f", "../resources/case5_policy_automation/case5-policy-automation-everyEvent.yaml",
@@ -401,7 +400,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			By("Should not create any new ansiblejob when Compliant")
 			Consistently(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).List(
-					context.TODO(), metav1.ListOptions{},
+					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -418,7 +417,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					ComplianceState: policiesv1.NonCompliant,
 				}
 				_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
-					context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
+					ctx, &replicatedPlc, metav1.UpdateOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 			}
@@ -441,7 +440,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			By("Should create ansiblejobs more than 1")
 			Eventually(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-					context.TODO(), metav1.ListOptions{},
+					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
@@ -453,7 +452,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 
 			Consistently(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-					context.TODO(), metav1.ListOptions{},
+					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
@@ -465,13 +464,13 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 
 			By("Should the last ansiblejob include managed3")
 			Eventually(func() interface{} {
-				return getLastJobCompliant()
+				return getLastJobCompliant(ctx)
 			}, 30, 1).Should(Equal("NonCompliant"))
 
 			By("Job TTL should match patch (1 hour)")
 			Eventually(func(g Gomega) interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-					context.TODO(), metav1.ListOptions{},
+					ctx, metav1.ListOptions{},
 				)
 				g.Expect(err).ToNot(HaveOccurred())
 
@@ -492,7 +491,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					ComplianceState: policiesv1.Compliant,
 				}
 				_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
-					context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
+					ctx, &replicatedPlc, metav1.UpdateOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 			}
@@ -515,7 +514,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			By("Should not create any new ansiblejob when policies become Compliant")
 			Consistently(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).List(
-					context.TODO(), metav1.ListOptions{},
+					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -532,7 +531,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					ComplianceState: policiesv1.NonCompliant,
 				}
 				_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
-					context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
+					ctx, &replicatedPlc, metav1.UpdateOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 			}
@@ -554,13 +553,13 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 
 			By("Should the last ansiblejob include managed3 that is noncompliant")
 			Eventually(func() interface{} {
-				return getLastJobCompliant()
+				return getLastJobCompliant(ctx)
 			}, 30, 1).Should(Equal("NonCompliant"))
 
 			By("Should more ansiblejobs after change Compliant to Noncompliant")
 			Eventually(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-					context.TODO(), metav1.ListOptions{},
+					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
@@ -570,13 +569,13 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 				// This ansiblelistlen is the length created before changed to noncompliant
 				return len(ansiblejobList.Items) > ansiblelistlen
 			}, 30, 1).Should(BeTrue())
-			cleanupPolicyAutomation()
+			cleanupPolicyAutomation(ctx)
 		})
 
 		// Create three events during delayAfterRunSeconds period
 		// Got the first ansiblejobs within delayAfterRunSeconds period for the first event
 		// Only got the second ansiblejobs after delayAfterRunSeconds period for the last two events
-		It("Test mode = everyEvent with delayAfterRunSeconds", func() {
+		It("Test mode = everyEvent with delayAfterRunSeconds", func(ctx SpecContext) {
 			By("Creating an policyAutomation with mode=everyEvent")
 			_, err := utils.KubectlWithOutput("apply",
 				"-f", "../resources/case5_policy_automation/case5-policy-automation-everyEvent.yaml",
@@ -589,13 +588,13 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			// controller.
 			Eventually(func(g Gomega) {
 				policyAutomation, err = clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).Get(
-					context.TODO(), automationName, metav1.GetOptions{},
+					ctx, automationName, metav1.GetOptions{},
 				)
 				g.Expect(err).ToNot(HaveOccurred())
 
 				policyAutomation.Object["spec"].(map[string]interface{})["delayAfterRunSeconds"] = 240
 				_, err = clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).Update(
-					context.TODO(), policyAutomation, metav1.UpdateOptions{},
+					ctx, policyAutomation, metav1.UpdateOptions{},
 				)
 				g.Expect(err).ToNot(HaveOccurred())
 			}).Should(Succeed())
@@ -603,7 +602,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			By("Should not create any new ansiblejob when Compliant")
 			Consistently(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).List(
-					context.TODO(), metav1.ListOptions{},
+					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -620,7 +619,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					ComplianceState: policiesv1.NonCompliant,
 				}
 				_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
-					context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
+					ctx, &replicatedPlc, metav1.UpdateOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 			}
@@ -647,12 +646,12 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 
-				return getLastJobCompliant()
+				return getLastJobCompliant(ctx)
 			}, 30, 1).Should(Equal("NonCompliant"))
 
 			Consistently(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-					context.TODO(), metav1.ListOptions{},
+					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -662,7 +661,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 				// Save ansiblelistlen for next test
 				ansiblelistlen = len(ansiblejobList.Items)
 
-				return getLastJobCompliant()
+				return getLastJobCompliant(ctx)
 			}, 30, 1).Should(Equal("NonCompliant"))
 
 			By("Patching policy to make all clusters back to Compliant")
@@ -675,7 +674,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					ComplianceState: policiesv1.Compliant,
 				}
 				_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
-					context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
+					ctx, &replicatedPlc, metav1.UpdateOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 			}
@@ -697,7 +696,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			By("Should not create a new ansiblejobs when policies become Compliant")
 			Consistently(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).List(
-					context.TODO(), metav1.ListOptions{},
+					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -706,7 +705,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 
 			// Save ansiblelistlen that indicate before compliant change
 			ansiblejobList, _ := clientHubDynamic.Resource(gvrAnsibleJob).List(
-				context.TODO(), metav1.ListOptions{},
+				ctx, metav1.ListOptions{},
 			)
 			ansiblelistlen = len(ansiblejobList.Items)
 
@@ -720,7 +719,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					ComplianceState: policiesv1.NonCompliant,
 				}
 				_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
-					context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
+					ctx, &replicatedPlc, metav1.UpdateOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 			}
@@ -744,7 +743,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 				" within delayAfterRunSeconds period")
 			Consistently(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).List(
-					context.TODO(), metav1.ListOptions{},
+					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -761,7 +760,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					ComplianceState: policiesv1.Compliant,
 				}
 				_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
-					context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
+					ctx, &replicatedPlc, metav1.UpdateOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 			}
@@ -783,7 +782,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 
 			// Save ansiblelist length for next test
 			ansiblejobList, err = clientHubDynamic.Resource(gvrAnsibleJob).List(
-				context.TODO(), metav1.ListOptions{},
+				ctx, metav1.ListOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -791,7 +790,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 
 			By("Patching automationStartTime to an earlier time and let delayAfterRunSeconds expire immediately")
 			policyAutomation, err = clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).Get(
-				context.TODO(), automationName, metav1.GetOptions{},
+				ctx, automationName, metav1.GetOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 			status := policyAutomation.Object["status"].(map[string]interface{})
@@ -801,7 +800,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 				ClusterEvent.(map[string]interface{})["automationStartTime"] = updateStartTime
 			}
 			_, err = clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).UpdateStatus(
-				context.TODO(), policyAutomation, metav1.UpdateOptions{},
+				ctx, policyAutomation, metav1.UpdateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -815,7 +814,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					ComplianceState: policiesv1.NonCompliant,
 				}
 				_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
-					context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
+					ctx, &replicatedPlc, metav1.UpdateOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 			}
@@ -838,7 +837,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			By("After delayAfterRunSeconds is expired, should only create the second ansiblejob")
 			Eventually(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-					context.TODO(), metav1.ListOptions{},
+					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
@@ -850,7 +849,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 
 			Consistently(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-					context.TODO(), metav1.ListOptions{},
+					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
@@ -868,20 +867,20 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			By("Ansiblejob should also be removed")
 			Eventually(func() interface{} {
 				ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-					context.TODO(), metav1.ListOptions{},
+					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 
 				return len(ansiblejobList.Items)
 			}, 30, 1).Should(Equal(0))
 
-			cleanupPolicyAutomation()
+			cleanupPolicyAutomation(ctx)
 		})
 	})
 
 	Describe("Test PolicyAutomation Manual run", func() {
 		Describe("Test manual run", func() {
-			It("should no issue when init policyAutomation with disable and manual ", func() {
+			It("should no issue when init policyAutomation with disable and manual ", func(ctx SpecContext) {
 				By("Patching policy to make all clusters NonCompliant")
 				opt := metav1.ListOptions{
 					LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case5PolicyName,
@@ -908,7 +907,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 						Details:         mockDetails,
 					}
 					_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
-						context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
+						ctx, &replicatedPlc, metav1.UpdateOptions{},
 					)
 					Expect(err).ToNot(HaveOccurred())
 				}
@@ -931,10 +930,10 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
-			It("Should only create one ansiblejob which include 3 noncompliant target_clusters", func() {
+			It("Should only create one ansiblejob which include 3 noncompliant target_clusters", func(ctx SpecContext) {
 				Eventually(func() interface{} {
 					ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-						context.TODO(), metav1.ListOptions{},
+						ctx, metav1.ListOptions{},
 					)
 					Expect(err).ToNot(HaveOccurred())
 					_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
@@ -945,7 +944,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 				}, 30, 1).Should(Equal(1))
 				Consistently(func() interface{} {
 					ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-						context.TODO(), metav1.ListOptions{},
+						ctx, metav1.ListOptions{},
 					)
 					Expect(err).ShouldNot(HaveOccurred())
 					_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
@@ -957,8 +956,8 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			})
 
 			It("Check each violation context field is not empty in "+
-				"extra_vars for the violated manual run case", func() {
-				lastAnsiblejob := getLastAnsiblejob()
+				"extra_vars for the violated manual run case", func(ctx SpecContext) {
+				lastAnsiblejob := getLastAnsiblejob(ctx)
 				spec := lastAnsiblejob.Object["spec"]
 				extraVars := spec.(map[string]interface{})["extra_vars"].(map[string]interface{})
 				Expect(extraVars["policy_name"]).To(Equal("case5-test-policy"))
@@ -975,7 +974,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 				Expect(compliant).To(Equal(string(policiesv1.NonCompliant)))
 			})
 
-			It("Patching policy to make all clusters back to Compliant", func() {
+			It("Patching policy to make all clusters back to Compliant", func(ctx SpecContext) {
 				opt := metav1.ListOptions{
 					LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case5PolicyName,
 				}
@@ -986,13 +985,13 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 						ComplianceState: policiesv1.Compliant,
 					}
 					_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
-						context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
+						ctx, &replicatedPlc, metav1.UpdateOptions{},
 					)
 					Expect(err).ToNot(HaveOccurred())
 				}
 			})
 
-			It("Should create one ansible job when the policy is compliant", func() {
+			It("Should create one ansible job when the policy is compliant", func(ctx SpecContext) {
 				By("Applying manual run annotation again")
 				_, err := utils.KubectlWithOutput(
 					"annotate",
@@ -1008,7 +1007,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 				By("Should still create one more ansiblejob when policy is Compliant")
 				Eventually(func() interface{} {
 					ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-						context.TODO(), metav1.ListOptions{},
+						ctx, metav1.ListOptions{},
 					)
 					Expect(err).ToNot(HaveOccurred())
 					_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
@@ -1019,7 +1018,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 				}, 30, 1).Should(Equal(2))
 				Consistently(func() interface{} {
 					ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-						context.TODO(), metav1.ListOptions{},
+						ctx, metav1.ListOptions{},
 					)
 					Expect(err).ToNot(HaveOccurred())
 					_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
@@ -1029,8 +1028,8 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					return len(ansiblejobList.Items)
 				}, 30, 1).Should(Equal(2))
 			})
-			It("Check policy_violations is mostly empty for the compliant manual run case", func() {
-				lastAnsibleJob := getLastAnsiblejobByTime()
+			It("Check policy_violations is mostly empty for the compliant manual run case", func(ctx SpecContext) {
+				lastAnsibleJob := getLastAnsiblejobByTime(ctx)
 				spec := lastAnsibleJob.Object["spec"]
 
 				extraVars := spec.(map[string]interface{})["extra_vars"].(map[string]interface{})
@@ -1041,11 +1040,11 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 				Expect(extraVars["policy_sets"].([]interface{})).To(HaveLen(1))
 				Expect(extraVars["policy_sets"].([]interface{})[0]).To(Equal("case5-test-policyset"))
 				Expect(extraVars["policy_violations"]).To(BeNil())
-				cleanupPolicyAutomation()
+				cleanupPolicyAutomation(ctx)
 			})
 		})
 		Describe("Test manual run and diable", func() {
-			It("Change policy to disabled and create policyAutomation with disabled", func() {
+			It("Change policy to disabled and create policyAutomation with disabled", func(ctx SpecContext) {
 				By("Change policy disabled to true")
 				rootPlc := utils.GetWithTimeout(
 					clientHubDynamic, gvrPolicy, case5PolicyName, testNamespace, true, defaultTimeoutSeconds,
@@ -1053,7 +1052,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 				Expect(rootPlc).NotTo(BeNil())
 				rootPlc.Object["spec"].(map[string]interface{})["disabled"] = true
 				_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(testNamespace).Update(
-					context.TODO(), rootPlc, metav1.UpdateOptions{},
+					ctx, rootPlc, metav1.UpdateOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -1063,7 +1062,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
-			It("Should no issue when policy set to disabled = true ", func() {
+			It("Should no issue when policy set to disabled = true ", func(ctx SpecContext) {
 				By("Applying manual run annotation")
 				_, err := utils.KubectlWithOutput(
 					"annotate",
@@ -1085,21 +1084,21 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 				Expect(rootPlc.Object["spec"].(map[string]interface{})["disabled"]).To(BeTrue())
 				rootPlc.Object["spec"].(map[string]interface{})["disabled"] = false
 				_, err = clientHubDynamic.Resource(gvrPolicy).Namespace(testNamespace).Update(
-					context.TODO(), rootPlc, metav1.UpdateOptions{},
+					ctx, rootPlc, metav1.UpdateOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 
 				By("The ansiblejob should be only one")
 				Eventually(func() interface{} {
 					ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-						context.TODO(), metav1.ListOptions{},
+						ctx, metav1.ListOptions{},
 					)
 					Expect(err).ToNot(HaveOccurred())
 
 					return len(ansiblejobList.Items)
 				}, 30, 1).Should(Equal(1))
 			})
-			It("Should create one more ansiblejob when the manual run is set again ", func() {
+			It("Should create one more ansiblejob when the manual run is set again ", func(ctx SpecContext) {
 				By("Applying manual run annotation")
 				_, err := utils.KubectlWithOutput(
 					"annotate",
@@ -1116,19 +1115,19 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 				By("The ansiblejob should be two")
 				Eventually(func() interface{} {
 					ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-						context.TODO(), metav1.ListOptions{},
+						ctx, metav1.ListOptions{},
 					)
 					Expect(err).ToNot(HaveOccurred())
 
 					return len(ansiblejobList.Items)
 				}, 30, 1).Should(Equal(2))
 
-				cleanupPolicyAutomation()
+				cleanupPolicyAutomation(ctx)
 			})
 		})
 	})
 
-	AfterAll(func() {
+	AfterAll(func(ctx SpecContext) {
 		By("Removing policy")
 		_, err := utils.KubectlWithOutput("delete", "policy", "-n",
 			testNamespace, case5PolicyName, "--kubeconfig="+kubeconfigHub)
@@ -1136,7 +1135,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 		By("PolicyAutomation should also be removed")
 		Eventually(func() *unstructured.Unstructured {
 			policyAutomation, err := clientHubDynamic.Resource(gvrPolicyAutomation).Namespace(testNamespace).Get(
-				context.TODO(), automationName, metav1.GetOptions{},
+				ctx, automationName, metav1.GetOptions{},
 			)
 			if !k8serrors.IsNotFound(err) {
 				Expect(err).ToNot(HaveOccurred())
@@ -1147,7 +1146,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 		By("Ansiblejob should also be removed")
 		Eventually(func() interface{} {
 			ansiblejobList, err := clientHubDynamic.Resource(gvrAnsibleJob).Namespace(testNamespace).List(
-				context.TODO(), metav1.ListOptions{},
+				ctx, metav1.ListOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 

@@ -61,7 +61,7 @@ var _ = Describe("Test policy templates", func() {
 			)
 			Expect(plc).NotTo(BeNil())
 		})
-		It("should resolve templates and propagate to cluster ns managed1", func() {
+		It("should resolve templates and propagate to cluster ns managed1", func(ctx SpecContext) {
 			By("Patching test-policy-plr with decision of cluster managed1")
 			plr := utils.GetWithTimeout(
 				clientHubDynamic, gvrPlacementRule, case9PolicyName+"-plr", testNamespace,
@@ -69,7 +69,7 @@ var _ = Describe("Test policy templates", func() {
 			)
 			plr.Object["status"] = utils.GeneratePlrStatus("managed1")
 			_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
-				context.TODO(), plr, metav1.UpdateOptions{},
+				ctx, plr, metav1.UpdateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 			plc := utils.GetWithTimeout(
@@ -112,7 +112,7 @@ var _ = Describe("Test policy templates", func() {
 				return replicatedPlc.Object["spec"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
 		})
-		It("should resolve templates and propagate to cluster ns managed2", func() {
+		It("should resolve templates and propagate to cluster ns managed2", func(ctx SpecContext) {
 			By("Patching test-policy-plr with decision of cluster managed2")
 			plr := utils.GetWithTimeout(
 				clientHubDynamic, gvrPlacementRule, case9PolicyName+"-plr", testNamespace,
@@ -120,7 +120,7 @@ var _ = Describe("Test policy templates", func() {
 			)
 			plr.Object["status"] = utils.GeneratePlrStatus("managed2")
 			_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
-				context.TODO(), plr, metav1.UpdateOptions{},
+				ctx, plr, metav1.UpdateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 			plc := utils.GetWithTimeout(
@@ -173,7 +173,7 @@ var _ = Describe("Test policy templates", func() {
 				Expect(plc).NotTo(BeNil())
 			})
 
-			It("should resolve templates and propagate to cluster ns "+managedCluster, func() {
+			It("should resolve templates and propagate to cluster ns "+managedCluster, func(ctx SpecContext) {
 				By("Initializing AES Encryption Secret")
 				_, err := utils.KubectlWithOutput("apply",
 					"-f", case9EncryptionSecret,
@@ -188,7 +188,7 @@ var _ = Describe("Test policy templates", func() {
 				)
 				plr.Object["status"] = utils.GeneratePlrStatus(managedCluster)
 				_, err = clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
-					context.TODO(), plr, metav1.UpdateOptions{},
+					ctx, plr, metav1.UpdateOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -214,7 +214,7 @@ var _ = Describe("Test policy templates", func() {
 				annotations[IVAnnotation] = initializationVector
 				replicatedPlc.SetAnnotations(annotations)
 				_, err = clientHubDynamic.Resource(gvrPolicy).Namespace(managedCluster).Update(
-					context.TODO(), replicatedPlc, metav1.UpdateOptions{},
+					ctx, replicatedPlc, metav1.UpdateOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -234,12 +234,12 @@ var _ = Describe("Test policy templates", func() {
 				}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
 			})
 
-			It("should reconcile when the secret referenced in the template is updated", func() {
+			It("should reconcile when the secret referenced in the template is updated", func(ctx SpecContext) {
 				By("Updating the secret " + case9SecretName)
 				newToken := "THVrZS4gSSBhbSB5b3VyIGZhdGhlci4="
 				patch := []byte(`{"data": {"token": "` + newToken + `"}}`)
 				_, err := clientHub.CoreV1().Secrets(testNamespace).Patch(
-					context.TODO(), case9SecretName, types.StrategicMergePatchType, patch, metav1.PatchOptions{},
+					ctx, case9SecretName, types.StrategicMergePatchType, patch, metav1.PatchOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -322,7 +322,7 @@ var _ = Describe("Test policy templates", func() {
 				Expect(plc).NotTo(BeNil())
 			})
 
-			It("should resolve templates and propagate to cluster ns "+managedCluster, func() {
+			It("should resolve templates and propagate to cluster ns "+managedCluster, func(ctx SpecContext) {
 				By("Initializing AES Encryption Secret")
 				_, err := utils.KubectlWithOutput("apply",
 					"-f", case9EncryptionSecret,
@@ -337,7 +337,7 @@ var _ = Describe("Test policy templates", func() {
 				)
 				plr.Object["status"] = utils.GeneratePlrStatus(managedCluster)
 				_, err = clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
-					context.TODO(), plr, metav1.UpdateOptions{},
+					ctx, plr, metav1.UpdateOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -363,7 +363,7 @@ var _ = Describe("Test policy templates", func() {
 				annotations[IVAnnotation] = initializationVector
 				replicatedPlc.SetAnnotations(annotations)
 				_, err = clientHubDynamic.Resource(gvrPolicy).Namespace(managedCluster).Update(
-					context.TODO(), replicatedPlc, metav1.UpdateOptions{},
+					ctx, replicatedPlc, metav1.UpdateOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -383,12 +383,12 @@ var _ = Describe("Test policy templates", func() {
 				}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
 			})
 
-			It("should reconcile when the secret referenced in the template is updated", func() {
+			It("should reconcile when the secret referenced in the template is updated", func(ctx SpecContext) {
 				By("Updating the secret " + case9SecretName)
 				newToken := "THVrZS4gSSBhbSB5b3VyIGZhdGhlci4="
 				patch := []byte(`{"data": {"token": "` + newToken + `"}}`)
 				_, err := clientHub.CoreV1().Secrets(testNamespace).Patch(
-					context.TODO(), case9SecretName, types.StrategicMergePatchType, patch, metav1.PatchOptions{},
+					ctx, case9SecretName, types.StrategicMergePatchType, patch, metav1.PatchOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -478,7 +478,7 @@ var _ = Describe("Test policy templates", func() {
 			)
 			Expect(plc).NotTo(BeNil())
 		})
-		It("should resolve templates and propagate to cluster ns managed1", func() {
+		It("should resolve templates and propagate to cluster ns managed1", func(ctx SpecContext) {
 			By("Patching test-policy-plr with decision of cluster managed1")
 			plr := utils.GetWithTimeout(
 				clientHubDynamic, gvrPlacementRule, case9PolicyWithCSLookupName+"-plr", testNamespace,
@@ -486,7 +486,7 @@ var _ = Describe("Test policy templates", func() {
 			)
 			plr.Object["status"] = utils.GeneratePlrStatus("managed1")
 			_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
-				context.TODO(), plr, metav1.UpdateOptions{},
+				ctx, plr, metav1.UpdateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 			plc := utils.GetWithTimeout(
@@ -518,7 +518,7 @@ var _ = Describe("Test policy templates", func() {
 	})
 
 	Describe("Test a custom service account", Ordered, func() {
-		AfterAll(func(_ context.Context) {
+		AfterAll(func() {
 			utils.Kubectl("delete", "-f", case9SAYaml, "--kubeconfig="+kubeconfigHub, "--ignore-not-found")
 			utils.Kubectl(
 				"-n",
