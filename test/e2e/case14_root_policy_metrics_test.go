@@ -4,7 +4,6 @@
 package e2e
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 
@@ -49,7 +48,7 @@ var _ = Describe("Test root policy metrics", Ordered, func() {
 			Expect(plc).NotTo(BeNil())
 		})
 
-		It("should resolve templates and propagate to cluster ns managed1", func() {
+		It("should resolve templates and propagate to cluster ns managed1", func(ctx SpecContext) {
 			By("Patching test-policy-plr with decision of cluster managed1")
 			plr := utils.GetWithTimeout(
 				clientHubDynamic, gvrPlacementRule, policyName+"-plr", testNamespace,
@@ -57,7 +56,7 @@ var _ = Describe("Test root policy metrics", Ordered, func() {
 			)
 			plr.Object["status"] = utils.GeneratePlrStatus("managed1")
 			_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
-				context.TODO(), plr, metav1.UpdateOptions{},
+				ctx, plr, metav1.UpdateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 			plc := utils.GetWithTimeout(

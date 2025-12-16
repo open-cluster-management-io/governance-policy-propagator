@@ -3,8 +3,6 @@
 package e2e
 
 import (
-	"context"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,7 +18,7 @@ var _ = Describe("Test metrics appear locally", func() {
 		case8PolicyYaml string = "../resources/case8_metrics/case8-test-policy.yaml"
 	)
 
-	It("should report 0 for compliant root policy and replicated policies", func() {
+	It("should report 0 for compliant root policy and replicated policies", func(ctx SpecContext) {
 		By("Creating " + case8PolicyYaml)
 		utils.Kubectl("apply",
 			"-f", case8PolicyYaml,
@@ -36,7 +34,7 @@ var _ = Describe("Test metrics appear locally", func() {
 		)
 		plr.Object["status"] = utils.GeneratePlrStatus("managed1", "managed2")
 		_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
-			context.TODO(), plr, metav1.UpdateOptions{},
+			ctx, plr, metav1.UpdateOptions{},
 		)
 		Expect(err).ToNot(HaveOccurred())
 		plc = utils.GetWithTimeout(
@@ -51,7 +49,7 @@ var _ = Describe("Test metrics appear locally", func() {
 				ComplianceState: policiesv1.Compliant,
 			}
 			_, err = clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
-				context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
+				ctx, &replicatedPlc, metav1.UpdateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 		}
@@ -81,7 +79,7 @@ var _ = Describe("Test metrics appear locally", func() {
 			)
 		}, defaultTimeoutSeconds, 1).Should(Equal([]string{"0"}))
 	})
-	It("should report 1 for noncompliant root policy and replicated policies", func() {
+	It("should report 1 for noncompliant root policy and replicated policies", func(ctx SpecContext) {
 		By("Patching both replicated policy status to noncompliant")
 		opt := metav1.ListOptions{LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case8PolicyName}
 		replicatedPlcList := utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
@@ -90,7 +88,7 @@ var _ = Describe("Test metrics appear locally", func() {
 				ComplianceState: policiesv1.NonCompliant,
 			}
 			_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
-				context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
+				ctx, &replicatedPlc, metav1.UpdateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 		}
