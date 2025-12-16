@@ -4,8 +4,6 @@
 package e2e
 
 import (
-	"context"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -62,14 +60,14 @@ var _ = Describe("Test policy status aggregation", func() {
 			Expect(plc).NotTo(BeNil())
 		})
 
-		It("should contain status.placement with managed1", func() {
+		It("should contain status.placement with managed1", func(ctx SpecContext) {
 			By("Patching test-policy-plr with decision of cluster managed1")
 			plr := utils.GetWithTimeout(
 				clientHubDynamic, gvrPlacementRule, case2PolicyName+"-plr", testNamespace, true, defaultTimeoutSeconds,
 			)
 			plr.Object["status"] = utils.GeneratePlrStatus("managed1")
 			_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
-				context.TODO(), plr, metav1.UpdateOptions{},
+				ctx, plr, metav1.UpdateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 			plc := utils.GetWithTimeout(
@@ -90,14 +88,14 @@ var _ = Describe("Test policy status aggregation", func() {
 				return rootPlc.Object["status"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
 		})
-		It("should contain status.placement with both managed1 and managed2", func() {
+		It("should contain status.placement with both managed1 and managed2", func(ctx SpecContext) {
 			By("Patching test-policy-plr with decision of cluster managed1 and managed2")
 			plr := utils.GetWithTimeout(
 				clientHubDynamic, gvrPlacementRule, case2PolicyName+"-plr", testNamespace, true, defaultTimeoutSeconds,
 			)
 			plr.Object["status"] = utils.GeneratePlrStatus("managed1", "managed2")
 			_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
-				context.TODO(), plr, metav1.UpdateOptions{},
+				ctx, plr, metav1.UpdateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 			plc := utils.GetWithTimeout(
@@ -118,14 +116,14 @@ var _ = Describe("Test policy status aggregation", func() {
 				return rootPlc.Object["status"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
 		})
-		It("should contain status.placement with managed2", func() {
+		It("should contain status.placement with managed2", func(ctx SpecContext) {
 			By("Patching test-policy-plr with decision of cluster managed2")
 			plr := utils.GetWithTimeout(
 				clientHubDynamic, gvrPlacementRule, case2PolicyName+"-plr", testNamespace, true, defaultTimeoutSeconds,
 			)
 			plr.Object["status"] = utils.GeneratePlrStatus("managed2")
 			_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
-				context.TODO(), plr, metav1.UpdateOptions{},
+				ctx, plr, metav1.UpdateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 			plc := utils.GetWithTimeout(
@@ -161,14 +159,14 @@ var _ = Describe("Test policy status aggregation", func() {
 				return rootPlc.Object["status"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
 		})
-		It("should contain status.placement with two pb/plr and both status", func() {
+		It("should contain status.placement with two pb/plr and both status", func(ctx SpecContext) {
 			By("Creating pb-plr-2 to binding second set of placement")
 			plr := utils.GetWithTimeout(
 				clientHubDynamic, gvrPlacementRule, case2PolicyName+"-plr2", testNamespace, true, defaultTimeoutSeconds,
 			)
 			plr.Object["status"] = utils.GeneratePlrStatus("managed1")
 			_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
-				context.TODO(), plr, metav1.UpdateOptions{},
+				ctx, plr, metav1.UpdateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 			By("Checking the status of root policy")
@@ -181,14 +179,14 @@ var _ = Describe("Test policy status aggregation", func() {
 				return rootPlc.Object["status"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
 		})
-		It("should still contain status.placement with two pb/plr and both status", func() {
+		It("should still contain status.placement with two pb/plr and both status", func(ctx SpecContext) {
 			By("Patch" + case2PolicyName + "-plr2 with both managed1 and managed2")
 			plr := utils.GetWithTimeout(
 				clientHubDynamic, gvrPlacementRule, case2PolicyName+"-plr2", testNamespace, true, defaultTimeoutSeconds,
 			)
 			plr.Object["status"] = utils.GeneratePlrStatus("managed1", "managed2")
 			_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
-				context.TODO(), plr, metav1.UpdateOptions{},
+				ctx, plr, metav1.UpdateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 			By("Checking the status of root policy")
@@ -258,7 +256,7 @@ var _ = Describe("Test policy status aggregation", func() {
 			}
 		}
 
-		BeforeAll(func() {
+		BeforeAll(func(ctx SpecContext) {
 			By("Creating " + case2PolicyYaml)
 			utils.Kubectl("apply",
 				"-f", case2PolicyYaml,
@@ -275,7 +273,7 @@ var _ = Describe("Test policy status aggregation", func() {
 			)
 			plr.Object["status"] = utils.GeneratePlrStatus("managed1", "managed2")
 			_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
-				context.TODO(), plr, metav1.UpdateOptions{},
+				ctx, plr, metav1.UpdateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 			plc = utils.GetWithTimeout(
@@ -299,7 +297,7 @@ var _ = Describe("Test policy status aggregation", func() {
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, metav1.ListOptions{}, 0, false, 10)
 		})
 
-		It("should be compliant when both managed clusters are compliant", func() {
+		It("should be compliant when both managed clusters are compliant", func(ctx SpecContext) {
 			By("Patching both replicated policy status to compliant")
 			replicatedPlcList := utils.ListWithTimeout(
 				clientHubDynamic, gvrPolicy, listOpts(), 2, true, defaultTimeoutSeconds)
@@ -308,7 +306,7 @@ var _ = Describe("Test policy status aggregation", func() {
 					ComplianceState: policiesv1.Compliant,
 				}
 				_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
-					context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
+					ctx, &replicatedPlc, metav1.UpdateOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
 			}
@@ -324,7 +322,7 @@ var _ = Describe("Test policy status aggregation", func() {
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
 		})
 
-		It("should be noncompliant when one managed cluster is noncompliant", func() {
+		It("should be noncompliant when one managed cluster is noncompliant", func(ctx SpecContext) {
 			By("Patching one replicated policy status to noncompliant")
 			replicatedPlcList := utils.ListWithTimeout(
 				clientHubDynamic, gvrPolicy, listOpts(), 2, true, defaultTimeoutSeconds)
@@ -337,7 +335,7 @@ var _ = Describe("Test policy status aggregation", func() {
 				ComplianceState: policiesv1.NonCompliant,
 			}
 			_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
-				context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
+				ctx, &replicatedPlc, metav1.UpdateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -352,7 +350,7 @@ var _ = Describe("Test policy status aggregation", func() {
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
 		})
 
-		It("should be noncompliant when one is pending, and one is noncompliant", func() {
+		It("should be noncompliant when one is pending, and one is noncompliant", func(ctx SpecContext) {
 			By("Patching one replicated policy to pending")
 			replicatedPlcList := utils.ListWithTimeout(
 				clientHubDynamic, gvrPolicy, listOpts(), 2, true, defaultTimeoutSeconds)
@@ -365,7 +363,7 @@ var _ = Describe("Test policy status aggregation", func() {
 				ComplianceState: policiesv1.Pending,
 			}
 			_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
-				context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
+				ctx, &replicatedPlc, metav1.UpdateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -380,7 +378,7 @@ var _ = Describe("Test policy status aggregation", func() {
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
 		})
 
-		It("should be pending when one is pending, and one is compliant", func() {
+		It("should be pending when one is pending, and one is compliant", func(ctx SpecContext) {
 			By("Patching one replicated policy to compliant")
 			replicatedPlcList := utils.ListWithTimeout(
 				clientHubDynamic, gvrPolicy, listOpts(), 2, true, defaultTimeoutSeconds)
@@ -393,7 +391,7 @@ var _ = Describe("Test policy status aggregation", func() {
 				ComplianceState: policiesv1.Compliant,
 			}
 			_, err := clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
-				context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
+				ctx, &replicatedPlc, metav1.UpdateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 

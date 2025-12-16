@@ -4,7 +4,6 @@
 package e2e
 
 import (
-	"context"
 	"errors"
 	"flag"
 	"os"
@@ -70,7 +69,7 @@ func init() {
 		"Location of the kubeconfig to use; defaults to current kubeconfig if set to an empty string")
 }
 
-var _ = BeforeSuite(func() {
+var _ = BeforeSuite(func(ctx SpecContext) {
 	By("Setup the controller-runtime logger")
 	ctrllog.SetLogger(GinkgoLogr)
 
@@ -125,15 +124,15 @@ var _ = BeforeSuite(func() {
 	By("Create Namespace if needed")
 	namespaces := clientHub.CoreV1().Namespaces()
 	if _, err := namespaces.Get(
-		context.TODO(), testNamespace, metav1.GetOptions{},
+		ctx, testNamespace, metav1.GetOptions{},
 	); err != nil && k8serrors.IsNotFound(err) {
-		Expect(namespaces.Create(context.TODO(), &corev1.Namespace{
+		Expect(namespaces.Create(ctx, &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: testNamespace,
 			},
 		}, metav1.CreateOptions{})).NotTo(BeNil())
 	}
-	Expect(namespaces.Get(context.TODO(), testNamespace, metav1.GetOptions{})).NotTo(BeNil())
+	Expect(namespaces.Get(ctx, testNamespace, metav1.GetOptions{})).NotTo(BeNil())
 })
 
 var _ = AfterSuite(func() {

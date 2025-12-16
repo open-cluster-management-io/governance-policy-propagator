@@ -5,7 +5,6 @@ package e2e
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"strings"
 
@@ -32,7 +31,7 @@ var _ = Describe("Test policy encryption key rotation", func() {
 	replicatedPolicyOneYaml := rsrcPath + "replicated-policy-one.yaml"
 	replicatedPolicyOneName := "policy-propagator-test.policy-one"
 
-	It("should create some sample policies", func() {
+	It("should create some sample policies", func(ctx SpecContext) {
 		By("Creating the root policies with placement rules and bindings")
 		utils.Kubectl("apply", "-f", policyOneYaml,
 			"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
@@ -54,7 +53,7 @@ var _ = Describe("Test policy encryption key rotation", func() {
 		)
 		plrOne.Object["status"] = utils.GeneratePlrStatus("managed1")
 		_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
-			context.TODO(), plrOne, metav1.UpdateOptions{},
+			ctx, plrOne, metav1.UpdateOptions{},
 		)
 		Expect(err).ToNot(HaveOccurred())
 		replicatedOne := utils.GetWithTimeout(
@@ -72,7 +71,7 @@ var _ = Describe("Test policy encryption key rotation", func() {
 		)
 		plrTwo.Object["status"] = utils.GeneratePlrStatus("managed1")
 		_, err = clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
-			context.TODO(), plrTwo, metav1.UpdateOptions{},
+			ctx, plrTwo, metav1.UpdateOptions{},
 		)
 		Expect(err).ToNot(HaveOccurred())
 		replicatedTwo := utils.GetWithTimeout(
@@ -97,7 +96,7 @@ var _ = Describe("Test policy encryption key rotation", func() {
 		}, defaultTimeoutSeconds, 1).Should(HaveKey(IVAnnotation))
 	})
 
-	It("should create a "+EncryptionKeySecret+" secret that needs a rotation", func() {
+	It("should create a "+EncryptionKeySecret+" secret that needs a rotation", func(ctx SpecContext) {
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:        EncryptionKeySecret,
@@ -106,7 +105,7 @@ var _ = Describe("Test policy encryption key rotation", func() {
 			},
 			Data: map[string][]byte{"key": key, "previousKey": previousKey},
 		}
-		_, err := clientHub.CoreV1().Secrets("managed1").Create(context.TODO(), secret, metav1.CreateOptions{})
+		_, err := clientHub.CoreV1().Secrets("managed1").Create(ctx, secret, metav1.CreateOptions{})
 		Expect(err).ShouldNot(HaveOccurred())
 	})
 
@@ -140,7 +139,7 @@ var _ = Describe("Test policy encryption key rotation", func() {
 		Expect(currentPrevKey).Should(Equal(keyB64))
 	})
 
-	It("should have triggered policies to be reprocessed", func() {
+	It("should have triggered policies to be reprocessed", func(ctx SpecContext) {
 		Eventually(func() interface{} {
 			policy := utils.GetWithTimeout(
 				clientHubDynamic,
@@ -155,21 +154,21 @@ var _ = Describe("Test policy encryption key rotation", func() {
 		}, defaultTimeoutSeconds, 1).Should(BeTrue())
 
 		policy, err := clientHubDynamic.Resource(gvrPolicy).Namespace(testNamespace).Get(
-			context.TODO(), "policy-two", metav1.GetOptions{},
+			ctx, "policy-two", metav1.GetOptions{},
 		)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(policy.GetAnnotations()[TriggerUpdateAnnotation]).Should(Equal(""))
 	})
 
-	It("clean up", func() {
+	It("clean up", func(ctx SpecContext) {
 		err := clientHub.CoreV1().Secrets("managed1").Delete(
-			context.TODO(), EncryptionKeySecret, metav1.DeleteOptions{},
+			ctx, EncryptionKeySecret, metav1.DeleteOptions{},
 		)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		for _, policyName := range []string{"policy-one", "policy-two"} {
 			err = clientHubDynamic.Resource(gvrPolicy).Namespace(testNamespace).Delete(
-				context.TODO(), policyName, metav1.DeleteOptions{},
+				ctx, policyName, metav1.DeleteOptions{},
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 		}

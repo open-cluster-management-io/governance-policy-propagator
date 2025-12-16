@@ -4,8 +4,6 @@
 package e2e
 
 import (
-	"context"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,7 +20,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 		case3PolicyYaml string = "../resources/case3_mutation_recovery/case3-test-policy.yaml"
 	)
 
-	BeforeEach(func() {
+	BeforeEach(func(ctx SpecContext) {
 		By("Creating " + case3PolicyYaml)
 		utils.Kubectl("apply",
 			"-f", case3PolicyYaml,
@@ -38,7 +36,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 		)
 		plr.Object["status"] = utils.GeneratePlrStatus("managed1", "managed2")
 		_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
-			context.TODO(), plr, metav1.UpdateOptions{},
+			ctx, plr, metav1.UpdateOptions{},
 		)
 		Expect(err).ToNot(HaveOccurred())
 		opt := metav1.ListOptions{LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case3PolicyName}
@@ -49,7 +47,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 				ComplianceState: policiesv1.Compliant,
 			}
 			_, err = clientHubDynamic.Resource(gvrPolicy).Namespace(replicatedPlc.GetNamespace()).UpdateStatus(
-				context.TODO(), &replicatedPlc, metav1.UpdateOptions{},
+				ctx, &replicatedPlc, metav1.UpdateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 		}
@@ -80,7 +78,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 		opt := metav1.ListOptions{}
 		utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 3, true, defaultTimeoutSeconds)
 	})
-	It("Should recover replicated policy when modified field disabled", func() {
+	It("Should recover replicated policy when modified field disabled", func(ctx SpecContext) {
 		By("Modifiying policy in cluster ns managed2")
 		plc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds,
@@ -88,7 +86,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 		Expect(plc).ToNot(BeNil())
 		plc.Object["spec"].(map[string]interface{})["disabled"] = true
 		plc, err := clientHubDynamic.Resource(gvrPolicy).Namespace("managed2").Update(
-			context.TODO(), plc, metav1.UpdateOptions{},
+			ctx, plc, metav1.UpdateOptions{},
 		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(plc.Object["spec"].(map[string]interface{})["disabled"]).To(BeTrue())
@@ -101,7 +99,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 			return plc.Object["spec"].(map[string]interface{})["disabled"]
 		}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(false))
 	})
-	It("Should recover replicated policy when modified field remediationAction", func() {
+	It("Should recover replicated policy when modified field remediationAction", func(ctx SpecContext) {
 		By("Modifiying policy in cluster ns managed2")
 		plc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds,
@@ -109,7 +107,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 		Expect(plc).ToNot(BeNil())
 		plc.Object["spec"].(map[string]interface{})["remediationAction"] = "enforce"
 		plc, err := clientHubDynamic.Resource(gvrPolicy).Namespace("managed2").Update(
-			context.TODO(), plc, metav1.UpdateOptions{},
+			ctx, plc, metav1.UpdateOptions{},
 		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(plc.Object["spec"].(map[string]interface{})["remediationAction"]).To(Equal("enforce"))
@@ -122,7 +120,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 			return plc.Object["spec"].(map[string]interface{})["remediationAction"]
 		}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual("inform"))
 	})
-	It("Should recover replicated policy when modified field policy-templates", func() {
+	It("Should recover replicated policy when modified field policy-templates", func(ctx SpecContext) {
 		By("Modifiying policy in cluster ns managed2")
 		plc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds,
@@ -130,7 +128,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 		Expect(plc).ToNot(BeNil())
 		plc.Object["spec"].(map[string]interface{})["policy-templates"] = []*policiesv1.PolicyTemplate{}
 		plc, err := clientHubDynamic.Resource(gvrPolicy).Namespace("managed2").Update(
-			context.TODO(), plc, metav1.UpdateOptions{},
+			ctx, plc, metav1.UpdateOptions{},
 		)
 		Expect(err).ToNot(HaveOccurred())
 		By("Getting policy in cluster ns managed2 again")
@@ -145,7 +143,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 			return plc.Object["spec"]
 		}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(rootPlc.Object["spec"]))
 	})
-	It("Should remove labels added to replicated policies", func() {
+	It("Should remove labels added to replicated policies", func(ctx SpecContext) {
 		By("Adding a label to the replicated policy in ns managed2")
 		plc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds,
@@ -159,7 +157,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 		err := unstructured.SetNestedStringMap(plc.Object, labels, "metadata", "labels")
 		Expect(err).ToNot(HaveOccurred())
 		_, err = clientHubDynamic.Resource(gvrPolicy).Namespace("managed2").Update(
-			context.TODO(), plc, metav1.UpdateOptions{},
+			ctx, plc, metav1.UpdateOptions{},
 		)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -172,7 +170,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 			return plc.GetLabels()
 		}, defaultTimeoutSeconds, 1).ShouldNot(HaveKey("test.io/grc-prop-case3-label"))
 	})
-	It("Should remove annotations added to replicated policies", func() {
+	It("Should remove annotations added to replicated policies", func(ctx SpecContext) {
 		By("Adding an annotation to the replicated policy in ns managed2")
 		plc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds,
@@ -186,7 +184,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 		err := unstructured.SetNestedStringMap(plc.Object, annos, "metadata", "annotations")
 		Expect(err).ToNot(HaveOccurred())
 		_, err = clientHubDynamic.Resource(gvrPolicy).Namespace("managed2").Update(
-			context.TODO(), plc, metav1.UpdateOptions{},
+			ctx, plc, metav1.UpdateOptions{},
 		)
 		Expect(err).ToNot(HaveOccurred())
 

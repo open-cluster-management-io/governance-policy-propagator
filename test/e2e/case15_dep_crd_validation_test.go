@@ -4,8 +4,6 @@
 package e2e
 
 import (
-	"context"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -59,10 +57,10 @@ var _ = Describe("Test CRD validation", func() {
 		return clientHubDynamic.Resource(gvrPolicy).Namespace("default")
 	}
 
-	AfterEach(func() {
+	AfterEach(func(ctx SpecContext) {
 		By("Removing the policy")
 		// ignore error, because invalid policies will not have been created
-		_ = policyClient().Delete(context.TODO(), "basic", v1.DeleteOptions{})
+		_ = policyClient().Delete(ctx, "basic", v1.DeleteOptions{})
 	})
 
 	Describe("Test dependency namespace validation", func() {
@@ -79,14 +77,14 @@ var _ = Describe("Test CRD validation", func() {
 
 		for kind, tc := range tests {
 
-			It("checks creating a policy with a "+kind+" dependency with a namespace", func() {
+			It("checks creating a policy with a "+kind+" dependency with a namespace", func(ctx SpecContext) {
 				pol := addDependency(basicPolicy(), "foo", "default", kind)
-				_, err := policyClient().Create(context.TODO(), pol, v1.CreateOptions{})
+				_, err := policyClient().Create(ctx, pol, v1.CreateOptions{})
 				Expect(err == nil).To(Equal(tc.validWithNamespace))
 			})
-			It("checks creating a policy with a "+kind+" dependency without a namespace", func() {
+			It("checks creating a policy with a "+kind+" dependency without a namespace", func(ctx SpecContext) {
 				pol := addDependency(basicPolicy(), "foo", "", kind)
-				_, err := policyClient().Create(context.TODO(), pol, v1.CreateOptions{})
+				_, err := policyClient().Create(ctx, pol, v1.CreateOptions{})
 				Expect(err == nil).To(Equal(tc.validWithoutNamespace))
 			})
 		}
@@ -106,14 +104,14 @@ var _ = Describe("Test CRD validation", func() {
 
 		for kind, tc := range tests {
 
-			It("checks creating a policy with a "+kind+" extraDependency with a namespace", func() {
+			It("checks creating a policy with a "+kind+" extraDependency with a namespace", func(ctx SpecContext) {
 				pol := addExtraDependency(basicPolicy(), "foo", "default", kind)
-				_, err := policyClient().Create(context.TODO(), pol, v1.CreateOptions{})
+				_, err := policyClient().Create(ctx, pol, v1.CreateOptions{})
 				Expect(err == nil).To(Equal(tc.validWithNamespace))
 			})
-			It("checks creating a policy with a "+kind+" extraDependency without a namespace", func() {
+			It("checks creating a policy with a "+kind+" extraDependency without a namespace", func(ctx SpecContext) {
 				pol := addExtraDependency(basicPolicy(), "foo", "", kind)
-				_, err := policyClient().Create(context.TODO(), pol, v1.CreateOptions{})
+				_, err := policyClient().Create(ctx, pol, v1.CreateOptions{})
 				Expect(err == nil).To(Equal(tc.validWithoutNamespace))
 			})
 		}
