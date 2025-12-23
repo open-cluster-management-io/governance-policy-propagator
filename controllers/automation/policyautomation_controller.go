@@ -177,7 +177,7 @@ func (r *PolicyAutomationReconciler) getViolationContext(
 	replicatedPlcList := &policyv1.PolicyList{}
 
 	err = r.List(
-		context.TODO(),
+		ctx,
 		replicatedPlcList,
 		client.MatchingLabels(common.LabelsForRootPolicy(policy)),
 	)
@@ -303,7 +303,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 	switch {
 	case policyAutomation.Annotations["policy.open-cluster-management.io/rerun"] == "true":
 		// Rerun logic
-		AjExist, err := MatchPAResouceV(policyAutomation, r.DynamicClient, policyAutomation.GetResourceVersion())
+		AjExist, err := MatchPAResouceV(ctx, log, policyAutomation, r.DynamicClient, policyAutomation.GetResourceVersion())
 		if err != nil {
 			log.Error(err, "Failed to compare Ansible job's resourceVersion")
 
@@ -321,7 +321,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 
 		violationContext, _ := r.getViolationContext(ctx, policy, targetList, policyAutomation)
 
-		err = CreateAnsibleJob(policyAutomation, r.DynamicClient, "manual", violationContext)
+		err = CreateAnsibleJob(ctx, log, policyAutomation, r.DynamicClient, "manual", violationContext)
 		if err != nil {
 			log.Error(err, "Failed to create the Ansible job", "mode", "manual")
 
@@ -366,7 +366,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 				log.Info("Creating An Ansible job", "targetList", targetList)
 				violationContext, _ := r.getViolationContext(ctx, policy, targetList, policyAutomation)
 
-				err = CreateAnsibleJob(policyAutomation, r.DynamicClient, "scan", violationContext)
+				err = CreateAnsibleJob(ctx, log, policyAutomation, r.DynamicClient, "scan", violationContext)
 				if err != nil {
 					return reconcile.Result{RequeueAfter: requeueAfter}, err
 				}
@@ -387,7 +387,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 			if len(targetList) > 0 {
 				log.Info("Creating an Ansible job", "targetList", targetList)
 
-				AjExist, err := MatchPAGeneration(policyAutomation, r.DynamicClient, policyAutomation.GetGeneration())
+				AjExist, err := MatchPAGeneration(ctx, log, policyAutomation, r.DynamicClient, policyAutomation.GetGeneration())
 				if err != nil {
 					log.Error(err, "Failed to get Ansible job's generation")
 
@@ -400,7 +400,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 
 				violationContext, _ := r.getViolationContext(ctx, policy, targetList, policyAutomation)
 
-				err = CreateAnsibleJob(policyAutomation, r.DynamicClient, string(policyv1beta1.Once), violationContext)
+				err = CreateAnsibleJob(ctx, log, policyAutomation, r.DynamicClient, string(policyv1beta1.Once), violationContext)
 				if err != nil {
 					log.Error(err, "Failed to create the Ansible job")
 
@@ -509,7 +509,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 				log.Info("Creating An Ansible job", "trimmedTargetList", trimmedTargetList)
 				violationContext, _ := r.getViolationContext(ctx, policy, trimmedTargetList, policyAutomation)
 
-				err = CreateAnsibleJob(policyAutomation, r.DynamicClient,
+				err = CreateAnsibleJob(ctx, log, policyAutomation, r.DynamicClient,
 					string(policyv1beta1.EveryEvent), violationContext)
 				if err != nil {
 					log.Error(err, "Failed to create the Ansible job")
