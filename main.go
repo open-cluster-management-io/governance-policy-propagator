@@ -4,7 +4,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -455,7 +454,7 @@ func main() {
 	}
 
 	if err := cache.IndexField(
-		context.TODO(), &policyv1.PlacementBinding{}, "placementRef.name", indexFunc,
+		controllerCtx, &policyv1.PlacementBinding{}, "placementRef.name", indexFunc,
 	); err != nil {
 		panic(err)
 	}
