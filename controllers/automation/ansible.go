@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -61,7 +62,7 @@ func MatchPAGeneration(ctx context.Context, log logr.Logger, policyAutomation *p
 
 // Check any ansiblejob is made by current resourceVersion number
 // Returning "true" means the policy automation already created ansiblejob with this resourceVersion
-func MatchPAResouceV(ctx context.Context, log logr.Logger, policyAutomation *policyv1beta1.PolicyAutomation,
+func MatchPAResourceV(ctx context.Context, log logr.Logger, policyAutomation *policyv1beta1.PolicyAutomation,
 	dynamicClient dynamic.Interface, resourceVersion string,
 ) (bool, error) {
 	ansiblejobList, err := dynamicClient.Resource(ansibleJobRes).Namespace(policyAutomation.GetNamespace()).List(
@@ -86,7 +87,7 @@ func MatchPAResouceV(ctx context.Context, log logr.Logger, policyAutomation *pol
 }
 
 // CreateAnsibleJob creates ansiblejob with given PolicyAutomation
-func CreateAnsibleJob(ctx context.Context, log logr.Logger, policyAutomation *policyv1beta1.PolicyAutomation,
+func CreateAnsibleJob(ctx context.Context, policyAutomation *policyv1beta1.PolicyAutomation,
 	dynamicClient dynamic.Interface, mode string, violationContext policyv1beta1.ViolationContext,
 ) error {
 	ansibleJob := &unstructured.Unstructured{

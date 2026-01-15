@@ -5,6 +5,7 @@ package policystatus
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -38,30 +39,41 @@ func policyStatusPredicate() predicate.Funcs {
 }
 
 // mapBindingToPolicies maps a placementBinding to all the Policies in its policies list.
-func mapBindingToPolicies(c client.Client) handler.MapFunc {
+func mapBindingToPolicies(log logr.Logger, c client.Client) handler.MapFunc {
 	return func(ctx context.Context, object client.Object) []reconcile.Request {
-		log := log.WithValues("placementBinding", object.GetName(), "namespace", object.GetNamespace())
-		log.V(2).Info("Reconcile Request for placementBinding")
+		log = log.WithValues(
+			"placementBinding", object.GetName(),
+			"namespace", object.GetNamespace())
+
+		log.V(2).Info("Processing reconcile request for placement binding")
 
 		//nolint:forcetypeassert
 		pb := object.(*policiesv1.PlacementBinding)
 
-		return common.GetPoliciesInPlacementBinding(ctx, c, pb)
+		requests := common.GetPoliciesInPlacementBinding(ctx, c, pb)
+
+		log.V(2).Info("Generated policy reconcile requests from placement binding",
+			"requestCount", len(requests))
+
+		return requests
 	}
 }
 
 // mapRuleToPolicies maps a PlacementRule to all the Policies in its policies list.
-func mapRuleToPolicies(c client.Client) handler.MapFunc {
+func mapRuleToPolicies(log logr.Logger, c client.Client) handler.MapFunc {
 	return func(ctx context.Context, object client.Object) []reconcile.Request {
-		log := log.WithValues("PlacementRule", object.GetName(), "namespace", object.GetNamespace())
-		log.V(2).Info("Reconcile Request for PlacementRule")
+		log = log.WithValues(
+			"placementRule", object.GetName(),
+			"namespace", object.GetNamespace())
+
+		log.V(2).Info("Processing reconcile request for placement rule")
 
 		//nolint:forcetypeassert
 		pr := object.(*appsv1.PlacementRule)
 
 		result, err := common.GetRootPolicyRequests(ctx, c, pr.GetNamespace(), pr.GetName(), common.PlacementRule)
 		if err != nil {
-			log.Error(err, "Getting root policy results  has error in mapRuleToPolicies")
+			log.Error(err, "Failed to get root policy requests for placement rule")
 
 			return nil
 		}
@@ -71,17 +83,21 @@ func mapRuleToPolicies(c client.Client) handler.MapFunc {
 }
 
 // mapDecisionToPolicies maps a PlacementDecision to all the Policies in its policies list.
-func mapDecisionToPolicies(c client.Client) handler.MapFunc {
+func mapDecisionToPolicies(log logr.Logger, c client.Client) handler.MapFunc {
 	return func(ctx context.Context, object client.Object) []reconcile.Request {
-		log := log.WithValues("placementDecision", object.GetName(), "namespace", object.GetNamespace())
-		log.V(2).Info("Reconcile Request for placementDecision")
+		log = log.WithValues(
+			"placementDecision", object.GetName(),
+			"namespace", object.GetNamespace())
+
+		log.V(2).Info("Processing reconcile request for placement decision")
 
 		pd := object.(*clusterv1beta1.PlacementDecision)
 		placementName := pd.GetLabels()["cluster.open-cluster-management.io/placement"]
 
 		result, err := common.GetRootPolicyRequests(ctx, c, pd.GetNamespace(), placementName, common.Placement)
 		if err != nil {
-			log.Error(err, "Getting root policy results  has error in mapDecisionToPolicies")
+			log.Error(err, "Failed to get root policy requests for placement decision",
+				"placementName", placementName)
 
 			return nil
 		}

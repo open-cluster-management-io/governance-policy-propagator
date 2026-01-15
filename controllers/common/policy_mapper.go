@@ -6,8 +6,8 @@ package common
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -15,9 +15,9 @@ import (
 
 // PolicyMapper looks at object and returns a slice of reconcile.Request to reconcile
 // owners of object from label: policy.open-cluster-management.io/root-policy
-func MapToRootPolicy(c client.Client) handler.MapFunc {
+func MapToRootPolicy(log logr.Logger, c client.Client) handler.MapFunc {
 	return func(ctx context.Context, object client.Object) []reconcile.Request {
-		log := ctrl.Log.WithValues("name", object.GetName(), "namespace", object.GetNamespace())
+		log = log.WithValues("name", object.GetName(), "namespace", object.GetNamespace())
 
 		log.V(2).Info("Reconcile request for a policy")
 

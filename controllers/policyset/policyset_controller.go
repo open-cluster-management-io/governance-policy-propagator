@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -28,8 +29,6 @@ import (
 
 const ControllerName string = "policy-set"
 
-var log = ctrl.Log.WithName(ControllerName)
-
 // PolicySetReconciler reconciles a PolicySet object
 type PolicySetReconciler struct {
 	client.Client
@@ -45,7 +44,7 @@ var _ reconcile.Reconciler = &PolicySetReconciler{}
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policysets/finalizers,verbs=update
 
 func (r *PolicySetReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
-	log := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	log := ctrl.LoggerFrom(ctx)
 	log.Info("Reconciling policy sets...")
 	// Fetch the PolicySet instance
 	instance := &policyv1beta1.PolicySet{}
@@ -69,7 +68,7 @@ func (r *PolicySetReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 	log.V(1).Info("Policy set was found, processing it")
 
 	originalInstance := instance.DeepCopy()
-	setNeedsUpdate := r.processPolicySet(ctx, instance)
+	setNeedsUpdate := r.processPolicySet(ctx, log, instance)
 
 	if setNeedsUpdate {
 		log.Info("Status update needed")
@@ -96,7 +95,9 @@ func (r *PolicySetReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 }
 
 // processPolicySet compares the status of a policyset to its desired state and determines whether an update is needed
-func (r *PolicySetReconciler) processPolicySet(ctx context.Context, plcSet *policyv1beta1.PolicySet) bool {
+func (r *PolicySetReconciler) processPolicySet(
+	ctx context.Context, log logr.Logger, plcSet *policyv1beta1.PolicySet,
+) bool {
 	log.V(1).Info("Processing policy sets")
 
 	needsUpdate := false
@@ -310,6 +311,8 @@ func showCompliance(compliancesFound []string, unknown []string, pending []strin
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PolicySetReconciler) SetupWithManager(mgr ctrl.Manager, plrsEnabled bool) error {
+	log := ctrl.Log.WithName(ControllerName)
+
 	ctrlBldr := ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerName).
 		For(
@@ -317,19 +320,22 @@ func (r *PolicySetReconciler) SetupWithManager(mgr ctrl.Manager, plrsEnabled boo
 			builder.WithPredicates(policySetPredicateFuncs)).
 		Watches(
 			&policyv1.Policy{},
-			handler.EnqueueRequestsFromMapFunc(policyMapper(mgr.GetClient())),
+			handler.EnqueueRequestsFromMapFunc(policyMapper(log, mgr.GetClient())),
 			builder.WithPredicates(policyPredicateFuncs)).
 		Watches(
 			&policyv1.PlacementBinding{},
-			handler.EnqueueRequestsFromMapFunc(placementBindingMapper(mgr.GetClient())),
+			handler.EnqueueRequestsFromMapFunc(placementBindingMapper(log, mgr.GetClient())),
 			builder.WithPredicates(pbPredicateFuncs)).
 		Watches(
 			&clusterv1beta1.PlacementDecision{},
-			handler.EnqueueRequestsFromMapFunc(placementDecisionMapper(mgr.GetClient())))
+			handler.EnqueueRequestsFromMapFunc(placementDecisionMapper(log, mgr.GetClient()))).
+		WithLogConstructor(func(req *reconcile.Request) logr.Logger {
+			return common.LogConstructor(ControllerName, "PolicySet", req)
+		})
 
 	if plrsEnabled {
 		ctrlBldr = ctrlBldr.Watches(&appsv1.PlacementRule{},
-			handler.EnqueueRequestsFromMapFunc(placementRuleMapper(mgr.GetClient())))
+			handler.EnqueueRequestsFromMapFunc(placementRuleMapper(log, mgr.GetClient())))
 	}
 
 	return ctrlBldr.Complete(r)

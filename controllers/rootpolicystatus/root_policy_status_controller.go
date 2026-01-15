@@ -6,9 +6,9 @@ import (
 	"context"
 	"sync"
 
+	"github.com/go-logr/logr"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -24,8 +24,6 @@ import (
 
 const ControllerName string = "root-policy-status"
 
-var log = ctrl.Log.WithName(ControllerName)
-
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies,verbs=get;list;watch
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policies/status,verbs=get;update;patch
 
@@ -35,8 +33,9 @@ func (r *RootPolicyStatusReconciler) SetupWithManager(
 	maxConcurrentReconciles uint16,
 	plrsEnabled bool,
 ) error {
+	log := ctrl.Log.WithName(ControllerName)
+
 	ctrlBldr := ctrl.NewControllerManagedBy(mgr).
-		WithOptions(controller.Options{MaxConcurrentReconciles: int(maxConcurrentReconciles)}).
 		Named(ControllerName).
 		For(
 			&policiesv1.Policy{},
@@ -44,24 +43,30 @@ func (r *RootPolicyStatusReconciler) SetupWithManager(
 		).
 		Watches(
 			&policiesv1.PlacementBinding{},
-			handler.EnqueueRequestsFromMapFunc(mapBindingToPolicies(mgr.GetClient())),
+			handler.EnqueueRequestsFromMapFunc(mapBindingToPolicies(log, mgr.GetClient())),
 		).
 		Watches(
 			&clusterv1beta1.PlacementDecision{},
-			handler.EnqueueRequestsFromMapFunc(mapDecisionToPolicies(mgr.GetClient())),
+			handler.EnqueueRequestsFromMapFunc(mapDecisionToPolicies(log, mgr.GetClient())),
 		).
 		// This is a workaround - the controller-runtime requires a "For", but does not allow it to
 		// modify the eventhandler. Currently we need to enqueue requests for Policies in a very
 		// particular way, so we will define that in a separate "Watches"
 		Watches(
 			&policiesv1.Policy{},
-			handler.EnqueueRequestsFromMapFunc(common.MapToRootPolicy(mgr.GetClient())),
+			handler.EnqueueRequestsFromMapFunc(common.MapToRootPolicy(log, mgr.GetClient())),
 			builder.WithPredicates(policyStatusPredicate()),
-		)
+		).
+		WithOptions(controller.Options{MaxConcurrentReconciles: int(maxConcurrentReconciles)}).
+		WithLogConstructor(func(req *reconcile.Request) logr.Logger {
+			log = common.LogConstructor(ControllerName, "Policy", req)
+
+			return log
+		})
 
 	if plrsEnabled {
 		ctrlBldr = ctrlBldr.Watches(&appsv1.PlacementRule{},
-			handler.EnqueueRequestsFromMapFunc(mapRuleToPolicies(mgr.GetClient())))
+			handler.EnqueueRequestsFromMapFunc(mapRuleToPolicies(log, mgr.GetClient())))
 	}
 
 	return ctrlBldr.Complete(r)
@@ -83,7 +88,7 @@ type RootPolicyStatusReconciler struct {
 // single replicated policy status per reconcile to be able to "batch" status update requests when there are bursts of
 // replicated policy status updates. This lowers resource utilization on the controller and the Kubernetes API server.
 func (r *RootPolicyStatusReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
-	log := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	log := ctrl.LoggerFrom(ctx)
 	log.V(1).Info("Reconciling the root policy status")
 
 	log.V(3).Info("Acquiring the lock for the root policy")
@@ -93,9 +98,11 @@ func (r *RootPolicyStatusReconciler) Reconcile(ctx context.Context, request ctrl
 	lock.(*sync.Mutex).Lock()
 	defer lock.(*sync.Mutex).Unlock()
 
+	log.V(2).Info("Retrieving root policy")
+
 	rootPolicy := &policiesv1.Policy{}
 
-	err := r.Get(ctx, types.NamespacedName{Namespace: request.Namespace, Name: request.Name}, rootPolicy)
+	err := r.Get(ctx, request.NamespacedName, rootPolicy)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			log.V(2).Info("The root policy has been deleted. Doing nothing.")
@@ -108,15 +115,26 @@ func (r *RootPolicyStatusReconciler) Reconcile(ctx context.Context, request ctrl
 		return reconcile.Result{}, err
 	}
 
+	log.V(2).Info("Successfully retrieved root policy",
+		"resourceVersion", rootPolicy.GetResourceVersion())
+
 	// Replicated policies don't need to update status here
 	if _, ok := rootPolicy.Labels["policy.open-cluster-management.io/root-policy"]; ok {
+		log.V(2).Info("Policy is a replicated policy, skipping status update")
+
 		return reconcile.Result{}, nil
 	}
 
+	log.V(1).Info("Processing root policy status update")
+
 	_, err = common.RootStatusUpdate(ctx, r.Client, rootPolicy)
 	if err != nil {
+		log.Error(err, "Failed to update root policy status")
+
 		return reconcile.Result{}, err
 	}
+
+	log.V(1).Info("Successfully updated root policy status")
 
 	return reconcile.Result{}, nil
 }
