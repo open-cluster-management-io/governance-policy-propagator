@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-logr/logr"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -396,4 +397,14 @@ func GetRootPolicyRequests(ctx context.Context, c client.Client,
 	}
 
 	return rootPolicyResults, nil
+}
+
+func LogConstructor(controllerName string, kind string, req *reconcile.Request) logr.Logger {
+	log := ctrl.Log.WithName(controllerName)
+
+	if req != nil {
+		log = log.WithValues("kind", kind, "namespace", req.Namespace, "name", req.Name)
+	}
+
+	return log
 }

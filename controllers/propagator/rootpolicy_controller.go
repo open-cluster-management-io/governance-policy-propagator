@@ -20,6 +20,7 @@ import (
 
 const ControllerName string = "policy-propagator"
 
+// Package-level logger for utility functions and event handlers that don't receive a context logger
 var log = ctrl.Log.WithName(ControllerName)
 
 type RootPolicyReconciler struct {
@@ -30,7 +31,7 @@ type RootPolicyReconciler struct {
 // that the desired policies are on the correct clusters. It also populates the status of the root
 // policy with placement information.
 func (r *RootPolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
-	log := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	log := ctrl.LoggerFrom(ctx)
 
 	log.V(3).Info("Acquiring the lock for the root policy")
 
@@ -73,7 +74,7 @@ func (r *RootPolicyReconciler) Reconcile(ctx context.Context, request ctrl.Reque
 	}
 
 	if !inClusterNs {
-		err := r.handleRootPolicy(ctx, instance)
+		err := r.handleRootPolicy(ctx, log, instance)
 		if err != nil {
 			log.Error(err, "Failure during root policy handling")
 
@@ -84,8 +85,6 @@ func (r *RootPolicyReconciler) Reconcile(ctx context.Context, request ctrl.Reque
 
 		return reconcile.Result{}, err
 	}
-
-	log = log.WithValues("name", instance.GetName(), "namespace", instance.GetNamespace())
 
 	log.Info("The policy was found in the cluster namespace but doesn't belong to any root policy, deleting it")
 

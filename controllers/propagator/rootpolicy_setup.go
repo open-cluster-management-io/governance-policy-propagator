@@ -4,12 +4,14 @@
 package propagator
 
 import (
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/equality"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	policiesv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
@@ -30,7 +32,6 @@ import (
 // SetupWithManager sets up the controller with the Manager.
 func (r *RootPolicyReconciler) SetupWithManager(mgr ctrl.Manager, maxConcurrentReconciles uint16) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		WithOptions(controller.Options{MaxConcurrentReconciles: int(maxConcurrentReconciles)}).
 		Named("root-policy-spec").
 		For(
 			&policiesv1.Policy{},
@@ -38,6 +39,12 @@ func (r *RootPolicyReconciler) SetupWithManager(mgr ctrl.Manager, maxConcurrentR
 		Watches(
 			&policiesv1beta1.PolicySet{},
 			&common.EnqueueRequestsFromPolicySet{}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: int(maxConcurrentReconciles)}).
+		WithLogConstructor(func(req *reconcile.Request) logr.Logger {
+			log = common.LogConstructor(ControllerName, "Policy", req)
+
+			return log
+		}).
 		Complete(r)
 }
 

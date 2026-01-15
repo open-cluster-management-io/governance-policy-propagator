@@ -6,6 +6,7 @@ package controllers
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -14,13 +15,13 @@ import (
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 )
 
-func placementBindingMapper(_ client.Client) handler.MapFunc {
+func placementBindingMapper(log logr.Logger, _ client.Client) handler.MapFunc {
 	return func(_ context.Context, obj client.Object) []reconcile.Request {
 		//nolint:forcetypeassert
 		object := obj.(*policiesv1.PlacementBinding)
 		var result []reconcile.Request
 
-		log := log.WithValues("placementBindingName", object.GetName(), "namespace", object.GetNamespace())
+		log = log.WithValues("placementBindingName", object.GetName(), "namespace", object.GetNamespace())
 
 		log.V(2).Info("Reconcile request for a PlacementBinding")
 

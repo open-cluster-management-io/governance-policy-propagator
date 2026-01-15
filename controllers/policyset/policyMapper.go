@@ -6,6 +6,7 @@ package controllers
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -14,9 +15,9 @@ import (
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 )
 
-func policyMapper(_ client.Client) handler.MapFunc {
+func policyMapper(log logr.Logger, _ client.Client) handler.MapFunc {
 	return func(_ context.Context, object client.Object) []reconcile.Request {
-		log := log.WithValues("policyName", object.GetName(), "namespace", object.GetNamespace())
+		log = log.WithValues("policyName", object.GetName(), "namespace", object.GetNamespace())
 		log.V(2).Info("Reconcile Request for Policy")
 
 		var result []reconcile.Request

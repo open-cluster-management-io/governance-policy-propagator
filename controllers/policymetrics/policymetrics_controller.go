@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -21,16 +22,17 @@ import (
 
 const ControllerName string = "policy-metrics"
 
-var log = ctrl.Log.WithName(ControllerName)
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *MetricReconciler) SetupWithManager(mgr ctrl.Manager, maxConcurrentReconciles uint16) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		Named(ControllerName).
+		For(&policiesv1.Policy{}).
 		// The work queue prevents the same item being reconciled concurrently:
 		// https://github.com/kubernetes-sigs/controller-runtime/issues/1416#issuecomment-899833144
 		WithOptions(controller.Options{MaxConcurrentReconciles: int(maxConcurrentReconciles)}).
-		Named(ControllerName).
-		For(&policiesv1.Policy{}).
+		WithLogConstructor(func(req *reconcile.Request) logr.Logger {
+			return common.LogConstructor(ControllerName, "Policy", req)
+		}).
 		Complete(r)
 }
 
@@ -50,7 +52,7 @@ type MetricReconciler struct {
 // Reconcile reads the state of the cluster for the Policy object and ensures that the exported
 // policy metrics are accurate, updating them as necessary.
 func (r *MetricReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
-	log := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	log := ctrl.LoggerFrom(ctx)
 	log.Info("Reconciling metric for the policy")
 
 	// Need to know if the policy is a root policy to create the correct prometheus labels

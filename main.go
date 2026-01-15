@@ -354,7 +354,11 @@ func main() {
 		},
 	)
 	if err != nil {
-		log.Error(err, "Unable to setup the template resolver the controller", "controller", "replicated-policy")
+		log.Error(
+			err,
+			"Unable to setup the template resolver the controller",
+			"controller", propagatorctrl.ReplicatedPolicyControllerName,
+		)
 		os.Exit(1)
 	}
 
@@ -489,7 +493,7 @@ func main() {
 	if err = replicatedPolicyCtrler.SetupWithManager(mgr, replPolicyMaxConcurrency,
 		dynamicWatcherSource, replicatedUpdatesSource, templatesSource, saTemplatesSource, !disablePlacementRule,
 	); err != nil {
-		log.Error(err, "Unable to create the controller", "controller", "replicated-policy")
+		log.Error(err, "Unable to create the controller", "controller", propagatorctrl.ReplicatedPolicyControllerName)
 		os.Exit(1)
 	}
 

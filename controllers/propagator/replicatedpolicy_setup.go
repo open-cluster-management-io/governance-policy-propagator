@@ -3,6 +3,7 @@ package propagator
 import (
 	"sync"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/equality"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
@@ -11,11 +12,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
+
+const ReplicatedPolicyControllerName = "replicated-policy"
 
 func (r *ReplicatedPolicyReconciler) SetupWithManager(
 	mgr ctrl.Manager,
@@ -27,8 +31,7 @@ func (r *ReplicatedPolicyReconciler) SetupWithManager(
 	plrsEnabled bool,
 ) error {
 	ctrlBldr := ctrl.NewControllerManagedBy(mgr).
-		WithOptions(controller.Options{MaxConcurrentReconciles: int(maxConcurrentReconciles)}).
-		Named("replicated-policy").
+		Named(ReplicatedPolicyControllerName).
 		For(
 			&policiesv1.Policy{},
 			builder.WithPredicates(replicatedPolicyPredicates(r.ResourceVersions))).
@@ -43,7 +46,13 @@ func (r *ReplicatedPolicyReconciler) SetupWithManager(
 		Watches(
 			&policiesv1.PlacementBinding{},
 			HandlerForBinding(mgr.GetClient()),
-		)
+		).
+		WithOptions(controller.Options{MaxConcurrentReconciles: int(maxConcurrentReconciles)}).
+		WithLogConstructor(func(req *reconcile.Request) logr.Logger {
+			log = common.LogConstructor(ReplicatedPolicyControllerName, "Policy", req)
+
+			return log
+		})
 
 	if plrsEnabled {
 		ctrlBldr = ctrlBldr.Watches(&appsv1.PlacementRule{},

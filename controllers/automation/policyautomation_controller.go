@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -30,8 +31,6 @@ const ControllerName string = "policy-automation"
 
 var dnsGVR = schema.GroupVersionResource{Group: "config.openshift.io", Version: "v1", Resource: "dnses"}
 
-var log = ctrl.Log.WithName(ControllerName)
-
 //+kubebuilder:rbac:groups=config.openshift.io,resources=dnses,resourceNames=cluster,verbs=get
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policyautomations,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=policy.open-cluster-management.io,resources=policyautomations/status,verbs=get;update;patch
@@ -42,13 +41,16 @@ var log = ctrl.Log.WithName(ControllerName)
 func (r *PolicyAutomationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerName).
+		For(
+			&policyv1beta1.PolicyAutomation{},
+			builder.WithPredicates(policyAuomtationPredicateFuncs)).
 		Watches(
 			&policyv1.Policy{},
 			&common.EnqueueRequestsFromMapFunc{ToRequests: policyMapper(mgr.GetClient())},
 			builder.WithPredicates(policyPredicateFuncs)).
-		For(
-			&policyv1beta1.PolicyAutomation{},
-			builder.WithPredicates(policyAuomtationPredicateFuncs)).
+		WithLogConstructor(func(req *reconcile.Request) logr.Logger {
+			return common.LogConstructor(ControllerName, "PolicyAutomation", req)
+		}).
 		Complete(r)
 }
 
@@ -67,7 +69,7 @@ type PolicyAutomationReconciler struct {
 // setOwnerReferences will set the input policy as the sole owner of the input policyAutomation and make the update
 // with the API. In practice, this will cause the input policyAutomation to be deleted when the policy is deleted.
 func (r *PolicyAutomationReconciler) setOwnerReferences(
-	ctx context.Context,
+	ctx context.Context, log logr.Logger,
 	policyAutomation *policyv1beta1.PolicyAutomation,
 	policy *policyv1.Policy,
 ) error {
@@ -104,7 +106,7 @@ func getTargetListMap(targetList []string) map[string]bool {
 }
 
 // getClusterDNSName will get the Hub cluster DNS name if the Hub is an OpenShift cluster.
-func (r *PolicyAutomationReconciler) getClusterDNSName(ctx context.Context) (string, error) {
+func (r *PolicyAutomationReconciler) getClusterDNSName(ctx context.Context, log logr.Logger) (string, error) {
 	dnsCluster, err := r.DynamicClient.Resource(dnsGVR).Get(ctx, "cluster", metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -131,7 +133,7 @@ func (r *PolicyAutomationReconciler) getClusterDNSName(ctx context.Context) (str
 // getViolationContext will put the root policy information into violationContext
 // It also puts the status of the non-compliant replicated policies into violationContext
 func (r *PolicyAutomationReconciler) getViolationContext(
-	ctx context.Context,
+	ctx context.Context, log logr.Logger,
 	policy *policyv1.Policy,
 	targetList []string,
 	policyAutomation *policyv1beta1.PolicyAutomation,
@@ -152,7 +154,7 @@ func (r *PolicyAutomationReconciler) getViolationContext(
 	// 4) get the root policy hub cluster name
 	var err error
 
-	violationContext.HubCluster, err = r.getClusterDNSName(ctx)
+	violationContext.HubCluster, err = r.getClusterDNSName(ctx, log)
 	if err != nil {
 		return policyv1beta1.ViolationContext{}, err
 	}
@@ -250,7 +252,7 @@ func (r *PolicyAutomationReconciler) getViolationContext(
 func (r *PolicyAutomationReconciler) Reconcile(
 	ctx context.Context, request ctrl.Request,
 ) (ctrl.Result, error) {
-	log := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	log := ctrl.LoggerFrom(ctx)
 
 	// Fetch the PolicyAutomation instance
 	policyAutomation := &policyv1beta1.PolicyAutomation{}
@@ -258,7 +260,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 	err := r.Get(ctx, request.NamespacedName, policyAutomation)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			log.V(2).Info("Automation was deleted. Nothing to do.")
+			log.V(2).Info("PolicyAutomation was deleted. Nothing to do.")
 
 			return reconcile.Result{}, nil
 		}
@@ -293,7 +295,7 @@ func (r *PolicyAutomationReconciler) Reconcile(
 		return reconcile.Result{}, err
 	}
 
-	err = r.setOwnerReferences(ctx, policyAutomation, policy)
+	err = r.setOwnerReferences(ctx, log, policyAutomation, policy)
 	if err != nil {
 		log.Error(err, "Failed to set the owner reference. Will requeue.")
 
@@ -303,7 +305,9 @@ func (r *PolicyAutomationReconciler) Reconcile(
 	switch {
 	case policyAutomation.Annotations["policy.open-cluster-management.io/rerun"] == "true":
 		// Rerun logic
-		AjExist, err := MatchPAResouceV(ctx, log, policyAutomation, r.DynamicClient, policyAutomation.GetResourceVersion())
+		AjExist, err := MatchPAResourceV(
+			ctx, log, policyAutomation, r.DynamicClient, policyAutomation.GetResourceVersion(),
+		)
 		if err != nil {
 			log.Error(err, "Failed to compare Ansible job's resourceVersion")
 
@@ -319,9 +323,9 @@ func (r *PolicyAutomationReconciler) Reconcile(
 		targetList := common.FindNonCompliantClustersForPolicy(policy)
 		log.Info("Creating an Ansible job", "mode", "manual", "clusterCount", strconv.Itoa(len(targetList)))
 
-		violationContext, _ := r.getViolationContext(ctx, policy, targetList, policyAutomation)
+		violationContext, _ := r.getViolationContext(ctx, log, policy, targetList, policyAutomation)
 
-		err = CreateAnsibleJob(ctx, log, policyAutomation, r.DynamicClient, "manual", violationContext)
+		err = CreateAnsibleJob(ctx, policyAutomation, r.DynamicClient, "manual", violationContext)
 		if err != nil {
 			log.Error(err, "Failed to create the Ansible job", "mode", "manual")
 
@@ -348,14 +352,14 @@ func (r *PolicyAutomationReconciler) Reconcile(
 	default:
 		switch policyAutomation.Spec.Mode {
 		case "scan":
-			log := log.WithValues("mode", "scan")
+			scanLog := log.WithValues("mode", "scan")
 
-			log.V(2).Info("Triggering scan mode")
+			scanLog.V(2).Info("Triggering scan mode")
 
 			requeueAfter, err := time.ParseDuration(policyAutomation.Spec.RescanAfter)
 			if err != nil {
 				if policyAutomation.Spec.RescanAfter != "" {
-					log.Error(err, "Invalid spec.rescanAfter value")
+					scanLog.Error(err, "Invalid spec.rescanAfter value")
 				}
 
 				return reconcile.Result{RequeueAfter: requeueAfter}, err
@@ -363,33 +367,39 @@ func (r *PolicyAutomationReconciler) Reconcile(
 
 			targetList := common.FindNonCompliantClustersForPolicy(policy)
 			if len(targetList) > 0 {
-				log.Info("Creating An Ansible job", "targetList", targetList)
-				violationContext, _ := r.getViolationContext(ctx, policy, targetList, policyAutomation)
+				scanLog.Info("Creating An Ansible job", "targetList", targetList)
 
-				err = CreateAnsibleJob(ctx, log, policyAutomation, r.DynamicClient, "scan", violationContext)
+				violationContext, _ := r.getViolationContext(ctx, scanLog, policy, targetList, policyAutomation)
+
+				err = CreateAnsibleJob(ctx, policyAutomation, r.DynamicClient, "scan", violationContext)
 				if err != nil {
 					return reconcile.Result{RequeueAfter: requeueAfter}, err
 				}
 			} else {
-				log.Info("All clusters are compliant. Doing nothing.")
+				scanLog.Info("All clusters are compliant. Doing nothing.")
 			}
 			// no violations found, doing nothing
 			r.counter++
 
-			log.V(2).Info("RequeueAfter.", "RequeueAfter", requeueAfter.String(), "Counter", strconv.Itoa(r.counter))
+			scanLog.V(2).Info("RequeueAfter.",
+				"RequeueAfter", requeueAfter.String(),
+				"Counter", strconv.Itoa(r.counter),
+			)
 
 			return reconcile.Result{RequeueAfter: requeueAfter}, nil
 
 		case policyv1beta1.Once:
-			log := log.WithValues("mode", string(policyv1beta1.Once))
+			onceLog := log.WithValues("mode", string(policyv1beta1.Once))
 			targetList := common.FindNonCompliantClustersForPolicy(policy)
 
 			if len(targetList) > 0 {
-				log.Info("Creating an Ansible job", "targetList", targetList)
+				onceLog.Info("Creating an Ansible job", "targetList", targetList)
 
-				AjExist, err := MatchPAGeneration(ctx, log, policyAutomation, r.DynamicClient, policyAutomation.GetGeneration())
+				AjExist, err := MatchPAGeneration(
+					ctx, onceLog, policyAutomation, r.DynamicClient, policyAutomation.GetGeneration(),
+				)
 				if err != nil {
-					log.Error(err, "Failed to get Ansible job's generation")
+					onceLog.Error(err, "Failed to get Ansible job's generation")
 
 					return reconcile.Result{}, err
 				}
@@ -398,11 +408,13 @@ func (r *PolicyAutomationReconciler) Reconcile(
 					return reconcile.Result{}, nil
 				}
 
-				violationContext, _ := r.getViolationContext(ctx, policy, targetList, policyAutomation)
+				violationContext, _ := r.getViolationContext(ctx, onceLog, policy, targetList, policyAutomation)
 
-				err = CreateAnsibleJob(ctx, log, policyAutomation, r.DynamicClient, string(policyv1beta1.Once), violationContext)
+				err = CreateAnsibleJob(
+					ctx, policyAutomation, r.DynamicClient, string(policyv1beta1.Once), violationContext,
+				)
 				if err != nil {
-					log.Error(err, "Failed to create the Ansible job")
+					onceLog.Error(err, "Failed to create the Ansible job")
 
 					return reconcile.Result{}, err
 				}
@@ -411,16 +423,16 @@ func (r *PolicyAutomationReconciler) Reconcile(
 
 				err = r.Update(ctx, policyAutomation, &client.UpdateOptions{})
 				if err != nil {
-					log.Error(err, "Failed to update the mode to disabled")
+					onceLog.Error(err, "Failed to update the mode to disabled")
 
 					return reconcile.Result{}, err
 				}
 			} else {
-				log.Info("All clusters are compliant. Doing nothing.")
+				onceLog.Info("All clusters are compliant. Doing nothing.")
 			}
 
 		case policyv1beta1.EveryEvent:
-			log := log.WithValues("mode", string(policyv1beta1.EveryEvent))
+			everyEventLog := log.WithValues("mode", string(policyv1beta1.EveryEvent))
 			targetList := common.FindNonCompliantClustersForPolicy(policy)
 			targetListMap := getTargetListMap(targetList)
 			// The clusters map that the new ansible job will target
@@ -442,13 +454,13 @@ func (r *PolicyAutomationReconciler) Reconcile(
 			for clusterName, clusterEvent := range eventMap {
 				originalStartTime, err := time.Parse(time.RFC3339, clusterEvent.AutomationStartTime)
 				if err != nil {
-					log.Error(err, "Failed to retrieve AutomationStartTime in ClustersWithEvent")
+					everyEventLog.Error(err, "Failed to retrieve AutomationStartTime in ClustersWithEvent")
 					delete(eventMap, clusterName)
 				}
 
 				preEventTime, err := time.Parse(time.RFC3339, clusterEvent.EventTime)
 				if err != nil {
-					log.Error(err, "Failed to retrieve EventTime in ClustersWithEvent")
+					everyEventLog.Error(err, "Failed to retrieve EventTime in ClustersWithEvent")
 					delete(eventMap, clusterName)
 				}
 				// The time that delayAfterRunSeconds setting expires
@@ -506,10 +518,10 @@ func (r *PolicyAutomationReconciler) Reconcile(
 					trimmedTargetList = append(trimmedTargetList, clusterName)
 				}
 
-				log.Info("Creating An Ansible job", "trimmedTargetList", trimmedTargetList)
-				violationContext, _ := r.getViolationContext(ctx, policy, trimmedTargetList, policyAutomation)
+				everyEventLog.Info("Creating An Ansible job", "trimmedTargetList", trimmedTargetList)
+				violationContext, _ := r.getViolationContext(ctx, log, policy, trimmedTargetList, policyAutomation)
 
-				err = CreateAnsibleJob(ctx, log, policyAutomation, r.DynamicClient,
+				err = CreateAnsibleJob(ctx, policyAutomation, r.DynamicClient,
 					string(policyv1beta1.EveryEvent), violationContext)
 				if err != nil {
 					log.Error(err, "Failed to create the Ansible job")
@@ -526,21 +538,22 @@ func (r *PolicyAutomationReconciler) Reconcile(
 					}
 				}
 			} else {
-				log.Info("All clusters are compliant. No new Ansible job. Just update ClustersWithEvent.")
+				everyEventLog.Info("All clusters are compliant. No new Ansible job. Just update ClustersWithEvent.")
 			}
 
 			policyAutomation.Status.ClustersWithEvent = eventMap
 			// use StatusWriter to update status subresource of a Kubernetes object
 			err := r.Status().Update(ctx, policyAutomation)
 			if err != nil {
-				log.Error(err, "Failed to update ClustersWithEvent in policyAutomation status")
+				everyEventLog.Error(err, "Failed to update ClustersWithEvent in policyAutomation status")
 
 				return reconcile.Result{}, err
 			}
 
 			if requeueFlag {
-				log.Info("Requeue for the new non-compliant event during the delay period", "Delay in seconds",
-					delayAfterRunSeconds, "Requeue After", requeueDuration)
+				everyEventLog.Info("Requeue for the new non-compliant event during the delay period",
+					"Delay in seconds", delayAfterRunSeconds,
+					"Requeue After", requeueDuration)
 
 				return reconcile.Result{RequeueAfter: time.Duration(requeueDuration)}, nil
 			}
