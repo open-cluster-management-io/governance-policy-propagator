@@ -30,14 +30,17 @@ type ReplicatedPolicyReconciler struct {
 }
 
 func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
-	log := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	// Create context-aware logger with request ID for tracing
+	log := ctrl.LoggerFrom(ctx).WithName("replicated-policy")
 	log.Info("Reconciling the replicated policy")
 
 	// Set the hub template watch metric after reconcile
 	defer func() {
 		watchCount := r.TemplateResolvers.GetWatchCount()
 
-		log.V(3).Info("Setting hub template watch metric", "value", watchCount)
+		log.V(3).Info("Setting hub template watch metric",
+			"metric", hubTemplateActiveWatchesMetric,
+			"value", watchCount)
 
 		hubTemplateActiveWatchesMetric.Set(float64(watchCount))
 	}()
@@ -238,7 +241,7 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 
 	// Any errors to expose to the user are logged and recorded in the processTemplates method. Only retry
 	// the request if it's determined to be a retryable error (i.e. don't retry syntax errors).
-	tmplErr := r.processTemplates(ctx, desiredReplicatedPolicy, decision.Cluster, rootPolicy)
+	tmplErr := r.processTemplates(ctx, log, desiredReplicatedPolicy, decision.Cluster, rootPolicy)
 	if errors.Is(tmplErr, ErrRetryable) {
 		// Return the error if it's retryable, which will utilize controller-runtime's exponential backoff.
 		return reconcile.Result{}, tmplErr

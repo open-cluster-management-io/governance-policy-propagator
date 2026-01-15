@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -33,16 +34,17 @@ var ansibleJobRes = schema.GroupVersionResource{
 
 // Check any ansiblejob is made by input genteration number
 // Returning "true" means the policy automation already created ansiblejob with the generation
-func MatchPAGeneration(policyAutomation *policyv1beta1.PolicyAutomation,
+func MatchPAGeneration(ctx context.Context, log logr.Logger, policyAutomation *policyv1beta1.PolicyAutomation,
 	dynamicClient dynamic.Interface, generation int64,
 ) (bool, error) {
 	ansiblejobList, err := dynamicClient.Resource(ansibleJobRes).Namespace(policyAutomation.GetNamespace()).List(
-		context.TODO(), metav1.ListOptions{
+		ctx, metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=%s", PolicyAutomationLabel, policyAutomation.GetName()),
 		},
 	)
 	if err != nil {
-		log.Error(err, "Failed to get ansiblejob list")
+		log.Error(err, "Failed to get ansiblejob list",
+			"function", "MatchPAGeneration")
 
 		return false, err
 	}
@@ -61,16 +63,17 @@ func MatchPAGeneration(policyAutomation *policyv1beta1.PolicyAutomation,
 
 // Check any ansiblejob is made by current resourceVersion number
 // Returning "true" means the policy automation already created ansiblejob with this resourceVersion
-func MatchPAResouceV(policyAutomation *policyv1beta1.PolicyAutomation,
+func MatchPAResourceV(ctx context.Context, log logr.Logger, policyAutomation *policyv1beta1.PolicyAutomation,
 	dynamicClient dynamic.Interface, resourceVersion string,
 ) (bool, error) {
 	ansiblejobList, err := dynamicClient.Resource(ansibleJobRes).Namespace(policyAutomation.GetNamespace()).List(
-		context.TODO(), metav1.ListOptions{
+		ctx, metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=%s", PolicyAutomationLabel, policyAutomation.GetName()),
 		},
 	)
 	if err != nil {
-		log.Error(err, "Failed to get ansiblejob list")
+		log.Error(err, "Failed to get ansiblejob list",
+			"function", "MatchPAResourceV")
 
 		return false, err
 	}
@@ -86,7 +89,7 @@ func MatchPAResouceV(policyAutomation *policyv1beta1.PolicyAutomation,
 }
 
 // CreateAnsibleJob creates ansiblejob with given PolicyAutomation
-func CreateAnsibleJob(policyAutomation *policyv1beta1.PolicyAutomation,
+func CreateAnsibleJob(ctx context.Context, policyAutomation *policyv1beta1.PolicyAutomation,
 	dynamicClient dynamic.Interface, mode string, violationContext policyv1beta1.ViolationContext,
 ) error {
 	ansibleJob := &unstructured.Unstructured{
@@ -167,7 +170,7 @@ func CreateAnsibleJob(policyAutomation *policyv1beta1.PolicyAutomation,
 	})
 
 	_, err := dynamicClient.Resource(ansibleJobRes).Namespace(policyAutomation.GetNamespace()).
-		Create(context.TODO(), ansibleJob, metav1.CreateOptions{})
+		Create(ctx, ansibleJob, metav1.CreateOptions{})
 	if err != nil {
 		return err
 	}

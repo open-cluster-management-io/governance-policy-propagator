@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,11 +31,6 @@ const (
 	// This is used for when an administrator prefers to manually generate the encryption keys
 	// instead of letting the Policy Propagator handle it.
 	DisableRotationAnnotation = "policy.open-cluster-management.io/disable-rotation"
-)
-
-var (
-	log                       = ctrl.Log.WithName(ControllerName)
-	errLastRotationParseError = fmt.Errorf(`failed to parse the "%s" annotation`, propagator.LastRotatedAnnotation)
 )
 
 // SetupWithManager sets up the controller with the Manager.
@@ -66,10 +62,12 @@ type EncryptionKeysReconciler struct { //nolint:golint,revive
 // Reconcile watches all "policy-encryption-key" Secrets on the Hub cluster. This periodically rotates the keys
 // and resolves invalid modifications made to the Secret.
 func (r *EncryptionKeysReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
-	log := log.WithValues("secretNamespace", request.Namespace, "secret", request.Name)
-	log.Info("Reconciling a Secret")
-
 	clusterName := request.Namespace
+
+	// Create context-aware logger with request ID for tracing
+	log := ctrl.LoggerFrom(ctx).WithName(ControllerName)
+
+	log.Info("Reconciling encryption key secret")
 
 	// The cache configuration of SelectorsByObject should prevent this from happening, but add this as a precaution.
 	if request.Name != propagator.EncryptionKeySecret {
@@ -93,55 +91,87 @@ func (r *EncryptionKeysReconciler) Reconcile(ctx context.Context, request ctrl.R
 		return ctrl.Result{}, err
 	}
 
+	log.V(2).Info("Successfully retrieved encryption key secret",
+		"resourceVersion", secret.GetResourceVersion(),
+		"hasKey", len(secret.Data["key"]) > 0,
+		"hasPreviousKey", len(secret.Data["previousKey"]) > 0)
+
 	annotations := secret.GetAnnotations()
 	if strings.EqualFold(annotations[DisableRotationAnnotation], "true") {
-		log.Info(
-			"Encountered an encryption key Secret with key rotation disabled. Will trigger a policy template update.",
+		log.Info("Encryption key rotation is disabled, triggering policy template update",
 			"annotation", DisableRotationAnnotation,
-			"value", annotations[DisableRotationAnnotation],
-		)
+			"value", annotations[DisableRotationAnnotation])
 
 		// In case the key was manually rotated, trigger a template update
-		r.triggerTemplateUpdate(ctx, clusterName, secret)
+		err := r.triggerTemplateUpdate(ctx, log, clusterName, secret)
+		if err != nil {
+			log.Error(err, "Failed to trigger template update for disabled rotation")
+
+			return reconcile.Result{}, err
+		}
+
+		log.V(1).Info("Successfully triggered template update for disabled rotation")
 
 		return reconcile.Result{}, nil
 	}
 
 	lastRotatedTS := annotations[propagator.LastRotatedAnnotation]
-	log = log.WithValues("annotation", propagator.LastRotatedAnnotation, "value", lastRotatedTS)
+	log = log.WithValues("lastRotatedAnnotation", propagator.LastRotatedAnnotation, "lastRotatedValue", lastRotatedTS)
+
+	log.V(2).Info("Checking rotation schedule",
+		"lastRotatedTS", lastRotatedTS,
+		"keyRotationDays", r.KeyRotationDays)
 
 	var nextRotation time.Duration
 
 	if lastRotatedTS == "" {
-		log.Info("The annotation is not set. Will rotate the key now.")
+		log.Info("The last rotated annotation is not set. Will rotate the key now.")
 
 		nextRotation = 0
 	} else {
-		nextRotation, err = r.getNextRotationFromNow(secret)
+		nextRotation, err = r.getNextRotationFromNow(log, secret)
 		if err != nil {
-			log.Error(err, "The annotation cannot be parsed. Will rotate the key now.")
+			log.Error(err, "The last rotated annotation cannot be parsed. Will rotate the key now.",
+				"lastRotatedTS", lastRotatedTS)
 
 			nextRotation = 0
+		} else {
+			log.V(2).Info("Calculated next rotation time",
+				"nextRotation", nextRotation)
 		}
 	}
 
+	log.V(3).Info("Validating current encryption key",
+		"keyLength", len(secret.Data["key"]))
+
 	_, err = aes.NewCipher(secret.Data["key"])
 	if err != nil {
-		log.Error(err, "The encryption key in the Secret is invalid. Will rotate the key now.")
+		log.Error(err, "The encryption key in the Secret is invalid. Will rotate the key now.",
+			"keyLength", len(secret.Data["key"]))
 
 		nextRotation = 0
 		// Set this to a null value so the bad key doesn't get stored as the previous key
 		secret.Data["key"] = []byte{}
+	} else {
+		log.V(3).Info("Current encryption key is valid",
+			"keyLength", len(secret.Data["key"]))
 	}
 
 	if nextRotation > 0 {
+		log.V(2).Info("Key rotation not needed yet",
+			"nextRotation", nextRotation)
+
 		// previousKey only needs to be checked if there won't be a rotation since it would get overwritten anyways
 		if len(secret.Data["previousKey"]) > 0 {
+			log.V(3).Info("Validating previous encryption key",
+				"previousKeyLength", len(secret.Data["previousKey"]))
+
 			// If previousKey is invalid, it'll cause go-template-utils to fail on the managed cluster, so remove it if
 			// a user changed this accidentally
 			_, err = aes.NewCipher(secret.Data["previousKey"])
 			if err != nil {
-				log.Info("The previous encryption key in the Secret is invalid. Will remove it.")
+				log.Info("The previous encryption key in the Secret is invalid. Will remove it.",
+					"previousKeyLength", len(secret.Data["previousKey"]))
 
 				secret.Data["previousKey"] = []byte{}
 
@@ -151,10 +181,16 @@ func (r *EncryptionKeysReconciler) Reconcile(ctx context.Context, request ctrl.R
 
 					return reconcile.Result{}, err
 				}
+
+				log.V(1).Info("Successfully removed invalid previous key")
+			} else {
+				log.V(3).Info("Previous encryption key is valid",
+					"previousKeyLength", len(secret.Data["previousKey"]))
 			}
 		}
 
-		log.V(2).Info("The key is not yet ready to be rotated")
+		log.V(2).Info("Scheduling next key rotation",
+			"nextRotation", nextRotation)
 
 		// Requeueing the same object multiple times is safe as the queue will drop any scheduled
 		// requeues in favor of this one
@@ -162,53 +198,97 @@ func (r *EncryptionKeysReconciler) Reconcile(ctx context.Context, request ctrl.R
 		return reconcile.Result{RequeueAfter: nextRotation}, nil
 	}
 
-	log.V(1).Info("Rotating the encryption key")
+	log.Info("Starting encryption key rotation",
+		"keyRotationDays", r.KeyRotationDays)
 
-	err = r.rotateKey(ctx, secret)
+	err = r.rotateKey(ctx, log, secret)
 	if err != nil {
 		log.Error(err, "Failed to rotate the encryption key. Will retry the request.")
 
 		return reconcile.Result{}, err
 	}
 
-	r.triggerTemplateUpdate(ctx, clusterName, secret)
+	log.Info("Successfully rotated encryption key")
+
+	err = r.triggerTemplateUpdate(ctx, log, clusterName, secret)
+	if err != nil {
+		log.Error(err, "Failed to trigger template update after key rotation")
+
+		return reconcile.Result{}, err
+	}
+
+	log.V(1).Info("Successfully triggered template update after key rotation")
 
 	// The error is ignored since this can't fail since the annotation value was just set to a valid value
-	nextRotation, _ = r.getNextRotationFromNow(secret)
+	nextRotation, _ = r.getNextRotationFromNow(log, secret)
 
-	log.Info("Rotated the encryption key successfully", "nextRotation", nextRotation)
+	log.Info("Encryption key rotation completed successfully",
+		"nextRotation", nextRotation,
+		"keyRotationDays", r.KeyRotationDays)
 
 	return reconcile.Result{RequeueAfter: nextRotation}, nil
 }
 
 // getNextRotationFromNow will return the duration from now until the next key rotation. An error is
 // returned if the last rotated annotation cannot be parsed.
-func (r *EncryptionKeysReconciler) getNextRotationFromNow(secret *corev1.Secret) (time.Duration, error) {
+func (r *EncryptionKeysReconciler) getNextRotationFromNow(
+	log logr.Logger, secret *corev1.Secret,
+) (time.Duration, error) {
 	annotations := secret.GetAnnotations()
 	lastRotatedTS := annotations[propagator.LastRotatedAnnotation]
 
+	log.V(3).Info("Parsing last rotation time",
+		"lastRotatedTS", lastRotatedTS,
+		"annotation", propagator.LastRotatedAnnotation)
+
 	lastRotated, err := time.Parse(time.RFC3339, lastRotatedTS)
 	if err != nil {
-		return 0, fmt.Errorf(`%w with value "%s": %w`, errLastRotationParseError, lastRotatedTS, err)
+		log.Error(err, "Failed to parse last rotation timestamp",
+			"lastRotatedTS", lastRotatedTS,
+			"format", time.RFC3339)
+
+		return 0, fmt.Errorf(`%w with value "%s": %w`,
+			fmt.Errorf(`failed to parse the "%s" annotation`, propagator.LastRotatedAnnotation),
+			lastRotatedTS, err)
 	}
 
 	nextRotation := lastRotated.Add(time.Hour * 24 * time.Duration(r.KeyRotationDays))
+	durationUntilNext := time.Until(nextRotation)
 
-	return time.Until(nextRotation), nil
+	log.V(3).Info("Calculated rotation schedule",
+		"lastRotated", lastRotated.Format(time.RFC3339),
+		"nextRotation", nextRotation.Format(time.RFC3339),
+		"keyRotationDays", r.KeyRotationDays,
+		"durationUntilNext", durationUntilNext)
+
+	return durationUntilNext, nil
 }
 
 // rotateKey will generate a new encryption key to replace the "key" field/key on the Secret. The
 // old key is stored as the "previousKey" field/key on the Secret. The Secret is then updated
 // with the Kubernetes API server. An error is returned if the key can't be generated or the
 // update on the API servier fails.
-func (r *EncryptionKeysReconciler) rotateKey(ctx context.Context, secret *corev1.Secret) error {
+func (r *EncryptionKeysReconciler) rotateKey(ctx context.Context, log logr.Logger, secret *corev1.Secret) error {
+	log.V(1).Info("Generating new encryption key")
+
 	newKey, err := propagator.GenerateEncryptionKey()
 	if err != nil {
+		log.Error(err, "Failed to generate new encryption key")
+
 		return err
 	}
 
+	log.V(2).Info("Successfully generated new encryption key",
+		"newKeyLength", len(newKey))
+
+	// Store the current key as previous and set the new key
+	oldKeyLength := len(secret.Data["key"])
 	secret.Data["previousKey"] = secret.Data["key"]
 	secret.Data["key"] = newKey
+
+	log.V(2).Info("Updated secret key data",
+		"oldKeyLength", oldKeyLength,
+		"newKeyLength", len(newKey))
 
 	annotations := secret.GetAnnotations()
 	if annotations == nil {
@@ -219,59 +299,107 @@ func (r *EncryptionKeysReconciler) rotateKey(ctx context.Context, secret *corev1
 	annotations[propagator.LastRotatedAnnotation] = lastRotatedTS
 	secret.SetAnnotations(annotations)
 
-	return r.Update(ctx, secret)
+	log.V(2).Info("Updated rotation annotation",
+		"annotation", propagator.LastRotatedAnnotation,
+		"lastRotatedTS", lastRotatedTS)
+
+	log.V(1).Info("Updating secret with new encryption key")
+
+	err = r.Update(ctx, secret)
+	if err != nil {
+		return err
+	}
+
+	log.V(1).Info("Successfully updated secret with new encryption key",
+		"resourceVersion", secret.GetResourceVersion())
+
+	return nil
 }
 
 // triggerTemplateUpdate finds all the policies that this managed cluster uses that use encryption.
 // It then updates those root policies with the trigger-update annotation to cause the policies to
 // be reprocessed with the new key.
 func (r *EncryptionKeysReconciler) triggerTemplateUpdate(
-	ctx context.Context, clusterName string, secret *corev1.Secret,
-) {
-	log.Info(
-		"Triggering template updates on all the managed cluster policies that use encryption", "cluster", clusterName,
-	)
+	ctx context.Context, log logr.Logger, clusterName string, secret *corev1.Secret,
+) error {
+	log.Info("Triggering template updates on all policies that use encryption",
+		"cluster", clusterName,
+		"rotationTimestamp", secret.Annotations[propagator.LastRotatedAnnotation])
 
+	// Get all the policies in the cluster namespace with timeout
 	policies := policyv1.PolicyList{}
-	// Get all the policies in the cluster namespace
+
+	log.V(2).Info("Querying policies in cluster namespace",
+		"namespace", clusterName)
+
 	err := r.List(ctx, &policies, client.InNamespace(clusterName))
 	if err != nil {
-		log.Error(err, "Failed to trigger all the policies to be reprocessed after the key rotation")
+		log.Error(err, "Failed to list policies for template update trigger",
+			"namespace", clusterName)
 
-		return
+		return err
 	}
+
+	log.V(2).Info("Found policies in cluster namespace",
+		"policyCount", len(policies.Items),
+		"namespace", clusterName)
 
 	// Setting this value to something unique for this key rotation ensures the annotation will be updated to
 	// a new value and thus trigger an update
 	value := fmt.Sprintf("rotate-key-%s-%s", clusterName, secret.Annotations[propagator.LastRotatedAnnotation])
 	patch := []byte(`{"metadata":{"annotations":{"` + propagator.TriggerUpdateAnnotation + `":"` + value + `"}}}`)
 
+	log.V(3).Info("Prepared patch for template update trigger",
+		"triggerValue", value,
+		"annotation", propagator.TriggerUpdateAnnotation)
+
+	encryptedPolicyCount := 0
+	updatedPolicyCount := 0
+	skippedPolicyCount := 0
+
 	for _, policy := range policies.Items {
+		policyLog := log.WithValues("policyName", policy.Name)
+
 		// If the policy does not have the initialization vector annotation, then encryption is not
 		// used and thus doesn't need to be reprocessed
 		if _, ok := policy.Annotations[propagator.IVAnnotation]; !ok {
+			policyLog.V(3).Info("Skipping policy without encryption IV annotation",
+				"annotation", propagator.IVAnnotation)
+
+			skippedPolicyCount++
+
 			continue
 		}
+
+		encryptedPolicyCount++
+
+		policyLog.V(2).Info("Found encrypted policy for template update",
+			"hasIVAnnotation", true)
 
 		// Find the root policy to patch with the annotation
 		rootPlcName := policy.GetLabels()[common.RootPolicyLabel]
 		if rootPlcName == "" {
-			log.Info(
-				"The replicated policy does not have the root policy label set",
-				"policy", policy.ObjectMeta.Name,
-				"label", common.RootPolicyLabel,
-			)
+			policyLog.Info("The replicated policy does not have the root policy label set",
+				"label", common.RootPolicyLabel)
+
+			skippedPolicyCount++
 
 			continue
 		}
+
+		policyLog = policyLog.WithValues("rootPolicyLabel", rootPlcName)
 
 		name, namespace, err := common.ParseRootPolicyLabel(rootPlcName)
 		if err != nil {
-			log.Error(err, "Unable to parse name and namespace of root policy, ignoring this replicated policy",
+			policyLog.Error(err, "Unable to parse name and namespace of root policy, ignoring this replicated policy",
 				"rootPlcName", rootPlcName)
+
+			skippedPolicyCount++
 
 			continue
 		}
+
+		policyLog = policyLog.WithValues("rootPolicyName", name, "rootPolicyNamespace", namespace)
 
 		rootPolicy := &policyv1.Policy{
 			ObjectMeta: metav1.ObjectMeta{
@@ -280,14 +408,28 @@ func (r *EncryptionKeysReconciler) triggerTemplateUpdate(
 			},
 		}
 
+		policyLog.V(2).Info("Patching root policy to trigger template update",
+			"triggerValue", value)
+
 		err = r.Patch(ctx, rootPolicy, client.RawPatch(types.MergePatchType, patch))
 		if err != nil {
-			log.Error(
-				err,
-				"Failed to trigger the policy to be reprocessed after the key rotation",
-				"policyName",
-				rootPlcName,
-			)
+			policyLog.Error(err, "Failed to trigger the policy to be reprocessed after the key rotation",
+				"rootPolicyName", rootPlcName)
+			// Continue with other policies rather than failing completely
+			continue
 		}
+
+		policyLog.V(1).Info("Successfully triggered template update for root policy")
+
+		updatedPolicyCount++
 	}
+
+	log.Info("Completed template update triggering",
+		"totalPolicies", len(policies.Items),
+		"encryptedPolicies", encryptedPolicyCount,
+		"updatedPolicies", updatedPolicyCount,
+		"skippedPolicies", skippedPolicyCount,
+		"cluster", clusterName)
+
+	return nil
 }

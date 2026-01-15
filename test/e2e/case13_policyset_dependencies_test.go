@@ -4,7 +4,6 @@
 package e2e
 
 import (
-	"context"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -25,7 +24,7 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 		case13Set2updateYaml string = "../resources/case13_policyset_dependencies/policyset2update.yaml"
 	)
 
-	setup := func() {
+	setup := func(ctx SpecContext) {
 		By("Creating the policy, policyset, binding, and rule")
 		utils.Kubectl("apply", "-f", case13PolicyYaml, "-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 		rootplc := utils.GetWithTimeout(
@@ -43,7 +42,7 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 		)
 		plr.Object["status"] = utils.GeneratePlrStatus("managed1")
 		_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
-			context.TODO(), plr, metav1.UpdateOptions{},
+			ctx, plr, metav1.UpdateOptions{},
 		)
 		Expect(err).ToNot(HaveOccurred())
 

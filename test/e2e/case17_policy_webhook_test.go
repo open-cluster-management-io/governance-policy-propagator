@@ -4,7 +4,6 @@
 package e2e
 
 import (
-	"context"
 	"unicode/utf8"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -85,7 +84,7 @@ var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
 			Expect(err).Should(HaveOccurred())
 			Expect(output).Should(ContainSubstring(combinedLengthErr))
 		})
-		It("Should replicated policy should not be validated", func() {
+		It("Should replicated policy should not be validated", func(ctx SpecContext) {
 			_, err := utils.KubectlWithOutput("apply",
 				"-f", case17PolicyReplicatedYaml,
 				"-n", testNamespace,
@@ -97,7 +96,7 @@ var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
 			)
 			plr.Object["status"] = utils.GeneratePlrStatus("managed1")
 			_, err = clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
-				context.TODO(), plr, metav1.UpdateOptions{},
+				ctx, plr, metav1.UpdateOptions{},
 			)
 			Expect(err).ToNot(HaveOccurred())
 
