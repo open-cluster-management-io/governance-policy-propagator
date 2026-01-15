@@ -21,8 +21,6 @@ import (
 
 const ControllerName string = "policy-metrics"
 
-var log = ctrl.Log.WithName(ControllerName)
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *MetricReconciler) SetupWithManager(mgr ctrl.Manager, maxConcurrentReconciles uint16) error {
 	return ctrl.NewControllerManagedBy(mgr).
@@ -50,7 +48,8 @@ type MetricReconciler struct {
 // Reconcile reads the state of the cluster for the Policy object and ensures that the exported
 // policy metrics are accurate, updating them as necessary.
 func (r *MetricReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
-	log := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	// Create context-aware logger with request ID for tracing
+	log := ctrl.LoggerFrom(ctx).WithName(ControllerName)
 	log.Info("Reconciling metric for the policy")
 
 	// Need to know if the policy is a root policy to create the correct prometheus labels

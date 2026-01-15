@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-logr/logr"
 	templates "github.com/stolostron/go-template-utils/v7/pkg/templates"
 	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -60,9 +61,12 @@ type clusterDecision struct {
 // decisions, then it's considered stale and an event is sent to the replicated policy reconciler
 // so the policy will be removed.
 func (r *RootPolicyReconciler) cleanUpOrphanedRplPolicies(
-	instance *policiesv1.Policy, originalCPCS []*policiesv1.CompliancePerClusterStatus, allDecisions common.DecisionSet,
+	log logr.Logger,
+	instance *policiesv1.Policy,
+	originalCPCS []*policiesv1.CompliancePerClusterStatus,
+	allDecisions common.DecisionSet,
 ) {
-	log := log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
+	log = log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
 
 	for _, cluster := range originalCPCS {
 		if allDecisions[cluster.ClusterName] {
@@ -88,7 +92,9 @@ func (r *RootPolicyReconciler) cleanUpOrphanedRplPolicies(
 }
 
 // handleRootPolicy will properly replicate or clean up when a root policy is updated.
-func (r *RootPolicyReconciler) handleRootPolicy(ctx context.Context, instance *policiesv1.Policy) error {
+func (r *RootPolicyReconciler) handleRootPolicy(
+	ctx context.Context, log logr.Logger, instance *policiesv1.Policy,
+) error {
 	// Generate a metric for elapsed handling time for each policy
 	entryTS := time.Now()
 	defer func() {
@@ -97,7 +103,7 @@ func (r *RootPolicyReconciler) handleRootPolicy(ctx context.Context, instance *p
 		roothandlerMeasure.Observe(elapsed)
 	}()
 
-	log := log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
+	log = log.WithValues("policyName", instance.GetName(), "policyNamespace", instance.GetNamespace())
 
 	// Clean up the replicated policies if the policy is disabled
 	if instance.Spec.Disabled {
@@ -144,7 +150,7 @@ func (r *RootPolicyReconciler) handleRootPolicy(ctx context.Context, instance *p
 		r.ReplicatedPolicyUpdates <- event.GenericEvent{Object: simpleObj}
 	}
 
-	r.cleanUpOrphanedRplPolicies(instance, originalCPCS, decisions)
+	r.cleanUpOrphanedRplPolicies(log, instance, originalCPCS, decisions)
 
 	return nil
 }
@@ -186,10 +192,10 @@ func addManagedClusterLabels(clusterName string) func(templates.CachingQueryAPI,
 // If hubTemplateOptions.serviceAccountName specifies a service account which does not exist, an ErrSAMissing
 // error is returned for the caller to add a watch on the missing service account.
 func (r *ReplicatedPolicyReconciler) processTemplates(
-	ctx context.Context,
+	ctx context.Context, log logr.Logger,
 	replicatedPlc *policiesv1.Policy, clusterName string, rootPlc *policiesv1.Policy,
 ) error {
-	log := log.WithValues(
+	log = log.WithValues(
 		"policyName", rootPlc.GetName(),
 		"policyNamespace", rootPlc.GetNamespace(),
 		"cluster", clusterName,
