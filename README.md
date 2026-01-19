@@ -42,6 +42,10 @@ You will need [kind](https://kind.sigs.k8s.io/docs/user/quick-start/) installed.
    make kind-bootstrap-cluster-dev
    ```
 2. Start the propagator:
+   - Install cert manager and deploy the webhook:
+     ```bash
+     make webhook
+     ```
    - Run in a pod on the cluster:
      ```bash
      make build-images
