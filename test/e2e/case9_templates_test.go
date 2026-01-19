@@ -45,6 +45,8 @@ var _ = Describe("Test policy templates", func() {
 		case9SAPolicyYaml                 = case9PathPrefix + "case9-sa-policy.yaml"
 		case9SAPolicyNoPermYaml           = case9PathPrefix + "case9-sa-policy-no-permission.yaml"
 		case9SAPolicyMissingSAYaml        = case9PathPrefix + "case9-sa-policy-missing-sa.yaml"
+		case9PolicyDeniedTemplateFuncYaml = case9PathPrefix + "case9-test-policy-denied-template-func.yaml"
+		case9PolicyDeniedTemplateFuncName = "case9-test-policy-denied-template-func"
 	)
 
 	Describe("Create policy, placement and referenced resource in ns:"+testNamespace, Ordered, func() {
@@ -816,6 +818,69 @@ var _ = Describe("Test policy templates", func() {
 				_, err := os.Stat(tokenPath)
 				g.Expect(err).To(MatchError(os.ErrNotExist))
 			}, 30, 3).Should(Succeed())
+		})
+	})
+
+	Describe("Test denied template functions", Ordered, func() {
+		BeforeAll(func() {
+			By("Creating " + case9PolicyDeniedTemplateFuncYaml)
+			utils.Kubectl("apply",
+				"-f", case9PolicyDeniedTemplateFuncYaml,
+				"-n", testNamespace,
+				"--kubeconfig="+kubeconfigHub)
+			plc := utils.GetWithTimeout(
+				clientHubDynamic, gvrPolicy, case9PolicyDeniedTemplateFuncName,
+				testNamespace, true, defaultTimeoutSeconds,
+			)
+			Expect(plc).NotTo(BeNil())
+
+			DeferCleanup(func() {
+				utils.Kubectl("delete",
+					"-f", case9PolicyDeniedTemplateFuncYaml,
+					"-n", testNamespace,
+					"--kubeconfig="+kubeconfigHub,
+					"--ignore-not-found")
+				opt := metav1.ListOptions{}
+				utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, defaultTimeoutSeconds)
+			})
+		})
+
+		It("should return an error when using a denied template function", func() {
+			By("Patching the placement rule with decision of managed1")
+			plr := utils.GetWithTimeout(
+				clientHubDynamic, gvrPlacementRule, case9PolicyDeniedTemplateFuncName+"-plr", testNamespace,
+				true, defaultTimeoutSeconds,
+			)
+			plr.Object["status"] = utils.GeneratePlrStatus("managed1")
+			_, err := clientHubDynamic.Resource(gvrPlacementRule).Namespace(testNamespace).UpdateStatus(
+				context.TODO(), plr, metav1.UpdateOptions{},
+			)
+			Expect(err).ToNot(HaveOccurred())
+
+			By("Verifying the replicated policy was created with an error annotation for denied function")
+			Eventually(func(g Gomega) {
+				plc := utils.GetWithTimeout(
+					clientHubDynamic,
+					gvrPolicy,
+					testNamespace+"."+case9PolicyDeniedTemplateFuncName,
+					"managed1",
+					true,
+					defaultTimeoutSeconds,
+				)
+				g.Expect(plc).NotTo(BeNil())
+
+				tmpls, _, _ := unstructured.NestedSlice(plc.Object, "spec", "policy-templates")
+				g.Expect(tmpls).To(HaveLen(1))
+
+				tmplAnnotations, _, _ := unstructured.NestedStringMap(tmpls[0].(map[string]interface{}),
+					"objectDefinition", "metadata", "annotations")
+				g.Expect(tmplAnnotations).ToNot(BeEmpty())
+
+				hubTmplErrAnnotation := tmplAnnotations["policy.open-cluster-management.io/hub-templates-error"]
+				g.Expect(hubTmplErrAnnotation).ToNot(BeEmpty())
+				g.Expect(hubTmplErrAnnotation).To(ContainSubstring(
+					"use of denylisted template function: function 'env' is considered a security risk"))
+			}, defaultTimeoutSeconds, 1).Should(Succeed())
 		})
 	})
 })

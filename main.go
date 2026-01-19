@@ -112,6 +112,7 @@ func main() {
 		replPolicyMaxConcurrency    uint16
 		enableWebhooks              bool
 		disablePlacementRule        bool
+		templateFunctionDenyList    []string
 	)
 
 	pflag.StringVar(&metricsAddr, "metrics-bind-address", ":8383", "The address the metric endpoint binds to.")
@@ -165,6 +166,8 @@ func main() {
 	)
 	pflag.BoolVar(&disablePlacementRule, "disable-placementrule", false,
 		"Disable watches for PlacementRules.")
+	pflag.StringSliceVar(&templateFunctionDenyList, "template-function-denylist", []string{},
+		"Comma-separated list of additional template functions to deny")
 
 	pflag.Parse()
 
@@ -330,6 +333,7 @@ func main() {
 		Recorder:                mgr.GetEventRecorderFor(propagatorctrl.ControllerName),
 		RootPolicyLocks:         policiesLock,
 		ReplicatedPolicyUpdates: replicatedPolicyUpdates,
+		TemplateFuncDenylist:    templateFunctionDenyList,
 	}
 
 	if err = (&propagatorctrl.RootPolicyReconciler{
