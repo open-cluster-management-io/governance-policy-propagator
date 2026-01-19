@@ -1,0 +1,59 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: case9-test-policy-denied-template-func
+spec:
+  remediationAction: inform
+  disabled: false
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: case9-test-configpolicy
+        spec:
+          remediationAction: inform
+          namespaceSelector:
+            exclude: ["kube-*"]
+            include: ["default"]
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                kind: ConfigMap
+                apiVersion: v1
+                metadata:
+                  name: case9-test-configmap
+                  namespace: test
+                data:
+                  home-env: |
+                    {{hub printf "%s" env "HOME" hub}}
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: case9-test-policy-denied-template-func-pb
+placementRef:
+  apiGroup: apps.open-cluster-management.io
+  kind: PlacementRule
+  name: case9-test-policy-denied-template-func-plr
+subjects:
+- apiGroup: policy.open-cluster-management.io
+  kind: Policy
+  name: case9-test-policy-denied-template-func
+---
+apiVersion: apps.open-cluster-management.io/v1
+kind: PlacementRule
+metadata:
+  name: case9-test-policy-denied-template-func-plr
+spec:
+  clusterConditions:
+  - status: "True"
+    type: ManagedClusterConditionAvailable
+  clusterSelector:
+    matchExpressions:
+      []
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: case9-test

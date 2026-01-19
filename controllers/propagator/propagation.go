@@ -46,6 +46,7 @@ type Propagator struct {
 	Recorder                record.EventRecorder
 	RootPolicyLocks         *sync.Map
 	ReplicatedPolicyUpdates chan event.GenericEvent
+	TemplateFuncDenylist    []string
 }
 
 // clusterDecision contains a single decision where the replicated policy
@@ -155,6 +156,46 @@ type templateCtx struct {
 	PolicyMetadata       map[string]interface{}
 }
 
+// getTemplateResolverOpts builds the service account namespace name and template resolver options
+// based on whether the replicated policy specifies a service account in its hub template options.
+func (r *ReplicatedPolicyReconciler) getTemplateResolverOpts(
+	replicatedPlc *policiesv1.Policy,
+	rootPlc *policiesv1.Policy,
+	clusterName string,
+	watcher k8sdepwatches.ObjectIdentifier,
+) (types.NamespacedName, templates.ResolveOptions) {
+	var saNSName types.NamespacedName
+	var templateResolverOptions templates.ResolveOptions
+
+	if replicatedPlc.Spec.HubTemplateOptions != nil && replicatedPlc.Spec.HubTemplateOptions.ServiceAccountName != "" {
+		saNSName = types.NamespacedName{
+			Namespace: rootPlc.Namespace,
+			Name:      replicatedPlc.Spec.HubTemplateOptions.ServiceAccountName,
+		}
+
+		templateResolverOptions = templates.ResolveOptions{
+			Watcher:           &watcher,
+			DenylistFunctions: r.TemplateFuncDenylist,
+		}
+	} else {
+		saNSName = defaultSANamespacedName
+		templateResolverOptions = templates.ResolveOptions{
+			ClusterScopedAllowList: []templates.ClusterScopedObjectIdentifier{
+				{
+					Group: "cluster.open-cluster-management.io",
+					Kind:  "ManagedCluster",
+					Name:  clusterName,
+				},
+			},
+			LookupNamespace:   rootPlc.GetNamespace(),
+			Watcher:           &watcher,
+			DenylistFunctions: r.TemplateFuncDenylist,
+		}
+	}
+
+	return saNSName, templateResolverOptions
+}
+
 func addManagedClusterLabels(clusterName string) func(templates.CachingQueryAPI, interface{}) (interface{}, error) {
 	return func(api templates.CachingQueryAPI, ctx interface{}) (interface{}, error) {
 		typedCtx, ok := ctx.(templateCtx)
@@ -205,32 +246,7 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 		Name:      replicatedPlc.GetName(),
 	}
 
-	var saNSName types.NamespacedName
-	var templateResolverOptions templates.ResolveOptions
-
-	if replicatedPlc.Spec.HubTemplateOptions != nil && replicatedPlc.Spec.HubTemplateOptions.ServiceAccountName != "" {
-		saNSName = types.NamespacedName{
-			Namespace: rootPlc.Namespace,
-			Name:      replicatedPlc.Spec.HubTemplateOptions.ServiceAccountName,
-		}
-
-		templateResolverOptions = templates.ResolveOptions{
-			Watcher: &watcher,
-		}
-	} else {
-		saNSName = defaultSANamespacedName
-		templateResolverOptions = templates.ResolveOptions{
-			ClusterScopedAllowList: []templates.ClusterScopedObjectIdentifier{
-				{
-					Group: "cluster.open-cluster-management.io",
-					Kind:  "ManagedCluster",
-					Name:  clusterName,
-				},
-			},
-			LookupNamespace: rootPlc.GetNamespace(),
-			Watcher:         &watcher,
-		}
-	}
+	saNSName, templateResolverOptions := r.getTemplateResolverOpts(replicatedPlc, rootPlc, clusterName, watcher)
 
 	templateResolver, err := r.TemplateResolvers.GetResolver(watcher, saNSName)
 	if err != nil {
