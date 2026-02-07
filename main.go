@@ -77,8 +77,8 @@ func printVersion() {
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(clusterv1.AddToScheme(scheme))
-	utilruntime.Must(clusterv1beta1.AddToScheme(scheme))
+	utilruntime.Must(clusterv1.Install(scheme))
+	utilruntime.Must(clusterv1beta1.Install(scheme))
 	utilruntime.Must(appsv1.AddToScheme(scheme))
 
 	//+kubebuilder:scaffold:scheme
