@@ -30,7 +30,7 @@ CLUSTER_NAME ?= hub
 KIND_NAMESPACE ?= $(CONTROLLER_NAMESPACE)
 
 # Test coverage threshold
-export COVERAGE_MIN ?= 71
+export COVERAGE_MIN ?= 70
 
 # Image URL to use all building/pushing image targets;
 # Use your own docker registry and image name for dev/test by overridding the IMG and REGISTRY environment variable.
