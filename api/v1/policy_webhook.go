@@ -7,14 +7,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"unicode/utf8"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -28,8 +25,7 @@ var (
 )
 
 func (r *Policy) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(r).
+	return ctrl.NewWebhookManagedBy(mgr, &Policy{}).
 		WithValidator(&PolicyCustomValidator{}).
 		Complete()
 }
@@ -38,15 +34,10 @@ func (r *Policy) SetupWebhookWithManager(mgr ctrl.Manager) error {
 // +kubebuilder:object:generate=false
 type PolicyCustomValidator struct{}
 
-var _ webhook.CustomValidator = &PolicyCustomValidator{}
+var _ admission.Validator[*Policy] = &PolicyCustomValidator{}
 
-// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type
-func (r *PolicyCustomValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	policy, ok := obj.(*Policy)
-	if !ok {
-		return nil, fmt.Errorf("expected a Policy object but got %T", obj)
-	}
-
+// ValidateCreate implements admission.Validator so a webhook will be registered for the type
+func (r *PolicyCustomValidator) ValidateCreate(_ context.Context, policy *Policy) (admission.Warnings, error) {
 	log := policylog.WithValues("policyName", policy.Name, "policyNamespace", policy.Namespace)
 	log.V(1).Info("Validate policy creation request")
 
@@ -65,13 +56,8 @@ func (r *PolicyCustomValidator) ValidateCreate(_ context.Context, obj runtime.Ob
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
 func (r *PolicyCustomValidator) ValidateUpdate(
-	_ context.Context, _, newObj runtime.Object,
+	_ context.Context, _, policy *Policy,
 ) (admission.Warnings, error) {
-	policy, ok := newObj.(*Policy)
-	if !ok {
-		return nil, fmt.Errorf("expected a Policy object but got %T", newObj)
-	}
-
 	log := policylog.WithValues("policyName", policy.Name, "policyNamespace", policy.Namespace)
 	log.V(1).Info("Validate policy update request")
 
@@ -84,7 +70,7 @@ func (r *PolicyCustomValidator) ValidateUpdate(
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
-func (r *PolicyCustomValidator) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
+func (r *PolicyCustomValidator) ValidateDelete(_ context.Context, _ *Policy) (admission.Warnings, error) {
 	return nil, nil
 }
 
