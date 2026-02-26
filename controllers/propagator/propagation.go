@@ -22,7 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
@@ -44,7 +44,7 @@ var (
 type Propagator struct {
 	client.Client
 	Scheme                  *runtime.Scheme
-	Recorder                record.EventRecorder
+	Recorder                events.EventRecorder
 	RootPolicyLocks         *sync.Map
 	ReplicatedPolicyUpdates chan event.GenericEvent
 	TemplateFuncDenylist    []string
@@ -114,7 +114,7 @@ func (r *RootPolicyReconciler) handleRootPolicy(
 		// Checks if replicated policies exist in the event that
 		// a double reconcile to prevent emitting the same event twice
 		if updateCount > 0 {
-			r.Recorder.Event(instance, "Normal", "PolicyPropagation",
+			r.Recorder.Eventf(instance, nil, "Normal", "PolicyPropagation", "PolicyPropagation",
 				fmt.Sprintf("Policy %s/%s was disabled", instance.GetNamespace(), instance.GetName()))
 		}
 	}
@@ -383,9 +383,11 @@ func (r *ReplicatedPolicyReconciler) processTemplates(
 		if tplErr != nil {
 			log.Error(tplErr, "Failed to resolve templates")
 
-			r.Recorder.Event(
+			r.Recorder.Eventf(
 				rootPlc,
+				nil,
 				"Warning",
+				"PolicyPropagation",
 				"PolicyPropagation",
 				fmt.Sprintf(
 					"Failed to resolve templates for cluster %s: %s",

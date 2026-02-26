@@ -13,7 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -33,7 +33,7 @@ const ControllerName string = "policy-set"
 type PolicySetReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Recorder events.EventRecorder
 }
 
 // blank assignment to verify that PolicySetReconciler implements reconcile.Reconciler
@@ -83,10 +83,12 @@ func (r *PolicySetReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 
 	log.Info("Policy set successfully processed, reconcile complete.")
 
-	r.Recorder.Event(
+	r.Recorder.Eventf(
 		instance,
+		nil,
 		"Normal",
-		"policySet: "+instance.GetName(),
+		"PolicySetStatusUpdate",
+		"PolicySetStatusUpdate",
 		fmt.Sprintf("Status successfully updated for policySet %s in namespace %s", instance.GetName(),
 			instance.GetNamespace()),
 	)
@@ -150,7 +152,7 @@ func (r *PolicySetReconciler) processPolicySet(
 
 			log.V(2).Info(errMessage)
 
-			r.Recorder.Event(plcSet, "Warning", "PolicyNotFound",
+			r.Recorder.Eventf(plcSet, nil, "Warning", "PolicyNotFound", "PolicyNotFound",
 				fmt.Sprintf(
 					"Policy %s is in PolicySet %s but could not be found in namespace %s",
 					childPlcName,

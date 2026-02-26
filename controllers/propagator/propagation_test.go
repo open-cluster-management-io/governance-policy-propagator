@@ -12,7 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	fakeClient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
@@ -44,7 +44,7 @@ func TestGetTemplateResolverOpts_DefaultSA(t *testing.T) {
 		WithScheme(fakeScheme).
 		Build()
 
-	eventRecorder := record.NewFakeRecorder(10)
+	eventRecorder := events.NewFakeRecorder(10)
 
 	r := &ReplicatedPolicyReconciler{
 		Propagator: Propagator{
@@ -126,7 +126,7 @@ func TestGetTemplateResolverOpts_DefaultSAWithDenylist(t *testing.T) {
 		WithScheme(fakeScheme).
 		Build()
 
-	eventRecorder := record.NewFakeRecorder(10)
+	eventRecorder := events.NewFakeRecorder(10)
 
 	denylist := []string{"add"}
 
@@ -194,7 +194,7 @@ func TestGetTemplateResolverOpts_HubSAWithDenylist(t *testing.T) {
 		WithScheme(fakeScheme).
 		Build()
 
-	eventRecorder := record.NewFakeRecorder(10)
+	eventRecorder := events.NewFakeRecorder(10)
 
 	denylist := []string{"add", "add1"}
 	r := &ReplicatedPolicyReconciler{
