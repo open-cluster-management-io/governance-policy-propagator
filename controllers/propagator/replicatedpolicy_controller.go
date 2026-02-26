@@ -288,7 +288,7 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 			return reconcile.Result{}, err
 		}
 
-		r.Recorder.Event(rootPolicy, "Normal", "PolicyPropagation",
+		r.Recorder.Eventf(rootPolicy, nil, "Normal", "PolicyPropagation", "PolicyPropagation",
 			fmt.Sprintf("Policy %s/%s was propagated to cluster %s", rootPolicy.GetNamespace(),
 				rootPolicy.GetName(), decision.Cluster))
 
@@ -315,7 +315,7 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 			return reconcile.Result{}, err
 		}
 
-		r.Recorder.Event(rootPolicy, "Normal", "PolicyPropagation",
+		r.Recorder.Eventf(rootPolicy, nil, "Normal", "PolicyPropagation", "PolicyPropagation",
 			fmt.Sprintf("Policy %s/%s was updated for cluster %s", rootPolicy.GetNamespace(),
 				rootPolicy.GetName(), decision.Cluster))
 

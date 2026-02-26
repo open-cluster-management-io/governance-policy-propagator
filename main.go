@@ -329,7 +329,7 @@ func main() {
 	propagator := propagatorctrl.Propagator{
 		Client:                  mgr.GetClient(),
 		Scheme:                  mgr.GetScheme(),
-		Recorder:                mgr.GetEventRecorderFor(propagatorctrl.ControllerName),
+		Recorder:                mgr.GetEventRecorder(propagatorctrl.ControllerName),
 		RootPolicyLocks:         policiesLock,
 		ReplicatedPolicyUpdates: replicatedPolicyUpdates,
 		TemplateFuncDenylist:    templateFunctionDenyList,
@@ -397,7 +397,7 @@ func main() {
 		Client:        mgr.GetClient(),
 		DynamicClient: dynamicClient,
 		Scheme:        mgr.GetScheme(),
-		Recorder:      mgr.GetEventRecorderFor(automationctrl.ControllerName),
+		Recorder:      mgr.GetEventRecorder(automationctrl.ControllerName),
 	}).SetupWithManager(mgr); err != nil {
 		log.Error(err, "Unable to create the controller", "controller", automationctrl.ControllerName)
 		os.Exit(1)
@@ -406,7 +406,7 @@ func main() {
 	if err = (&policysetctrl.PolicySetReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor(policysetctrl.ControllerName),
+		Recorder: mgr.GetEventRecorder(policysetctrl.ControllerName),
 	}).SetupWithManager(mgr, !disablePlacementRule); err != nil {
 		log.Error(err, "Unable to create controller", "controller", policysetctrl.ControllerName)
 		os.Exit(1)
