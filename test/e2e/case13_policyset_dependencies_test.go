@@ -26,7 +26,7 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 
 	setup := func(ctx SpecContext) {
 		By("Creating the policy, policyset, binding, and rule")
-		utils.Kubectl("apply", "-f", case13PolicyYaml, "-n", testNamespace, "--kubeconfig="+kubeconfigHub)
+		utils.Kubectl(ctx, "apply", "-f", case13PolicyYaml, "-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 		rootplc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, case13PolicyName, testNamespace, true, defaultTimeoutSeconds,
 		)
@@ -56,13 +56,13 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 		}
 		utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 1, true, defaultTimeoutSeconds)
 
-		DeferCleanup(func() {
+		DeferCleanup(func(ctx SpecContext) {
 			By("Running cleanup")
-			utils.Kubectl(
+			utils.Kubectl(ctx,
 				"delete", "-f", case13PolicyYaml, "-n", testNamespace,
 				"--ignore-not-found", "--kubeconfig="+kubeconfigHub,
 			)
-			utils.Kubectl("delete", "-f", case13Set2Yaml, "--ignore-not-found", "--kubeconfig="+kubeconfigHub)
+			utils.Kubectl(ctx, "delete", "-f", case13Set2Yaml, "--ignore-not-found", "--kubeconfig="+kubeconfigHub)
 			time.Sleep(5 * time.Second) // this helps everything get cleaned up completely
 		})
 	}
@@ -100,9 +100,9 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 			return gotdeps
 		}
 
-		It("should replace a PolicySet dependency with each policy in the existing set", func() {
+		It("should replace a PolicySet dependency with each policy in the existing set", func(ctx SpecContext) {
 			By("Updating the root policy to have a PolicySet dependency")
-			_, err := utils.KubectlWithOutput("apply", "-f", case13Test1Yaml,
+			_, err := utils.KubectlWithOutput(ctx, "apply", "-f", case13Test1Yaml,
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -113,9 +113,9 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 			))
 		})
 
-		It("should keep a non-existent PolicySet dependency as-is", func() {
+		It("should keep a non-existent PolicySet dependency as-is", func(ctx SpecContext) {
 			By("Updating the root policy to have a non-existent PolicySet dependency")
-			_, err := utils.KubectlWithOutput("apply", "-f", case13Test2Yaml,
+			_, err := utils.KubectlWithOutput(ctx, "apply", "-f", case13Test2Yaml,
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -127,14 +127,14 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 			))
 		})
 
-		It("should update when the policy set is created", func() {
+		It("should update when the policy set is created", func(ctx SpecContext) {
 			By("Waiting some time, to make sure extra policy reconciles aren't pending")
 			// This helps verify that the policy is correctly watching the PolicySets,
 			// and isn't just coincidently being re-reconiled for some other reason.
 			time.Sleep(5 * time.Second)
 
 			By("Creating the PolicySet that was non-existent")
-			_, err := utils.KubectlWithOutput("apply", "-f", case13Set2Yaml, "--kubeconfig="+kubeconfigHub)
+			_, err := utils.KubectlWithOutput(ctx, "apply", "-f", case13Set2Yaml, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 
 			By("Checking that the replicated policy has the correct list of dependencies")
@@ -146,14 +146,14 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 			))
 		})
 
-		It("should update when a dependency policy set is updated", func() {
+		It("should update when a dependency policy set is updated", func(ctx SpecContext) {
 			By("Waiting some time, to make sure extra policy reconciles aren't pending")
 			// This helps verify that the policy is correctly watching the PolicySets,
 			// and isn't just coincidently being re-reconiled for some other reason.
 			time.Sleep(5 * time.Second)
 
 			By("Updating the PolicySet")
-			_, err := utils.KubectlWithOutput("apply", "-f", case13Set2updateYaml, "--kubeconfig="+kubeconfigHub)
+			_, err := utils.KubectlWithOutput(ctx, "apply", "-f", case13Set2updateYaml, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 
 			By("Checking that the replicated policy has the correct list of dependencies")
@@ -207,9 +207,9 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 			return gotdeps
 		}
 
-		It("should replace a PolicySet extraDependency with each policy in the existing set", func() {
+		It("should replace a PolicySet extraDependency with each policy in the existing set", func(ctx SpecContext) {
 			By("Updating the root policy to have a PolicySet extraDependency")
-			_, err := utils.KubectlWithOutput("apply", "-f", case13Test3Yaml,
+			_, err := utils.KubectlWithOutput(ctx, "apply", "-f", case13Test3Yaml,
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -220,9 +220,9 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 			))
 		})
 
-		It("should keep a non-existent PolicySet extraDependency as-is", func() {
+		It("should keep a non-existent PolicySet extraDependency as-is", func(ctx SpecContext) {
 			By("Updating the root policy to have a non-existent PolicySet dependency")
-			_, err := utils.KubectlWithOutput("apply", "-f", case13Test4Yaml,
+			_, err := utils.KubectlWithOutput(ctx, "apply", "-f", case13Test4Yaml,
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -234,14 +234,14 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 			))
 		})
 
-		It("should update when the policy set is created", func() {
+		It("should update when the policy set is created", func(ctx SpecContext) {
 			By("Waiting some time, to make sure extra policy reconciles aren't pending")
 			// This helps verify that the policy is correctly watching the PolicySets,
 			// and isn't just coincidently being re-reconiled for some other reason.
 			time.Sleep(5 * time.Second)
 
 			By("Creating the PolicySet that was non-existent")
-			_, err := utils.KubectlWithOutput("apply", "-f", case13Set2Yaml, "--kubeconfig="+kubeconfigHub)
+			_, err := utils.KubectlWithOutput(ctx, "apply", "-f", case13Set2Yaml, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 
 			By("Checking that the replicated policy has the correct list of extraDependencies")
@@ -253,14 +253,14 @@ var _ = Describe("Test replacement of policysets in dependencies", Ordered, func
 			))
 		})
 
-		It("should update when a dependency policy set is updated", func() {
+		It("should update when a dependency policy set is updated", func(ctx SpecContext) {
 			By("Waiting some time, to make sure extra policy reconciles aren't pending")
 			// This helps verify that the policy is correctly watching the PolicySets,
 			// and isn't just coincidently being re-reconiled for some other reason.
 			time.Sleep(5 * time.Second)
 
 			By("Updating the PolicySet")
-			_, err := utils.KubectlWithOutput("apply", "-f", case13Set2updateYaml, "--kubeconfig="+kubeconfigHub)
+			_, err := utils.KubectlWithOutput(ctx, "apply", "-f", case13Set2updateYaml, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 
 			By("Checking that the replicated policy has the correct list of dependencies")

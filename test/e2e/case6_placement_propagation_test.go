@@ -20,9 +20,9 @@ var _ = Describe("Test policy propagation", func() {
 	)
 
 	Describe("Create policy/pb/plc in ns:"+testNamespace+" and then update pb/plc", Ordered, func() {
-		BeforeAll(func() {
+		BeforeAll(func(ctx SpecContext) {
 			By("Creating " + case6PolicyYaml)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case6PolicyYaml,
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			plc := utils.GetWithTimeout(
@@ -348,7 +348,7 @@ var _ = Describe("Test policy propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 		})
-		It("should remove policy from ns managed1 and managed2", func() {
+		It("should remove policy from ns managed1 and managed2", func(ctx SpecContext) {
 			By("Deleting decision for test-policy-plr")
 			utils.GetWithTimeout(
 				clientHubDynamic,
@@ -359,7 +359,7 @@ var _ = Describe("Test policy propagation", func() {
 				defaultTimeoutSeconds,
 			)
 			// remove the placementdecision will remove the policy from all managed clusters
-			utils.Kubectl("delete",
+			utils.Kubectl(ctx, "delete",
 				"placementdecision", case6PolicyName+"-plr-1",
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			opt := metav1.ListOptions{
@@ -367,8 +367,8 @@ var _ = Describe("Test policy propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
 		})
-		AfterAll(func() {
-			utils.Kubectl("delete",
+		AfterAll(func(ctx SpecContext) {
+			utils.Kubectl(ctx, "delete",
 				"-f", case6PolicyYaml,
 				"-n", testNamespace,
 				"--ignore-not-found",
@@ -379,9 +379,9 @@ var _ = Describe("Test policy propagation", func() {
 	})
 
 	Describe("Create policy/pb/plc in ns:"+testNamespace+" and then update policy", Ordered, func() {
-		BeforeAll(func() {
+		BeforeAll(func(ctx SpecContext) {
 			By("Creating " + case6PolicyYaml)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case6PolicyYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -457,9 +457,9 @@ var _ = Describe("Test policy propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
 		})
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case6PolicyYaml)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case6PolicyYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -497,9 +497,9 @@ var _ = Describe("Test policy propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 1, true, defaultTimeoutSeconds)
 		})
-		It("should update test-policy to a different policy template", func() {
+		It("should update test-policy to a different policy template", func(ctx SpecContext) {
 			By("Creating ../resources/case6_placement_propagation/case6-test-policy2.yaml")
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", "../resources/case6_placement_propagation/case6-test-policy2.yaml",
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			rootPlc := utils.GetWithTimeout(
@@ -520,8 +520,8 @@ var _ = Describe("Test policy propagation", func() {
 				return replicatedPlc.Object["spec"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
 		})
-		AfterAll(func() {
-			utils.Kubectl("delete",
+		AfterAll(func(ctx SpecContext) {
+			utils.Kubectl(ctx, "delete",
 				"-f", "../resources/case6_placement_propagation/case6-test-policy2.yaml",
 				"-n", testNamespace, "--ignore-not-found", "--kubeconfig="+kubeconfigHub)
 			opt := metav1.ListOptions{}
@@ -532,9 +532,9 @@ var _ = Describe("Test policy propagation", func() {
 	Describe("Handling propagation to terminating clusters", Ordered, func() {
 		var finalizerRemoved bool
 
-		BeforeAll(func() {
+		BeforeAll(func(ctx SpecContext) {
 			By("Creating " + case6PolicyYaml)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case6PolicyYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -543,15 +543,15 @@ var _ = Describe("Test policy propagation", func() {
 			)
 			Expect(plc).NotTo(BeNil())
 		})
-		It("sets up the terminating cluster", func() {
+		It("sets up the terminating cluster", func(ctx SpecContext) {
 			By("Creating the namespace and cluster")
 			// Note: the namespace is initially created with a finalizer
-			_, err := utils.KubectlWithOutput("apply", "-f",
+			_, err := utils.KubectlWithOutput(ctx, "apply", "-f",
 				"../resources/case6_placement_propagation/extra-cluster.yaml", "--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 
 			By("Deleting the namespace")
-			out, err := utils.KubectlWithOutput("delete", "namespace", "test6-extra",
+			out, err := utils.KubectlWithOutput(ctx, "delete", "namespace", "test6-extra",
 				"--timeout=2s", "--kubeconfig="+kubeconfigHub)
 			Expect(err).To(HaveOccurred())
 			Expect(out).To(MatchRegexp("waiting for the condition"))
@@ -578,9 +578,9 @@ var _ = Describe("Test policy propagation", func() {
 					"test6-extra", false, defaultTimeoutSeconds)
 			}, defaultTimeoutSeconds, 1).Should(BeNil())
 		})
-		It("should succeed when the cluster namespace is re-created", func() {
+		It("should succeed when the cluster namespace is re-created", func(ctx SpecContext) {
 			By("Removing the finalizer from the namespace")
-			utils.Kubectl("patch", "namespace", "test6-extra", "--type=json",
+			utils.Kubectl(ctx, "patch", "namespace", "test6-extra", "--type=json",
 				`-p=[{"op":"remove","path":"/metadata/finalizers"}]`, "--kubeconfig="+kubeconfigHub)
 
 			finalizerRemoved = true
@@ -591,15 +591,15 @@ var _ = Describe("Test policy propagation", func() {
 			Expect(ns).To(BeNil())
 
 			By("Recreating the namespace")
-			utils.Kubectl("create", "namespace", "test6-extra", "--kubeconfig="+kubeconfigHub)
+			utils.Kubectl(ctx, "create", "namespace", "test6-extra", "--kubeconfig="+kubeconfigHub)
 
 			By("Verifying that the policy is now replicated")
 			pol := utils.GetWithTimeout(clientHubDynamic, gvrPolicy, testNamespace+"."+case6PolicyName,
 				"test6-extra", true, defaultTimeoutSeconds)
 			Expect(pol).NotTo(BeNil())
 		})
-		AfterAll(func() {
-			utils.Kubectl("delete",
+		AfterAll(func(ctx SpecContext) {
+			utils.Kubectl(ctx, "delete",
 				"-f", case6PolicyYaml,
 				"-n", testNamespace,
 				"--ignore-not-found",
@@ -608,14 +608,14 @@ var _ = Describe("Test policy propagation", func() {
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 10)
 
 			if !finalizerRemoved {
-				utils.Kubectl("patch", "namespace", "test6-extra", "--type=json",
+				utils.Kubectl(ctx, "patch", "namespace", "test6-extra", "--type=json",
 					`-p=[{"op":"remove","path":"/metadata/finalizers"}]`, "--kubeconfig="+kubeconfigHub)
 			}
 
-			utils.Kubectl("delete", "namespace", "test6-extra", "--ignore-not-found", "--kubeconfig="+kubeconfigHub)
-			utils.Kubectl(
-				"delete", "managedcluster", "test6-extra", "--ignore-not-found", "--kubeconfig="+kubeconfigHub,
-			)
+			utils.Kubectl(ctx, "delete", "namespace", "test6-extra", "--ignore-not-found",
+				"--kubeconfig="+kubeconfigHub)
+			utils.Kubectl(ctx, "delete", "managedcluster", "test6-extra", "--ignore-not-found",
+				"--kubeconfig="+kubeconfigHub)
 		})
 	})
 })

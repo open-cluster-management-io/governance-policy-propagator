@@ -143,152 +143,6 @@ func (t *TemplateResolvers) WaitForShutdown() {
 	t.wg.Wait()
 }
 
-// initResolver will instantiate a DynamicWatcher with a token from the input service account and then instantiate a
-// TemplateResolver with that DynamicWatcher. Tokens will be automatically refreshed.
-func (t *TemplateResolvers) initResolver(
-	ctx context.Context,
-	serviceAccount types.NamespacedName,
-) (*templateResolverWithCancel, error) {
-	resolverCtx, resolverCtxCancel := context.WithCancel(ctx)
-
-	// Refresh the token anywhere between 1h50m and 1h55m after issuance.
-	tokenConfig := TokenRefreshConfig{
-		ExpirationSeconds: 7200, // 2 hours,
-		MinRefreshMins:    5,
-		MaxRefreshMins:    10,
-		OnFailedRefresh: func(originalErr error) {
-			if err := t.onBackgroundError(ctx, serviceAccount); err != nil {
-				log.Error(err, "Failed to handle the token refresh unexpectedly stopping", "originalErr", originalErr)
-			}
-		},
-	}
-
-	// Use BearerTokenFile since it allows the token to be renewed without restarting the template resolver.
-	tokenFile, err := GetToken(resolverCtx, t.wg, t.mgrClient, serviceAccount, tokenConfig)
-	if err != nil {
-		// Make this error identifiable so that up in the call stack, a watch can be add to the service account
-		// to trigger a reconcile when the service account becomes available.
-		if k8serrors.IsNotFound(err) {
-			err = errors.Join(ErrSAMissing, err)
-		}
-
-		resolverCtxCancel()
-
-		return nil, err
-	}
-
-	saConfig := getUserKubeConfig(t.config, tokenFile)
-
-	dynamicWatcher, err := k8sdepwatches.New(
-		saConfig,
-		t.dynamicWatcherReconciler,
-		&k8sdepwatches.Options{
-			DisableInitialReconcile: true,
-			EnableCache:             true,
-		},
-	)
-	if err != nil {
-		resolverCtxCancel()
-
-		return nil, fmt.Errorf(
-			"failed to instantiate the template resolver for the service account %s: %w", serviceAccount, err,
-		)
-	}
-
-	rv := templateResolverWithCancel{
-		cancel:         resolverCtxCancel,
-		referenceCount: &atomic.Uint32{},
-	}
-
-	t.wg.Add(1)
-
-	go func() {
-		err := dynamicWatcher.Start(resolverCtx)
-
-		// Start is blocking so regardless of the reason it stopped, canceled must be set to true.
-		rv.canceled.Store(true)
-
-		if err != nil {
-			log.Error(err, "The DynamicWatcher for the service account unexpectedly stopped")
-
-			if err := t.onBackgroundError(ctx, serviceAccount); err != nil {
-				log.Error(err, "Failed to handle the DynamicWatcher unexpectedly stopping")
-			}
-		}
-
-		resolverCtxCancel()
-		t.wg.Done()
-	}()
-
-	<-dynamicWatcher.Started()
-
-	templateResolver, err := templates.NewResolverWithDynamicWatcher(dynamicWatcher, templates.Config{
-		AdditionalIndentation: 8,
-		DisabledFunctions:     []string{},
-		SkipBatchManagement:   true,
-		StartDelim:            TemplateStartDelim,
-		StopDelim:             TemplateStopDelim,
-	})
-	if err != nil {
-		log.Error(err, "Failed to instantiate a template resolver for the service account")
-
-		resolverCtxCancel()
-
-		return nil, err
-	}
-
-	rv.resolver = templateResolver
-
-	return &rv, nil
-}
-
-// onBackgroundError is called when a goroutine encounters an unrecoverable error. This will clean up the template
-// resolver and trigger reconciles on all replicated policies that leverage this template resolver.
-func (t *TemplateResolvers) onBackgroundError(ctx context.Context, serviceAccount types.NamespacedName) error {
-	replicatedPolicies := policiesv1.PolicyList{}
-
-	t.globalLock.Lock()
-
-	if t.TemplateResolvers[serviceAccount] != nil {
-		t.TemplateResolvers[serviceAccount].cancel()
-		t.TemplateResolvers[serviceAccount].canceled.Store(true)
-		t.TemplateResolvers[serviceAccount].resolver = nil
-	}
-
-	t.globalLock.Unlock()
-
-	// This is pulled from the controller-runtime cache which is why client-side filtering with filterFunc is ok.
-	err := t.mgrClient.List(ctx, &replicatedPolicies, &client.ListOptions{LabelSelector: replicatedPlcLabelSelector})
-	if err != nil {
-		return err
-	}
-
-	for i := range replicatedPolicies.Items {
-		replicatedPolicy := replicatedPolicies.Items[i]
-
-		if replicatedPolicy.Spec.HubTemplateOptions == nil {
-			continue
-		}
-
-		if replicatedPolicy.Spec.HubTemplateOptions.ServiceAccountName != serviceAccount.Name {
-			continue
-		}
-
-		_, rootNS, err := common.ParseRootPolicyLabel(replicatedPolicy.Name)
-		if err != nil {
-			continue
-		}
-
-		if rootNS != serviceAccount.Namespace {
-			continue
-		}
-
-		t.replicatedPolicyUpdates <- event.GenericEvent{Object: &replicatedPolicy}
-	}
-
-	return nil
-}
-
 // RemoveReplicatedPolicy will clean up watches on the current template resolver (service account used in the last call
 // to GetResolver) and if this was the last replicated policy using this template resolver, the template resolver will
 // be cleaned up.
@@ -498,13 +352,13 @@ func GetToken(
 	}()
 
 	if _, writeErr = tokenFile.WriteString(tokenReq.Status.Token); writeErr != nil {
-		log.Error(err, "Failed to write the service account token file")
+		log.Error(writeErr, "Failed to write the service account token file")
 
 		return "", writeErr
 	}
 
 	if writeErr = tokenFile.Close(); writeErr != nil {
-		log.Error(err, "Failed to close the service account token file")
+		log.Error(writeErr, "Failed to close the service account token file")
 
 		if removeErr := os.Remove(tokenFilePath); removeErr != nil {
 			log.Error(removeErr, "Failed to clean up the service account token file")
@@ -600,10 +454,10 @@ func getUserKubeConfig(config *rest.Config, tokenFile string) *rest.Config {
 		Host:    config.Host,
 		APIPath: config.APIPath,
 		TLSClientConfig: rest.TLSClientConfig{
-			CAFile:     config.TLSClientConfig.CAFile,
-			CAData:     config.TLSClientConfig.CAData,
-			ServerName: config.TLSClientConfig.ServerName,
-			Insecure:   config.TLSClientConfig.Insecure,
+			CAFile:     config.CAFile,
+			CAData:     config.CAData,
+			ServerName: config.ServerName,
+			Insecure:   config.Insecure,
 		},
 	}
 
@@ -637,6 +491,152 @@ func setTemplateError(policyT *policiesv1.PolicyTemplate, tplErr error) error {
 	}
 
 	policyT.ObjectDefinition.Raw = updatedPolicyT
+
+	return nil
+}
+
+// initResolver will instantiate a DynamicWatcher with a token from the input service account and then instantiate a
+// TemplateResolver with that DynamicWatcher. Tokens will be automatically refreshed.
+func (t *TemplateResolvers) initResolver(
+	ctx context.Context,
+	serviceAccount types.NamespacedName,
+) (*templateResolverWithCancel, error) {
+	resolverCtx, resolverCtxCancel := context.WithCancel(ctx)
+
+	// Refresh the token anywhere between 1h50m and 1h55m after issuance.
+	tokenConfig := TokenRefreshConfig{
+		ExpirationSeconds: 7200, // 2 hours,
+		MinRefreshMins:    5,
+		MaxRefreshMins:    10,
+		OnFailedRefresh: func(originalErr error) {
+			if err := t.onBackgroundError(ctx, serviceAccount); err != nil {
+				log.Error(err, "Failed to handle the token refresh unexpectedly stopping", "originalErr", originalErr)
+			}
+		},
+	}
+
+	// Use BearerTokenFile since it allows the token to be renewed without restarting the template resolver.
+	tokenFile, err := GetToken(resolverCtx, t.wg, t.mgrClient, serviceAccount, tokenConfig)
+	if err != nil {
+		// Make this error identifiable so that up in the call stack, a watch can be add to the service account
+		// to trigger a reconcile when the service account becomes available.
+		if k8serrors.IsNotFound(err) {
+			err = errors.Join(ErrSAMissing, err)
+		}
+
+		resolverCtxCancel()
+
+		return nil, err
+	}
+
+	saConfig := getUserKubeConfig(t.config, tokenFile)
+
+	dynamicWatcher, err := k8sdepwatches.New(
+		saConfig,
+		t.dynamicWatcherReconciler,
+		&k8sdepwatches.Options{
+			DisableInitialReconcile: true,
+			EnableCache:             true,
+		},
+	)
+	if err != nil {
+		resolverCtxCancel()
+
+		return nil, fmt.Errorf(
+			"failed to instantiate the template resolver for the service account %s: %w", serviceAccount, err,
+		)
+	}
+
+	rv := templateResolverWithCancel{
+		cancel:         resolverCtxCancel,
+		referenceCount: &atomic.Uint32{},
+	}
+
+	t.wg.Add(1)
+
+	go func() {
+		err := dynamicWatcher.Start(resolverCtx)
+
+		// Start is blocking so regardless of the reason it stopped, canceled must be set to true.
+		rv.canceled.Store(true)
+
+		if err != nil {
+			log.Error(err, "The DynamicWatcher for the service account unexpectedly stopped")
+
+			if err := t.onBackgroundError(ctx, serviceAccount); err != nil {
+				log.Error(err, "Failed to handle the DynamicWatcher unexpectedly stopping")
+			}
+		}
+
+		resolverCtxCancel()
+		t.wg.Done()
+	}()
+
+	<-dynamicWatcher.Started()
+
+	templateResolver, err := templates.NewResolverWithDynamicWatcher(dynamicWatcher, templates.Config{
+		AdditionalIndentation: 8,
+		DisabledFunctions:     []string{},
+		SkipBatchManagement:   true,
+		StartDelim:            TemplateStartDelim,
+		StopDelim:             TemplateStopDelim,
+	})
+	if err != nil {
+		log.Error(err, "Failed to instantiate a template resolver for the service account")
+
+		resolverCtxCancel()
+
+		return nil, err
+	}
+
+	rv.resolver = templateResolver
+
+	return &rv, nil
+}
+
+// onBackgroundError is called when a goroutine encounters an unrecoverable error. This will clean up the template
+// resolver and trigger reconciles on all replicated policies that leverage this template resolver.
+func (t *TemplateResolvers) onBackgroundError(ctx context.Context, serviceAccount types.NamespacedName) error {
+	replicatedPolicies := policiesv1.PolicyList{}
+
+	t.globalLock.Lock()
+
+	if t.TemplateResolvers[serviceAccount] != nil {
+		t.TemplateResolvers[serviceAccount].cancel()
+		t.TemplateResolvers[serviceAccount].canceled.Store(true)
+		t.TemplateResolvers[serviceAccount].resolver = nil
+	}
+
+	t.globalLock.Unlock()
+
+	// This is pulled from the controller-runtime cache which is why client-side filtering with filterFunc is ok.
+	err := t.mgrClient.List(ctx, &replicatedPolicies, &client.ListOptions{LabelSelector: replicatedPlcLabelSelector})
+	if err != nil {
+		return err
+	}
+
+	for i := range replicatedPolicies.Items {
+		replicatedPolicy := replicatedPolicies.Items[i]
+
+		if replicatedPolicy.Spec.HubTemplateOptions == nil {
+			continue
+		}
+
+		if replicatedPolicy.Spec.HubTemplateOptions.ServiceAccountName != serviceAccount.Name {
+			continue
+		}
+
+		_, rootNS, err := common.ParseRootPolicyLabel(replicatedPolicy.Name)
+		if err != nil {
+			continue
+		}
+
+		if rootNS != serviceAccount.Namespace {
+			continue
+		}
+
+		t.replicatedPolicyUpdates <- event.GenericEvent{Object: &replicatedPolicy}
+	}
 
 	return nil
 }

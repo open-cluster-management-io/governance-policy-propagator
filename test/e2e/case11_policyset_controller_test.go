@@ -37,7 +37,7 @@ var _ = Describe("Test policyset controller status updates", func() {
 	Describe("Create policy, policyset, and placement in ns:"+testNamespace, func() {
 		It("should create and process policy and policyset", func(ctx SpecContext) {
 			By("Creating " + case11PolicyYaml)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case11PolicyYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -98,9 +98,9 @@ var _ = Describe("Test policyset controller status updates", func() {
 				return rootPlcSet.Object["status"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
 		})
-		It("should add a status entry in policyset for a policy that does not exist", func() {
+		It("should add a status entry in policyset for a policy that does not exist", func(ctx SpecContext) {
 			By("Creating " + case11PolicySetPatchYaml)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case11PolicySetPatchYaml,
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			plcSet := utils.GetWithTimeout(
@@ -116,12 +116,8 @@ var _ = Describe("Test policyset controller status updates", func() {
 
 				return rootPlcSet.Object["status"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
-			utils.Kubectl(
-				"apply",
-				"-f",
-				"../resources/case11_policyset_controller/case11-reset-plcset.yaml", "-n",
-				testNamespace, "--kubeconfig="+kubeconfigHub,
-			)
+			utils.Kubectl(ctx, "apply", "-f", "../resources/case11_policyset_controller/case11-reset-plcset.yaml",
+				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 		})
 		It("should update to compliant if all its child policy violations have been remediated", func(ctx SpecContext) {
 			opt := metav1.ListOptions{
@@ -191,7 +187,7 @@ var _ = Describe("Test policyset controller status updates", func() {
 		})
 		It("should update status properly if a policy is disabled", func(ctx SpecContext) {
 			By("Creating " + case11DisablePolicyYaml)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case11DisablePolicyYaml,
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			plc := utils.GetWithTimeout(
@@ -210,7 +206,7 @@ var _ = Describe("Test policyset controller status updates", func() {
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
 
 			By("Creating " + case11PolicyCompliantYaml)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case11PolicyCompliantYaml,
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			plc = utils.GetWithTimeout(
@@ -218,7 +214,7 @@ var _ = Describe("Test policyset controller status updates", func() {
 			)
 			Expect(plc).NotTo(BeNil())
 
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case11PolicySetPatch2Yaml,
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			plcSet := utils.GetWithTimeout(
@@ -277,10 +273,10 @@ var _ = Describe("Test policyset controller status updates", func() {
 		})
 		It("should scope status to policyset placement", func(ctx SpecContext) {
 			By("Creating " + case11PolicyManaged2Yaml)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case11PolicySetManaged1Yaml,
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case11PolicyManaged2Yaml,
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			plc := utils.GetWithTimeout(
@@ -358,9 +354,9 @@ var _ = Describe("Test policyset controller status updates", func() {
 				return rootPlcSet.Object["status"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
 		})
-		It("should have no status if no policies are contained in the policySet", func() {
+		It("should have no status if no policies are contained in the policySet", func(ctx SpecContext) {
 			By("Creating " + case11PolicySetEmpty)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case11PolicySetEmptyYaml,
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			plcSet := utils.GetWithTimeout(
@@ -376,43 +372,43 @@ var _ = Describe("Test policyset controller status updates", func() {
 				return rootPlcSet.Object["status"]
 			}, defaultTimeoutSeconds, 1).Should(BeNil())
 		})
-		It("must have combined statusMessage when disabled/deleted policies are contained in the policySet", func() {
-			By("Creating " + case11PolicySetMultiStatus)
-			utils.Kubectl("apply",
-				"-f", case11PolicySetMultiStatusYaml,
-				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
-			plcSet := utils.GetWithTimeout(
-				clientHubDynamic, gvrPolicySet, case11PolicySetMultiStatus, testNamespace, true, defaultTimeoutSeconds,
-			)
-			Expect(plcSet).NotTo(BeNil())
-			By("Checking the status of policy set")
-			yamlPlc := utils.ParseYaml("../resources/case11_policyset_controller/case11-statuscheck-7.yaml")
-			Eventually(func() interface{} {
-				rootPlcSet := utils.GetWithTimeout(
-					clientHubDynamic, gvrPolicySet, case11PolicySetMultiStatus,
-					testNamespace, true, defaultTimeoutSeconds,
-				)
+		It("must have combined statusMessage when disabled/deleted policies are contained in the policySet",
+			func(ctx SpecContext) {
+				By("Creating " + case11PolicySetMultiStatus)
+				utils.Kubectl(ctx, "apply",
+					"-f", case11PolicySetMultiStatusYaml,
+					"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
+				plcSet := utils.GetWithTimeout(clientHubDynamic, gvrPolicySet, case11PolicySetMultiStatus,
+					testNamespace, true, defaultTimeoutSeconds)
+				Expect(plcSet).NotTo(BeNil())
+				By("Checking the status of policy set")
+				yamlPlc := utils.ParseYaml("../resources/case11_policyset_controller/case11-statuscheck-7.yaml")
+				Eventually(func() interface{} {
+					rootPlcSet := utils.GetWithTimeout(
+						clientHubDynamic, gvrPolicySet, case11PolicySetMultiStatus,
+						testNamespace, true, defaultTimeoutSeconds,
+					)
 
-				return rootPlcSet.Object["status"]
-			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
-		})
-		It("should clean up", func() {
-			utils.Kubectl("delete",
+					return rootPlcSet.Object["status"]
+				}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
+			})
+		It("should clean up", func(ctx SpecContext) {
+			utils.Kubectl(ctx, "delete",
 				"-f", "../resources/case11_policyset_controller/case11-test-policy.yaml",
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
-			utils.Kubectl("delete",
+			utils.Kubectl(ctx, "delete",
 				"-f", "../resources/case11_policyset_controller/case11-empty-plcset.yaml",
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
-			utils.Kubectl("delete",
+			utils.Kubectl(ctx, "delete",
 				"-f", case11PolicySetManaged1Yaml,
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
-			utils.Kubectl("delete",
+			utils.Kubectl(ctx, "delete",
 				"-f", case11PolicyManaged2Yaml,
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
-			utils.Kubectl("delete",
+			utils.Kubectl(ctx, "delete",
 				"-f", case11PolicyCompliantYaml,
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
-			utils.Kubectl("delete",
+			utils.Kubectl(ctx, "delete",
 				"-f", case11PolicySetMultiStatusYaml,
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			opt := metav1.ListOptions{}

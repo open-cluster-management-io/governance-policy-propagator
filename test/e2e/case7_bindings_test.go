@@ -24,9 +24,9 @@ var _ = Describe("Test policy propagation", func() {
 	)
 
 	Describe("Create policy/pb/plc in ns:"+testNamespace, Ordered, func() {
-		BeforeAll(func() {
+		BeforeAll(func(ctx SpecContext) {
 			By("Creating " + case7PolicyYaml)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case7PolicyYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -35,7 +35,7 @@ var _ = Describe("Test policy propagation", func() {
 			)
 			Expect(plc).NotTo(BeNil())
 			By("Creating " + case7BindingYaml1)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case7BindingYaml1,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -49,7 +49,7 @@ var _ = Describe("Test policy propagation", func() {
 			)
 			Expect(binding).NotTo(BeNil())
 			By("Creating " + case7BindingYaml2)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case7BindingYaml2,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -63,7 +63,7 @@ var _ = Describe("Test policy propagation", func() {
 			)
 			Expect(binding).NotTo(BeNil())
 			By("Creating " + case7BindingYaml3)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case7BindingYaml3,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -77,7 +77,7 @@ var _ = Describe("Test policy propagation", func() {
 			)
 			Expect(binding).NotTo(BeNil())
 			By("Creating " + case7BindingYaml4)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case7BindingYaml4,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -217,31 +217,31 @@ var _ = Describe("Test policy propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 		})
-		AfterAll(func() {
+		AfterAll(func(ctx SpecContext) {
 			By("Clean up")
-			utils.Kubectl("delete",
+			utils.Kubectl(ctx, "delete",
 				"-f", case7PolicyYaml,
 				"-n", testNamespace,
 				"--ignore-not-found",
 				"--kubeconfig="+kubeconfigHub)
 			opt := metav1.ListOptions{}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 10)
-			utils.Kubectl("delete",
+			utils.Kubectl(ctx, "delete",
 				"-f", case7BindingYaml1,
 				"-n", testNamespace,
 				"--ignore-not-found",
 				"--kubeconfig="+kubeconfigHub)
-			utils.Kubectl("delete",
+			utils.Kubectl(ctx, "delete",
 				"-f", case7BindingYaml2,
 				"-n", testNamespace,
 				"--ignore-not-found",
 				"--kubeconfig="+kubeconfigHub)
-			utils.Kubectl("delete",
+			utils.Kubectl(ctx, "delete",
 				"-f", case7BindingYaml3,
 				"-n", testNamespace,
 				"--ignore-not-found",
 				"--kubeconfig="+kubeconfigHub)
-			utils.Kubectl("delete",
+			utils.Kubectl(ctx, "delete",
 				"-f", case7BindingYaml4,
 				"-n", testNamespace,
 				"--ignore-not-found",

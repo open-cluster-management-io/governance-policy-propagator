@@ -24,9 +24,9 @@ var _ = Describe("Test root policy metrics", Ordered, func() {
 	Describe("Create policy, placement and referenced resource in ns:"+testNamespace, func() {
 		prePolicyDuration := -1
 
-		It("should record root policy duration before the policy is created", func() {
-			durationMetric := utils.GetMetrics(
-				"ocm_handle_root_policy_duration_seconds_bucket_bucket", fmt.Sprintf(`le=\"%d\"`, 10))
+		It("should record root policy duration before the policy is created", func(ctx SpecContext) {
+			durationMetric := utils.GetMetrics(ctx, "ocm_handle_root_policy_duration_seconds_bucket_bucket",
+				fmt.Sprintf(`le=\"%d\"`, 10))
 			Expect(durationMetric).ShouldNot(BeEmpty())
 
 			numEvals, err := strconv.Atoi(durationMetric[0])
@@ -36,9 +36,9 @@ var _ = Describe("Test root policy metrics", Ordered, func() {
 			Expect(prePolicyDuration).Should(BeNumerically(">", -1))
 		})
 
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + policyYaml)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", policyYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -80,11 +80,11 @@ var _ = Describe("Test root policy metrics", Ordered, func() {
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
 		})
 
-		It("should update root policy duration after the policy is created", func() {
+		It("should update root policy duration after the policy is created", func(ctx SpecContext) {
 			By("Checking metric bucket for root policy duration (10 seconds or less)")
 			Eventually(func() interface{} {
-				metric := utils.GetMetrics(
-					"ocm_handle_root_policy_duration_seconds_bucket_bucket", fmt.Sprintf(`le=\"%d\"`, 10))
+				metric := utils.GetMetrics(ctx, "ocm_handle_root_policy_duration_seconds_bucket_bucket",
+					fmt.Sprintf(`le=\"%d\"`, 10))
 				if len(metric) == 0 {
 					return false
 				}
@@ -97,15 +97,15 @@ var _ = Describe("Test root policy metrics", Ordered, func() {
 			}, defaultTimeoutSeconds, 1).Should(BeTrue())
 		})
 
-		It("should correctly report root policy hub template watches when propagated", func() {
+		It("should correctly report root policy hub template watches when propagated", func(ctx SpecContext) {
 			By("Checking metric endpoint for root policy hub template watches")
 			Eventually(func() interface{} {
-				return utils.GetMetrics("hub_templates_active_watches", "\"[0-9]\"")
+				return utils.GetMetrics(ctx, "hub_templates_active_watches", "\"[0-9]\"")
 			}, defaultTimeoutSeconds, 1).Should(Equal([]string{"3"}))
 		})
 
-		cleanup := func() {
-			utils.Kubectl("delete",
+		cleanup := func(ctx SpecContext) {
+			utils.Kubectl(ctx, "delete",
 				"-f", policyYaml,
 				"-n", testNamespace,
 				"--ignore-not-found",
@@ -116,10 +116,10 @@ var _ = Describe("Test root policy metrics", Ordered, func() {
 
 		It("should clean up", cleanup)
 
-		It("should report root policy 0 hub template watches after clean up", func() {
+		It("should report root policy 0 hub template watches after clean up", func(ctx SpecContext) {
 			By("Checking metric endpoint for root policy hub template watches")
 			Eventually(func() interface{} {
-				return utils.GetMetrics("hub_templates_active_watches", "\"[0-9]\"")
+				return utils.GetMetrics(ctx, "hub_templates_active_watches", "\"[0-9]\"")
 			}, defaultTimeoutSeconds, 1).Should(Equal([]string{"0"}))
 		})
 

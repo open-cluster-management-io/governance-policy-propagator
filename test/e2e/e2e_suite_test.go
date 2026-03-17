@@ -135,9 +135,9 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	Expect(namespaces.Get(ctx, testNamespace, metav1.GetOptions{})).NotTo(BeNil())
 })
 
-var _ = AfterSuite(func() {
+var _ = AfterSuite(func(ctx SpecContext) {
 	By("Collecting workqueue_adds_total metrics")
-	wqAddsLines, err := utils.MetricsLines("workqueue_adds_total")
+	wqAddsLines, err := utils.MetricsLines(ctx, "workqueue_adds_total")
 	if err != nil {
 		GinkgoWriter.Println("Error getting workqueue_adds_total metrics: ", err)
 	}
@@ -145,7 +145,7 @@ var _ = AfterSuite(func() {
 	GinkgoWriter.Println(wqAddsLines)
 
 	By("Collecting controller_runtime_reconcile_total metrics")
-	ctrlReconcileTotalLines, err := utils.MetricsLines("controller_runtime_reconcile_total")
+	ctrlReconcileTotalLines, err := utils.MetricsLines(ctx, "controller_runtime_reconcile_total")
 	if err != nil {
 		GinkgoWriter.Println("Error getting controller_runtime_reconcile_total metrics: ", err)
 	}
@@ -153,7 +153,7 @@ var _ = AfterSuite(func() {
 	GinkgoWriter.Println(ctrlReconcileTotalLines)
 
 	By("Collecting controller_runtime_reconcile_time_seconds_sum metrics")
-	ctrlReconcileTimeLines, err := utils.MetricsLines("controller_runtime_reconcile_time_seconds_sum")
+	ctrlReconcileTimeLines, err := utils.MetricsLines(ctx, "controller_runtime_reconcile_time_seconds_sum")
 	if err != nil {
 		GinkgoWriter.Println("Error getting controller_runtime_reconcile_time_seconds_sum metrics: ", err)
 	}

@@ -22,7 +22,7 @@ var policyAuomtationPredicateFuncs = predicate.Funcs{
 			return false
 		}
 
-		if policyAutomationNew.ObjectMeta.Annotations["policy.open-cluster-management.io/rerun"] == "true" {
+		if policyAutomationNew.Annotations["policy.open-cluster-management.io/rerun"] == "true" {
 			return true
 		}
 

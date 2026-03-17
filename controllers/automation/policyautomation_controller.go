@@ -66,184 +66,6 @@ type PolicyAutomationReconciler struct {
 	counter       int
 }
 
-// setOwnerReferences will set the input policy as the sole owner of the input policyAutomation and make the update
-// with the API. In practice, this will cause the input policyAutomation to be deleted when the policy is deleted.
-func (r *PolicyAutomationReconciler) setOwnerReferences(
-	ctx context.Context, log logr.Logger,
-	policyAutomation *policyv1beta1.PolicyAutomation,
-	policy *policyv1.Policy,
-) error {
-	var policyOwnerRefFound bool
-
-	for _, ownerRef := range policyAutomation.GetOwnerReferences() {
-		if ownerRef.UID == policy.UID {
-			policyOwnerRefFound = true
-
-			break
-		}
-	}
-
-	if !policyOwnerRefFound {
-		log.V(3).Info("Setting the owner reference on the PolicyAutomation " + policyAutomation.GetName())
-		policyAutomation.SetOwnerReferences([]metav1.OwnerReference{
-			*metav1.NewControllerRef(policy, policy.GroupVersionKind()),
-		})
-
-		return r.Update(ctx, policyAutomation)
-	}
-
-	return nil
-}
-
-// getTargetListMap will convert slice targetList to map for search efficiency
-func getTargetListMap(targetList []string) map[string]bool {
-	targetListMap := map[string]bool{}
-	for _, target := range targetList {
-		targetListMap[target] = true
-	}
-
-	return targetListMap
-}
-
-// getClusterDNSName will get the Hub cluster DNS name if the Hub is an OpenShift cluster.
-func (r *PolicyAutomationReconciler) getClusterDNSName(ctx context.Context, log logr.Logger) (string, error) {
-	dnsCluster, err := r.DynamicClient.Resource(dnsGVR).Get(ctx, "cluster", metav1.GetOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// This is a debug log to not spam the logs when the Hub is installed on a Kubernetes distribution other
-			// than OpenShift.
-			log.V(2).Info("The Hub cluster DNS name couldn't be determined")
-
-			return "", nil
-		}
-
-		return "", err
-	}
-
-	dnsName, _, _ := unstructured.NestedString(dnsCluster.Object, "spec", "baseDomain")
-	if dnsName == "" {
-		log.Info("The OpenShift DNS object named cluster did not contain a valid spec.baseDomain value")
-	} else {
-		log.V(2).Info("The Hub cluster DNS name was found", "name", dnsName)
-	}
-
-	return dnsName, nil
-}
-
-// getViolationContext will put the root policy information into violationContext
-// It also puts the status of the non-compliant replicated policies into violationContext
-func (r *PolicyAutomationReconciler) getViolationContext(
-	ctx context.Context, log logr.Logger,
-	policy *policyv1.Policy,
-	targetList []string,
-	policyAutomation *policyv1beta1.PolicyAutomation,
-) (policyv1beta1.ViolationContext, error) {
-	log.V(3).Info(
-		"Get the violation context from the root policy %s/%s",
-		policy.GetNamespace(),
-		policy.GetName(),
-	)
-
-	violationContext := policyv1beta1.ViolationContext{}
-	// 1) get the target cluster list
-	violationContext.TargetClusters = targetList
-	// 2) get the root policy name
-	violationContext.PolicyName = policy.GetName()
-	// 3) get the root policy namespace
-	violationContext.PolicyNamespace = policy.GetNamespace()
-	// 4) get the root policy hub cluster name
-	var err error
-
-	violationContext.HubCluster, err = r.getClusterDNSName(ctx, log)
-	if err != nil {
-		return policyv1beta1.ViolationContext{}, err
-	}
-
-	// 5) get the policy sets of the root policy
-	plcPlacement := policy.Status.Placement
-	policySets := []string{}
-
-	for _, placement := range plcPlacement {
-		if placement.PolicySet != "" {
-			policySets = append(policySets, placement.PolicySet)
-		}
-	}
-
-	violationContext.PolicySets = policySets
-
-	// skip policy_violation_context if all clusters are compliant
-	if len(targetList) == 0 {
-		return violationContext, nil
-	}
-
-	replicatedPlcList := &policyv1.PolicyList{}
-
-	err = r.List(
-		ctx,
-		replicatedPlcList,
-		client.MatchingLabels(common.LabelsForRootPolicy(policy)),
-	)
-	if err != nil {
-		log.Error(err, "Failed to list the replicated policies")
-
-		return violationContext, err
-	}
-
-	if len(replicatedPlcList.Items) == 0 {
-		log.V(2).Info("The replicated policies cannot be found.")
-
-		return violationContext, nil
-	}
-
-	policyViolationsLimit := policyAutomation.Spec.Automation.PolicyViolationsLimit
-	if policyViolationsLimit == nil {
-		policyViolationsLimit = new(uint16)
-		*policyViolationsLimit = policyv1beta1.DefaultPolicyViolationsLimit
-	}
-
-	contextLimit := int(*policyViolationsLimit)
-
-	targetListMap := getTargetListMap(targetList)
-	violationContext.PolicyViolations = make(
-		map[string]policyv1beta1.ReplicatedPolicyStatus,
-		len(replicatedPlcList.Items),
-	)
-
-	// 6) get the status of the non-compliance replicated policies
-	for _, rPlc := range replicatedPlcList.Items {
-		clusterName := rPlc.GetLabels()[common.ClusterNameLabel]
-		if !targetListMap[clusterName] {
-			continue // skip the compliance replicated policies
-		}
-
-		rPlcStatus := policyv1beta1.ReplicatedPolicyStatus{}
-		// Convert PolicyStatus to ReplicatedPolicyStatus and skip the unnecessary items
-		err := common.TypeConverter(rPlc.Status, &rPlcStatus)
-		if err != nil { // still assign the empty rPlcStatus to PolicyViolations later
-			log.Error(err, "The PolicyStatus cannot be converted to the type ReplicatedPolicyStatus.")
-		}
-
-		// get the latest violation message from the replicated policy
-		statusDetails := rPlc.Status.Details
-		if len(statusDetails) > 0 && len(statusDetails[0].History) > 0 {
-			rPlcStatus.ViolationMessage = statusDetails[0].History[0].Message
-		}
-
-		violationContext.PolicyViolations[clusterName] = rPlcStatus
-		if contextLimit > 0 && len(violationContext.PolicyViolations) == contextLimit {
-			log.V(2).Info(
-				"PolicyViolationsLimit is %s so skipping %s remaining replicated policies violations.",
-				strconv.Itoa(contextLimit),
-				strconv.Itoa(len(replicatedPlcList.Items)-contextLimit),
-			)
-
-			break
-		}
-	}
-
-	return violationContext, nil
-}
-
 // Reconcile reads that state of the cluster for a Policy object and makes changes based on the state read
 // and what is in the Policy.Spec
 // Note:
@@ -570,4 +392,182 @@ func (r *PolicyAutomationReconciler) Reconcile(
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// setOwnerReferences will set the input policy as the sole owner of the input policyAutomation and make the update
+// with the API. In practice, this will cause the input policyAutomation to be deleted when the policy is deleted.
+func (r *PolicyAutomationReconciler) setOwnerReferences(
+	ctx context.Context, log logr.Logger,
+	policyAutomation *policyv1beta1.PolicyAutomation,
+	policy *policyv1.Policy,
+) error {
+	var policyOwnerRefFound bool
+
+	for _, ownerRef := range policyAutomation.GetOwnerReferences() {
+		if ownerRef.UID == policy.UID {
+			policyOwnerRefFound = true
+
+			break
+		}
+	}
+
+	if !policyOwnerRefFound {
+		log.V(3).Info("Setting the owner reference on the PolicyAutomation " + policyAutomation.GetName())
+		policyAutomation.SetOwnerReferences([]metav1.OwnerReference{
+			*metav1.NewControllerRef(policy, policy.GroupVersionKind()),
+		})
+
+		return r.Update(ctx, policyAutomation)
+	}
+
+	return nil
+}
+
+// getTargetListMap will convert slice targetList to map for search efficiency
+func getTargetListMap(targetList []string) map[string]bool {
+	targetListMap := map[string]bool{}
+	for _, target := range targetList {
+		targetListMap[target] = true
+	}
+
+	return targetListMap
+}
+
+// getClusterDNSName will get the Hub cluster DNS name if the Hub is an OpenShift cluster.
+func (r *PolicyAutomationReconciler) getClusterDNSName(ctx context.Context, log logr.Logger) (string, error) {
+	dnsCluster, err := r.DynamicClient.Resource(dnsGVR).Get(ctx, "cluster", metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// This is a debug log to not spam the logs when the Hub is installed on a Kubernetes distribution other
+			// than OpenShift.
+			log.V(2).Info("The Hub cluster DNS name couldn't be determined")
+
+			return "", nil
+		}
+
+		return "", err
+	}
+
+	dnsName, _, _ := unstructured.NestedString(dnsCluster.Object, "spec", "baseDomain")
+	if dnsName == "" {
+		log.Info("The OpenShift DNS object named cluster did not contain a valid spec.baseDomain value")
+	} else {
+		log.V(2).Info("The Hub cluster DNS name was found", "name", dnsName)
+	}
+
+	return dnsName, nil
+}
+
+// getViolationContext will put the root policy information into violationContext
+// It also puts the status of the non-compliant replicated policies into violationContext
+func (r *PolicyAutomationReconciler) getViolationContext(
+	ctx context.Context, log logr.Logger,
+	policy *policyv1.Policy,
+	targetList []string,
+	policyAutomation *policyv1beta1.PolicyAutomation,
+) (policyv1beta1.ViolationContext, error) {
+	log.V(3).Info(
+		"Get the violation context from the root policy %s/%s",
+		policy.GetNamespace(),
+		policy.GetName(),
+	)
+
+	violationContext := policyv1beta1.ViolationContext{}
+	// 1) get the target cluster list
+	violationContext.TargetClusters = targetList
+	// 2) get the root policy name
+	violationContext.PolicyName = policy.GetName()
+	// 3) get the root policy namespace
+	violationContext.PolicyNamespace = policy.GetNamespace()
+	// 4) get the root policy hub cluster name
+	var err error
+
+	violationContext.HubCluster, err = r.getClusterDNSName(ctx, log)
+	if err != nil {
+		return policyv1beta1.ViolationContext{}, err
+	}
+
+	// 5) get the policy sets of the root policy
+	plcPlacement := policy.Status.Placement
+	policySets := []string{}
+
+	for _, placement := range plcPlacement {
+		if placement.PolicySet != "" {
+			policySets = append(policySets, placement.PolicySet)
+		}
+	}
+
+	violationContext.PolicySets = policySets
+
+	// skip policy_violation_context if all clusters are compliant
+	if len(targetList) == 0 {
+		return violationContext, nil
+	}
+
+	replicatedPlcList := &policyv1.PolicyList{}
+
+	err = r.List(
+		ctx,
+		replicatedPlcList,
+		client.MatchingLabels(common.LabelsForRootPolicy(policy)),
+	)
+	if err != nil {
+		log.Error(err, "Failed to list the replicated policies")
+
+		return violationContext, err
+	}
+
+	if len(replicatedPlcList.Items) == 0 {
+		log.V(2).Info("The replicated policies cannot be found.")
+
+		return violationContext, nil
+	}
+
+	policyViolationsLimit := policyAutomation.Spec.Automation.PolicyViolationsLimit
+	if policyViolationsLimit == nil {
+		policyViolationsLimit = new(uint16)
+		*policyViolationsLimit = policyv1beta1.DefaultPolicyViolationsLimit
+	}
+
+	contextLimit := int(*policyViolationsLimit)
+
+	targetListMap := getTargetListMap(targetList)
+	violationContext.PolicyViolations = make(
+		map[string]policyv1beta1.ReplicatedPolicyStatus,
+		len(replicatedPlcList.Items),
+	)
+
+	// 6) get the status of the non-compliance replicated policies
+	for _, rPlc := range replicatedPlcList.Items {
+		clusterName := rPlc.GetLabels()[common.ClusterNameLabel]
+		if !targetListMap[clusterName] {
+			continue // skip the compliance replicated policies
+		}
+
+		rPlcStatus := policyv1beta1.ReplicatedPolicyStatus{}
+		// Convert PolicyStatus to ReplicatedPolicyStatus and skip the unnecessary items
+		err := common.TypeConverter(rPlc.Status, &rPlcStatus)
+		if err != nil { // still assign the empty rPlcStatus to PolicyViolations later
+			log.Error(err, "The PolicyStatus cannot be converted to the type ReplicatedPolicyStatus.")
+		}
+
+		// get the latest violation message from the replicated policy
+		statusDetails := rPlc.Status.Details
+		if len(statusDetails) > 0 && len(statusDetails[0].History) > 0 {
+			rPlcStatus.ViolationMessage = statusDetails[0].History[0].Message
+		}
+
+		violationContext.PolicyViolations[clusterName] = rPlcStatus
+		if contextLimit > 0 && len(violationContext.PolicyViolations) == contextLimit {
+			log.V(2).Info(
+				"PolicyViolationsLimit is %s so skipping %s remaining replicated policies violations.",
+				strconv.Itoa(contextLimit),
+				strconv.Itoa(len(replicatedPlcList.Items)-contextLimit),
+			)
+
+			break
+		}
+	}
+
+	return violationContext, nil
 }

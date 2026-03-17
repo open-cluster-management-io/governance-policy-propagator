@@ -50,9 +50,9 @@ var _ = Describe("Test policy templates", func() {
 	)
 
 	Describe("Create policy, placement and referenced resource in ns:"+testNamespace, Ordered, func() {
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case9PolicyYaml)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case9PolicyYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -92,9 +92,9 @@ var _ = Describe("Test policy templates", func() {
 				return replicatedPlc.Object["spec"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
 		})
-		It("should update the templated value when the managed cluster labels change", func() {
+		It("should update the templated value when the managed cluster labels change", func(ctx SpecContext) {
 			By("Updating the label on managed1")
-			utils.Kubectl("label", "managedcluster", "managed1",
+			utils.Kubectl(ctx, "label", "managedcluster", "managed1",
 				"vendor=Fake", "--overwrite", "--kubeconfig="+kubeconfigHub)
 
 			By("Verifying the policy is updated")
@@ -143,13 +143,13 @@ var _ = Describe("Test policy templates", func() {
 				return replicatedPlc.Object["spec"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["spec"]))
 		})
-		AfterAll(func() {
-			utils.Kubectl("delete",
+		AfterAll(func(ctx SpecContext) {
+			utils.Kubectl(ctx, "delete",
 				"-f", case9PolicyYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub,
 				"--ignore-not-found")
-			utils.Kubectl("label", "managedcluster", "managed1",
+			utils.Kubectl(ctx, "label", "managedcluster", "managed1",
 				"vendor=auto-detect", "--overwrite", "--kubeconfig="+kubeconfigHub)
 			opt := metav1.ListOptions{}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, defaultTimeoutSeconds)
@@ -160,9 +160,9 @@ var _ = Describe("Test policy templates", func() {
 		for i := 1; i <= 2; i++ {
 			managedCluster := "managed" + strconv.Itoa(i)
 
-			It("should be created in user ns", func() {
+			It("should be created in user ns", func(ctx SpecContext) {
 				By("Creating " + case9PolicyYamlEncrypted)
-				utils.Kubectl("apply",
+				utils.Kubectl(ctx, "apply",
 					"-f", case9PolicyYamlEncrypted,
 					"-n", testNamespace,
 					"--kubeconfig="+kubeconfigHub)
@@ -175,7 +175,7 @@ var _ = Describe("Test policy templates", func() {
 
 			It("should resolve templates and propagate to cluster ns "+managedCluster, func(ctx SpecContext) {
 				By("Initializing AES Encryption Secret")
-				_, err := utils.KubectlWithOutput("apply",
+				_, err := utils.KubectlWithOutput(ctx, "apply",
 					"-f", case9EncryptionSecret,
 					"-n", managedCluster,
 					"--kubeconfig="+kubeconfigHub)
@@ -285,8 +285,8 @@ var _ = Describe("Test policy templates", func() {
 				}, defaultTimeoutSeconds, 1).Should(Equal(expected))
 			})
 
-			It("should clean up the encryption key", func() {
-				utils.Kubectl("delete", "secret",
+			It("should clean up the encryption key", func(ctx SpecContext) {
+				utils.Kubectl(ctx, "delete", "secret",
 					case9EncryptionSecretName,
 					"-n", managedCluster,
 					"--kubeconfig="+kubeconfigHub)
@@ -296,8 +296,8 @@ var _ = Describe("Test policy templates", func() {
 				)
 			})
 
-			It("should clean up", func() {
-				utils.Kubectl("delete", "-f", case9PolicyYamlEncrypted,
+			It("should clean up", func(ctx SpecContext) {
+				utils.Kubectl(ctx, "delete", "-f", case9PolicyYamlEncrypted,
 					"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 				opt := metav1.ListOptions{}
 				utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, defaultTimeoutSeconds)
@@ -309,9 +309,9 @@ var _ = Describe("Test policy templates", func() {
 		for i := 1; i <= 2; i++ {
 			managedCluster := "managed" + strconv.Itoa(i)
 
-			It("should be created in user ns", func() {
+			It("should be created in user ns", func(ctx SpecContext) {
 				By("Creating " + case9PolicyYamlCopy)
-				utils.Kubectl("apply",
+				utils.Kubectl(ctx, "apply",
 					"-f", case9PolicyYamlCopy,
 					"-n", testNamespace,
 					"--kubeconfig="+kubeconfigHub)
@@ -324,7 +324,7 @@ var _ = Describe("Test policy templates", func() {
 
 			It("should resolve templates and propagate to cluster ns "+managedCluster, func(ctx SpecContext) {
 				By("Initializing AES Encryption Secret")
-				_, err := utils.KubectlWithOutput("apply",
+				_, err := utils.KubectlWithOutput(ctx, "apply",
 					"-f", case9EncryptionSecret,
 					"-n", managedCluster,
 					"--kubeconfig="+kubeconfigHub)
@@ -434,8 +434,8 @@ var _ = Describe("Test policy templates", func() {
 				}, defaultTimeoutSeconds, 1).Should(Equal(expected))
 			})
 
-			It("should clean up the encryption key", func() {
-				utils.Kubectl("delete", "secret",
+			It("should clean up the encryption key", func(ctx SpecContext) {
+				utils.Kubectl(ctx, "delete", "secret",
 					case9EncryptionSecretName,
 					"-n", managedCluster,
 					"--kubeconfig="+kubeconfigHub)
@@ -445,20 +445,20 @@ var _ = Describe("Test policy templates", func() {
 				)
 			})
 
-			It("should clean up", func() {
-				utils.Kubectl("delete", "-f", case9PolicyYamlCopy,
+			It("should clean up", func(ctx SpecContext) {
+				utils.Kubectl(ctx, "delete", "-f", case9PolicyYamlCopy,
 					"-n", testNamespace,
 					"--kubeconfig="+kubeconfigHub)
 				opt := metav1.ListOptions{}
 				utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, defaultTimeoutSeconds)
 			})
-			AfterAll(func() {
-				utils.Kubectl("delete", "secret",
+			AfterAll(func(ctx SpecContext) {
+				utils.Kubectl(ctx, "delete", "secret",
 					case9EncryptionSecretName,
 					"-n", managedCluster,
 					"--ignore-not-found",
 					"--kubeconfig="+kubeconfigHub)
-				utils.Kubectl("delete", "-f", case9PolicyYamlCopy,
+				utils.Kubectl(ctx, "delete", "-f", case9PolicyYamlCopy,
 					"-n", testNamespace,
 					"--ignore-not-found",
 					"--kubeconfig="+kubeconfigHub)
@@ -467,9 +467,9 @@ var _ = Describe("Test policy templates", func() {
 	})
 
 	Describe("Test policy templates with cluster-scoped lookup", Ordered, func() {
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case9PolicyWithCSLookupName)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case9PolicyWithCSLookupYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -506,8 +506,8 @@ var _ = Describe("Test policy templates", func() {
 			hubTmplErrAnnotation := tmplAnnotations["policy.open-cluster-management.io/hub-templates-error"]
 			Expect(hubTmplErrAnnotation).To(ContainSubstring("error calling lookup"))
 		})
-		AfterAll(func() {
-			utils.Kubectl("delete",
+		AfterAll(func(ctx SpecContext) {
+			utils.Kubectl(ctx, "delete",
 				"-f", case9PolicyWithCSLookupYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub,
@@ -518,36 +518,26 @@ var _ = Describe("Test policy templates", func() {
 	})
 
 	Describe("Test a custom service account", Ordered, func() {
-		AfterAll(func() {
-			utils.Kubectl("delete", "-f", case9SAYaml, "--kubeconfig="+kubeconfigHub, "--ignore-not-found")
-			utils.Kubectl(
-				"-n",
-				testNamespace,
-				"delete",
-				"-f",
-				case9SAPolicyYaml,
-				"--kubeconfig="+kubeconfigHub,
-				"--ignore-not-found",
-			)
-			utils.Kubectl(
-				"-n", testNamespace, "delete", "sa", "case9-sa-does-not-exist",
+		AfterAll(func(ctx SpecContext) {
+			utils.Kubectl(ctx, "delete", "-f", case9SAYaml, "--kubeconfig="+kubeconfigHub, "--ignore-not-found")
+			utils.Kubectl(ctx, "-n", testNamespace, "delete", "-f", case9SAPolicyYaml,
+				"--ignore-not-found", "--kubeconfig="+kubeconfigHub)
+			utils.Kubectl(ctx, "-n", testNamespace, "delete", "sa", "case9-sa-does-not-exist",
 				"--ignore-not-found", "--kubeconfig="+kubeconfigHub,
 			)
 
 			for i := range 3 {
-				utils.Kubectl(
-					"delete", "secret", "policy-encryption-key", "-n", fmt.Sprintf("managed%d", i+1),
-					"--ignore-not-found", "--kubeconfig="+kubeconfigHub,
-				)
+				utils.Kubectl(ctx, "delete", "secret", "policy-encryption-key", "-n", fmt.Sprintf("managed%d", i+1),
+					"--ignore-not-found", "--kubeconfig="+kubeconfigHub)
 			}
 		})
 
 		It("Template resolution with a custom service account", func(ctx SpecContext) {
 			By("Creating the service account")
-			utils.Kubectl("apply", "-f", case9SAYaml, "--kubeconfig="+kubeconfigHub)
+			utils.Kubectl(ctx, "apply", "-f", case9SAYaml, "--kubeconfig="+kubeconfigHub)
 
 			By("Creating the policy")
-			utils.Kubectl("-n", testNamespace, "apply", "-f", case9SAPolicyYaml, "--kubeconfig="+kubeconfigHub)
+			utils.Kubectl(ctx, "-n", testNamespace, "apply", "-f", case9SAPolicyYaml, "--kubeconfig="+kubeconfigHub)
 
 			plr := utils.GetWithTimeout(
 				clientHubDynamic, gvrPlacementRule, "case9-sa-policy", testNamespace, true, defaultTimeoutSeconds,
@@ -588,9 +578,10 @@ var _ = Describe("Test policy templates", func() {
 			}
 		})
 
-		It("Template resolution fails when the SA doesn't have permission", func() {
+		It("Template resolution fails when the SA doesn't have permission", func(ctx SpecContext) {
 			By("Updating the policy")
-			utils.Kubectl("-n", testNamespace, "apply", "-f", case9SAPolicyNoPermYaml, "--kubeconfig="+kubeconfigHub)
+			utils.Kubectl(ctx, "-n", testNamespace, "apply", "-f", case9SAPolicyNoPermYaml,
+				"--kubeconfig="+kubeconfigHub)
 
 			By("Verifying the replicated policy has an error")
 			for i := range 3 {
@@ -627,7 +618,7 @@ var _ = Describe("Test policy templates", func() {
 			}
 
 			By("Reverting back the policy")
-			utils.Kubectl("-n", testNamespace, "apply", "-f", case9SAPolicyYaml, "--kubeconfig="+kubeconfigHub)
+			utils.Kubectl(ctx, "-n", testNamespace, "apply", "-f", case9SAPolicyYaml, "--kubeconfig="+kubeconfigHub)
 
 			By("Verifying the replicated policy has no error")
 			for i := range 3 {
@@ -656,9 +647,10 @@ var _ = Describe("Test policy templates", func() {
 			}
 		})
 
-		It("Template resolution fails when the SA changes and does not exist", func() {
+		It("Template resolution fails when the SA changes and does not exist", func(ctx SpecContext) {
 			By("Updating the policy")
-			utils.Kubectl("-n", testNamespace, "apply", "-f", case9SAPolicyMissingSAYaml, "--kubeconfig="+kubeconfigHub)
+			utils.Kubectl(ctx, "-n", testNamespace, "apply", "-f", case9SAPolicyMissingSAYaml,
+				"--kubeconfig="+kubeconfigHub)
 
 			By("Verifying the replicated policy has an error")
 			for i := range 3 {
@@ -693,7 +685,8 @@ var _ = Describe("Test policy templates", func() {
 			}
 
 			By("Creating the service account makes the policy reconcile and resolve the templates")
-			utils.Kubectl("-n", testNamespace, "create", "sa", "case9-sa-does-not-exist", "--kubeconfig="+kubeconfigHub)
+			utils.Kubectl(ctx, "-n", testNamespace, "create", "sa", "case9-sa-does-not-exist",
+				"--kubeconfig="+kubeconfigHub)
 
 			By("Verifying the replicated policy has the correct values")
 			for i := range 3 {
@@ -732,11 +725,12 @@ var _ = Describe("Test policy templates", func() {
 	})
 
 	Describe("Test token issuance and refresh", Ordered, func() {
-		BeforeAll(func() {
-			utils.Kubectl("apply", "-f", case9SATokenYaml, "--kubeconfig="+kubeconfigHub)
+		BeforeAll(func(ctx SpecContext) {
+			utils.Kubectl(ctx, "apply", "-f", case9SATokenYaml, "--kubeconfig="+kubeconfigHub)
 
-			DeferCleanup(func() {
-				utils.Kubectl("delete", "-f", case9SATokenYaml, "--kubeconfig="+kubeconfigHub, "--ignore-not-found")
+			DeferCleanup(func(ctx SpecContext) {
+				utils.Kubectl(ctx, "delete", "-f", case9SATokenYaml, "--kubeconfig="+kubeconfigHub,
+					"--ignore-not-found")
 			})
 		})
 
@@ -811,7 +805,7 @@ var _ = Describe("Test policy templates", func() {
 			}, defaultTimeoutSeconds, 1).Should(Succeed())
 
 			By("Deleting the service account")
-			utils.Kubectl("delete", "-f", case9SATokenYaml, "--kubeconfig="+kubeconfigHub)
+			utils.Kubectl(ctx, "delete", "-f", case9SATokenYaml, "--kubeconfig="+kubeconfigHub)
 
 			By("Verifying the token file was deleted")
 			Eventually(func(g Gomega) {
@@ -822,9 +816,9 @@ var _ = Describe("Test policy templates", func() {
 	})
 
 	Describe("Test denied template functions", Ordered, func() {
-		BeforeAll(func() {
+		BeforeAll(func(ctx SpecContext) {
 			By("Creating " + case9PolicyDeniedTemplateFuncYaml)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case9PolicyDeniedTemplateFuncYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -834,8 +828,8 @@ var _ = Describe("Test policy templates", func() {
 			)
 			Expect(plc).NotTo(BeNil())
 
-			DeferCleanup(func() {
-				utils.Kubectl("delete",
+			DeferCleanup(func(ctx SpecContext) {
+				utils.Kubectl(ctx, "delete",
 					"-f", case9PolicyDeniedTemplateFuncYaml,
 					"-n", testNamespace,
 					"--kubeconfig="+kubeconfigHub,

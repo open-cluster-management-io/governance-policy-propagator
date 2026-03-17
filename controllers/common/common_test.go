@@ -82,7 +82,7 @@ func TestGetAffectedObjsWithRequest(t *testing.T) {
 
 	result := GetAffectedObjs(newOjbs, oldOjbs)
 	sort.SliceStable(result, func(i, j int) bool {
-		return result[i].NamespacedName.Namespace < result[j].NamespacedName.Namespace
+		return result[i].Namespace < result[j].Namespace
 	})
 
 	if !cmp.Equal(result, expectedResult) {

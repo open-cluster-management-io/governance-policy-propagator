@@ -21,7 +21,7 @@ var _ = Describe("Test selective policy enforcement", Ordered, func() {
 
 	BeforeAll(func(ctx SpecContext) {
 		By("Creating the test policy, the initial placement binding, and placement rule")
-		_, err := utils.KubectlWithOutput("apply", "-f", case16PolicyYaml,
+		_, err := utils.KubectlWithOutput(ctx, "apply", "-f", case16PolicyYaml,
 			"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 		Expect(err).ToNot(HaveOccurred())
 		rootplc := utils.GetWithTimeout(
@@ -50,12 +50,12 @@ var _ = Describe("Test selective policy enforcement", Ordered, func() {
 		}
 	})
 
-	AfterAll(func() {
+	AfterAll(func(ctx SpecContext) {
 		By("Cleaning up resources")
-		_, err := utils.KubectlWithOutput("delete", "-f", case16PolicyYaml,
+		_, err := utils.KubectlWithOutput(ctx, "delete", "-f", case16PolicyYaml,
 			"-n", testNamespace, "--kubeconfig="+kubeconfigHub, "--ignore-not-found")
 		Expect(err).ToNot(HaveOccurred())
-		_, err = utils.KubectlWithOutput("delete", "-f", case16BindingYaml,
+		_, err = utils.KubectlWithOutput(ctx, "delete", "-f", case16BindingYaml,
 			"-n", testNamespace, "--kubeconfig="+kubeconfigHub, "--ignore-not-found")
 		Expect(err).ToNot(HaveOccurred())
 	})
@@ -64,7 +64,7 @@ var _ = Describe("Test selective policy enforcement", Ordered, func() {
 		It("should update the policy's remediationAction to enforce on cluster ns managed1, managed2",
 			func(ctx SpecContext) {
 				By("Creating another placement rule and binding to selectively enforce policy")
-				_, err := utils.KubectlWithOutput("apply", "-f", case16BindingYaml,
+				_, err := utils.KubectlWithOutput(ctx, "apply", "-f", case16BindingYaml,
 					"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -218,7 +218,7 @@ var _ = Describe("Test selective policy enforcement", Ordered, func() {
 			}, "5s", 1).Should(BeNil())
 
 			By("Removing the subfilter from the binding")
-			utils.Kubectl("patch", "placementbinding", "case16-test-policy-pb-enforce", "-n", testNamespace,
+			utils.Kubectl(ctx, "patch", "placementbinding", "case16-test-policy-pb-enforce", "-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub, "--type=json", `-p=[{"op":"remove","path":"/subFilter"}]`)
 
 			By("Verifying the policies exist and are enforcing on all 3 clusters")
@@ -234,9 +234,9 @@ var _ = Describe("Test selective policy enforcement", Ordered, func() {
 			}
 		})
 
-		It("should change remediationAction when the bindingOverrides are removed", func() {
+		It("should change remediationAction when the bindingOverrides are removed", func(ctx SpecContext) {
 			By("Removing the overrides from the binding")
-			utils.Kubectl("patch", "placementbinding", "case16-test-policy-pb-enforce", "-n", testNamespace,
+			utils.Kubectl(ctx, "patch", "placementbinding", "case16-test-policy-pb-enforce", "-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub, "--type=json", `-p=[{"op":"remove","path":"/bindingOverrides"}]`)
 
 			By("Verifying the policies are informing on all 3 clusters")

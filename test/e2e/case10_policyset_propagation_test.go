@@ -27,9 +27,9 @@ var _ = Describe("Test policyset propagation", func() {
 	)
 
 	Describe("Test policy propagation through policyset placementbinding with placementrule", func() {
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case10PolicySetYaml)
-			_, err := utils.KubectlWithOutput("apply",
+			_, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", case10PolicySetYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -147,9 +147,9 @@ var _ = Describe("Test policyset propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 		})
-		It("should remove policy from ns managed1 and managed2", func() {
+		It("should remove policy from ns managed1 and managed2", func(ctx SpecContext) {
 			By("Deleting policyset")
-			_, err := utils.KubectlWithOutput("delete", "policyset",
+			_, err := utils.KubectlWithOutput(ctx, "delete", "policyset",
 				case10PolicySetName, "-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet := utils.GetWithTimeout(
@@ -161,9 +161,9 @@ var _ = Describe("Test policyset propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
 		})
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case10PolicySetYaml)
-			_, err := utils.KubectlWithOutput("apply",
+			_, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", case10PolicySetYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -189,9 +189,9 @@ var _ = Describe("Test policyset propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 		})
-		It("should remove policy from ns managed1 and managed2", func() {
+		It("should remove policy from ns managed1 and managed2", func(ctx SpecContext) {
 			By("Deleting placementbinding")
-			_, err := utils.KubectlWithOutput("delete", "PlacementBinding", case10PolicySetName+"-pb", "-n",
+			_, err := utils.KubectlWithOutput(ctx, "delete", "PlacementBinding", case10PolicySetName+"-pb", "-n",
 				testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			opt := metav1.ListOptions{
@@ -199,9 +199,9 @@ var _ = Describe("Test policyset propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
 		})
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case10PolicySetYaml)
-			_, err := utils.KubectlWithOutput("apply",
+			_, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", case10PolicySetYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -227,9 +227,9 @@ var _ = Describe("Test policyset propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 		})
-		It("should remove policy from ns managed1 and managed2", func() {
+		It("should remove policy from ns managed1 and managed2", func(ctx SpecContext) {
 			By("Deleting placementrule")
-			_, err := utils.KubectlWithOutput("delete", "PlacementRule", case10PolicySetName+"-plr", "-n",
+			_, err := utils.KubectlWithOutput(ctx, "delete", "PlacementRule", case10PolicySetName+"-plr", "-n",
 				testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			opt := metav1.ListOptions{
@@ -237,9 +237,9 @@ var _ = Describe("Test policyset propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
 		})
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case10PolicySetYaml)
-			_, err := utils.KubectlWithOutput("apply",
+			_, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", case10PolicySetYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -265,9 +265,9 @@ var _ = Describe("Test policyset propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 		})
-		It("should clean up", func() {
+		It("should clean up", func(ctx SpecContext) {
 			By("Deleting " + case10PolicySetYaml)
-			_, err := utils.KubectlWithOutput("delete",
+			_, err := utils.KubectlWithOutput(ctx, "delete",
 				"-f", case10PolicySetYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -284,9 +284,9 @@ var _ = Describe("Test policyset propagation", func() {
 	})
 
 	Describe("Test policy propagation through both policy and policyset placementbinding with placementrule", func() {
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case10PolicySetYaml)
-			_, err := utils.KubectlWithOutput("apply",
+			_, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", case10PolicySetPolicyYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -385,9 +385,9 @@ var _ = Describe("Test policyset propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 		})
-		It("should clean up", func() {
+		It("should clean up", func(ctx SpecContext) {
 			By("Deleting " + case10PolicySetYaml)
-			_, err := utils.KubectlWithOutput("delete",
+			_, err := utils.KubectlWithOutput(ctx, "delete",
 				"-f", case10PolicySetPolicyYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -404,9 +404,9 @@ var _ = Describe("Test policyset propagation", func() {
 	})
 
 	Describe("Test policy propagation through policyset placementbinding with placement", func() {
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case10PolicySetPlacementYaml)
-			_, err := utils.KubectlWithOutput("apply",
+			_, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", case10PolicySetPlacementYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -484,9 +484,9 @@ var _ = Describe("Test policyset propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 		})
-		It("should remove policy from ns managed1 and managed2", func() {
+		It("should remove policy from ns managed1 and managed2", func(ctx SpecContext) {
 			By("Deleting policyset")
-			_, err := utils.KubectlWithOutput("delete", "policyset", case10PolicySetName,
+			_, err := utils.KubectlWithOutput(ctx, "delete", "policyset", case10PolicySetName,
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			plcSet := utils.GetWithTimeout(
@@ -498,9 +498,9 @@ var _ = Describe("Test policyset propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
 		})
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case10PolicySetPlacementYaml)
-			_, err := utils.KubectlWithOutput("apply",
+			_, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", case10PolicySetPlacementYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -536,9 +536,9 @@ var _ = Describe("Test policyset propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 		})
-		It("should remove policy from ns managed1 and managed2", func() {
+		It("should remove policy from ns managed1 and managed2", func(ctx SpecContext) {
 			By("Deleting placementbinding")
-			_, err := utils.KubectlWithOutput("delete", "PlacementBinding", case10PolicySetName+"-pb", "-n",
+			_, err := utils.KubectlWithOutput(ctx, "delete", "PlacementBinding", case10PolicySetName+"-pb", "-n",
 				testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			opt := metav1.ListOptions{
@@ -546,9 +546,9 @@ var _ = Describe("Test policyset propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
 		})
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case10PolicySetPlacementYaml)
-			_, err := utils.KubectlWithOutput("apply",
+			_, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", case10PolicySetPlacementYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -584,19 +584,19 @@ var _ = Describe("Test policyset propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 		})
-		It("should remove policy from ns managed1 and managed2", func() {
+		It("should remove policy from ns managed1 and managed2", func(ctx SpecContext) {
 			By("Deleting placementDecision")
-			_, err := utils.KubectlWithOutput("delete", "PlacementDecision", case10PolicySetName+"-plm-decision", "-n",
-				testNamespace, "--kubeconfig="+kubeconfigHub)
+			_, err := utils.KubectlWithOutput(ctx, "delete", "PlacementDecision", case10PolicySetName+"-plm-decision",
+				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ToNot(HaveOccurred())
 			opt := metav1.ListOptions{
 				LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case10PolicyName,
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
 		})
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case10PolicySetPlacementYaml)
-			_, err := utils.KubectlWithOutput("apply",
+			_, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", case10PolicySetPlacementYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -606,9 +606,9 @@ var _ = Describe("Test policyset propagation", func() {
 			)
 			Expect(plcSet).NotTo(BeNil())
 		})
-		It("should cleanup", func() {
+		It("should cleanup", func(ctx SpecContext) {
 			By("Deleting " + case10PolicySetPlacementYaml)
-			_, err := utils.KubectlWithOutput("delete",
+			_, err := utils.KubectlWithOutput(ctx, "delete",
 				"-f", case10PolicySetPlacementYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -625,9 +625,9 @@ var _ = Describe("Test policyset propagation", func() {
 	})
 
 	Describe("Test policy propagation through both policy and policyset placementbinding with placement", func() {
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case10PolicySetPolicyPlacementYaml)
-			_, err := utils.KubectlWithOutput("apply",
+			_, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", case10PolicySetPolicyPlacementYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -684,9 +684,9 @@ var _ = Describe("Test policyset propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 		})
-		It("should cleanup", func() {
+		It("should cleanup", func(ctx SpecContext) {
 			By("Deleting " + case10PolicySetPolicyPlacementYaml)
-			_, err := utils.KubectlWithOutput("delete",
+			_, err := utils.KubectlWithOutput(ctx, "delete",
 				"-f", case10PolicySetPolicyPlacementYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -703,9 +703,9 @@ var _ = Describe("Test policyset propagation", func() {
 	})
 
 	Describe("Test policy propagation with policyset modification", func() {
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case10PolicySetYaml)
-			_, err := utils.KubectlWithOutput("apply",
+			_, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", case10PolicySetPolicyYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -820,9 +820,9 @@ var _ = Describe("Test policyset propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
 		})
-		It("should clean up", func() {
+		It("should clean up", func(ctx SpecContext) {
 			By("Deleting " + case10PolicySetYaml)
-			_, err := utils.KubectlWithOutput("delete",
+			_, err := utils.KubectlWithOutput(ctx, "delete",
 				"-f", case10PolicySetPolicyYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -840,9 +840,9 @@ var _ = Describe("Test policyset propagation", func() {
 
 	Describe("Test policy propagation with multiple policysets", func() {
 		const case10PolicySetMultipleYaml string = path + "case10-test-multiple-policysets.yaml"
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case10PolicySetMultipleYaml)
-			_, err := utils.KubectlWithOutput("apply",
+			_, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", case10PolicySetMultipleYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -899,9 +899,9 @@ var _ = Describe("Test policyset propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 		})
-		It("should cleanup", func() {
+		It("should cleanup", func(ctx SpecContext) {
 			By("Deleting " + case10PolicySetMultipleYaml)
-			_, err := utils.KubectlWithOutput("delete",
+			_, err := utils.KubectlWithOutput(ctx, "delete",
 				"-f", case10PolicySetMultipleYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -923,9 +923,9 @@ var _ = Describe("Test policyset propagation", func() {
 
 	Describe("Test policy propagation with multiple policysets with single placementbinding", func() {
 		const case10PolicySetMultipleSinglePBYaml string = path + "case10-test-multiple-policysets-single-pb.yaml"
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case10PolicySetMultipleSinglePBYaml)
-			_, err := utils.KubectlWithOutput("apply",
+			_, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", case10PolicySetMultipleSinglePBYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -1074,9 +1074,9 @@ var _ = Describe("Test policyset propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 1, true, defaultTimeoutSeconds)
 		})
-		It("should cleanup", func() {
+		It("should cleanup", func(ctx SpecContext) {
 			By("Deleting " + case10PolicySetMultipleSinglePBYaml)
-			_, err := utils.KubectlWithOutput("delete",
+			_, err := utils.KubectlWithOutput(ctx, "delete",
 				"-f", case10PolicySetMultipleSinglePBYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -1098,9 +1098,9 @@ var _ = Describe("Test policyset propagation", func() {
 
 	Describe("Test policy placement with multiple policies and policysets with single placementbinding", func() {
 		case10PolicySetMultipleSinglePBYaml := path + "case10-test-multiple-policies-policysets-single-pb.yaml"
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case10PolicySetMultipleSinglePBYaml)
-			_, err := utils.KubectlWithOutput("apply",
+			_, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", case10PolicySetMultipleSinglePBYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -1135,9 +1135,9 @@ var _ = Describe("Test policyset propagation", func() {
 			Expect(placement).To(HaveLen(1))
 			Expect(placement[0].(map[string]interface{})["policySet"]).Should(Equal(case10PolicySetName + "2"))
 		})
-		It("should cleanup", func() {
+		It("should cleanup", func(ctx SpecContext) {
 			By("Deleting " + case10PolicySetMultipleSinglePBYaml)
-			_, err := utils.KubectlWithOutput("delete",
+			_, err := utils.KubectlWithOutput(ctx, "delete",
 				"-f", case10PolicySetMultipleSinglePBYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)

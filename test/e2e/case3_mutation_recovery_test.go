@@ -22,7 +22,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 
 	BeforeEach(func(ctx SpecContext) {
 		By("Creating " + case3PolicyYaml)
-		utils.Kubectl("apply",
+		utils.Kubectl(ctx, "apply",
 			"-f", case3PolicyYaml,
 			"-n", testNamespace,
 			"--kubeconfig="+kubeconfigHub)
@@ -61,8 +61,8 @@ var _ = Describe("Test unexpected policy mutation", func() {
 			return rootPlc.Object["status"]
 		}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
 	})
-	AfterEach(func() {
-		utils.Kubectl("delete",
+	AfterEach(func(ctx SpecContext) {
+		utils.Kubectl(ctx, "delete",
 			"-f", case3PolicyYaml,
 			"-n", testNamespace,
 			"--ignore-not-found",
@@ -70,10 +70,10 @@ var _ = Describe("Test unexpected policy mutation", func() {
 		opt := metav1.ListOptions{}
 		utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
 	})
-	It("Should recreate replicated policy when deleted", func() {
+	It("Should recreate replicated policy when deleted", func(ctx SpecContext) {
 		By("Deleting policy in cluster ns")
-		utils.Kubectl("delete", "policy", "-n", "managed1", "--all", "--kubeconfig="+kubeconfigHub)
-		utils.Kubectl("delete", "policy", "-n", "managed2", "--all", "--kubeconfig="+kubeconfigHub)
+		utils.Kubectl(ctx, "delete", "policy", "-n", "managed1", "--all", "--kubeconfig="+kubeconfigHub)
+		utils.Kubectl(ctx, "delete", "policy", "-n", "managed2", "--all", "--kubeconfig="+kubeconfigHub)
 		By("Checking number of policy left in all ns")
 		opt := metav1.ListOptions{}
 		utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 3, true, defaultTimeoutSeconds)
