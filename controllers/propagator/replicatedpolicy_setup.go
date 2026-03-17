@@ -96,7 +96,7 @@ func replicatedPolicyPredicates(resourceVersions *sync.Map) predicate.Funcs {
 			_, oldIsReplicated := e.ObjectOld.GetLabels()[common.RootPolicyLabel]
 
 			// if neither has the label, it is not a replicated policy
-			if !(oldIsReplicated || newIsReplicated) {
+			if !oldIsReplicated && !newIsReplicated {
 				return false
 			}
 

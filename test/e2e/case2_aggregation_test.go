@@ -22,13 +22,13 @@ var _ = Describe("Test policy status aggregation", func() {
 	)
 
 	Describe("Root status from different placements", Ordered, func() {
-		AfterAll(func() {
-			utils.Kubectl("delete",
+		AfterAll(func(ctx SpecContext) {
+			utils.Kubectl(ctx, "delete",
 				"-f", faultyPBYaml,
 				"-n", testNamespace,
 				"--ignore-not-found",
 				"--kubeconfig="+kubeconfigHub)
-			utils.Kubectl("delete",
+			utils.Kubectl(ctx, "delete",
 				"-f", case2PolicyYaml,
 				"-n", testNamespace,
 				"--ignore-not-found",
@@ -37,9 +37,9 @@ var _ = Describe("Test policy status aggregation", func() {
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 10)
 		})
 
-		It("should create the faulty PlacementBinding in user ns", func() {
+		It("should create the faulty PlacementBinding in user ns", func(ctx SpecContext) {
 			By("Creating " + faultyPBName)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", faultyPBYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -48,9 +48,9 @@ var _ = Describe("Test policy status aggregation", func() {
 			)
 			Expect(pb).NotTo(BeNil())
 		})
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case2PolicyYaml)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case2PolicyYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -144,9 +144,9 @@ var _ = Describe("Test policy status aggregation", func() {
 				return rootPlc.Object["status"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
 		})
-		It("should contain status.placement with two pb/plr", func() {
+		It("should contain status.placement with two pb/plr", func(ctx SpecContext) {
 			By("Creating pb-plr-2 to binding second set of placement")
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", "../resources/case2_aggregation/pb-plr-2.yaml",
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			By("Checking the status of root policy")
@@ -199,9 +199,9 @@ var _ = Describe("Test policy status aggregation", func() {
 				return rootPlc.Object["status"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
 		})
-		It("should still contain status.placement with two pb, one plr and both status", func() {
+		It("should still contain status.placement with two pb, one plr and both status", func(ctx SpecContext) {
 			By("Remove" + case2PolicyName + "-plr")
-			utils.Kubectl("delete",
+			utils.Kubectl(ctx, "delete",
 				"placementrule", case2PolicyName+"-plr",
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			By("Checking the status of root policy")
@@ -214,9 +214,9 @@ var _ = Describe("Test policy status aggregation", func() {
 				return rootPlc.Object["status"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
 		})
-		It("should clear out status.status", func() {
+		It("should clear out status.status", func(ctx SpecContext) {
 			By("Remove" + case2PolicyName + "-plr2")
-			utils.Kubectl("delete",
+			utils.Kubectl(ctx, "delete",
 				"placementrule", case2PolicyName+"-plr2",
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			By("Checking the status of root policy")
@@ -229,12 +229,12 @@ var _ = Describe("Test policy status aggregation", func() {
 				return rootPlc.Object["status"]
 			}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
 		})
-		It("should clear out status", func() {
+		It("should clear out status", func(ctx SpecContext) {
 			By("Remove" + case2PolicyName + "-pb and " + case2PolicyName + "-pb2")
-			utils.Kubectl("delete",
+			utils.Kubectl(ctx, "delete",
 				"placementbinding", case2PolicyName+"-pb",
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
-			utils.Kubectl("delete",
+			utils.Kubectl(ctx, "delete",
 				"placementbinding", case2PolicyName+"-pb2",
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			By("Checking the status of root policy")
@@ -258,7 +258,7 @@ var _ = Describe("Test policy status aggregation", func() {
 
 		BeforeAll(func(ctx SpecContext) {
 			By("Creating " + case2PolicyYaml)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case2PolicyYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -283,17 +283,10 @@ var _ = Describe("Test policy status aggregation", func() {
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, listOpts(), 2, true, defaultTimeoutSeconds)
 		})
 
-		AfterAll(func() {
+		AfterAll(func(ctx SpecContext) {
 			By("Cleaning up")
-			utils.Kubectl(
-				"delete",
-				"-f",
-				case2PolicyYaml,
-				"-n",
-				testNamespace,
-				"--ignore-not-found",
-				"--kubeconfig="+kubeconfigHub,
-			)
+			utils.Kubectl(ctx, "delete", "-f", case2PolicyYaml, "-n", testNamespace,
+				"--ignore-not-found", "--kubeconfig="+kubeconfigHub)
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, metav1.ListOptions{}, 0, false, 10)
 		})
 

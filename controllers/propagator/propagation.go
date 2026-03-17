@@ -96,6 +96,7 @@ func (r *RootPolicyReconciler) handleRootPolicy(
 ) error {
 	// Generate a metric for elapsed handling time for each policy
 	entryTS := time.Now()
+
 	defer func() {
 		now := time.Now()
 		elapsed := now.Sub(entryTS).Seconds()

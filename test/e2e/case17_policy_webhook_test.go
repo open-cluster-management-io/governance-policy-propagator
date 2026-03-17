@@ -37,22 +37,22 @@ var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
 	)
 
 	Describe("Test name + namespace over 63", func() {
-		BeforeAll(func() {
-			_, err := utils.KubectlWithOutput("create",
+		BeforeAll(func(ctx SpecContext) {
+			_, err := utils.KubectlWithOutput(ctx, "create",
 				"ns", longNamespace, "--kubeconfig="+kubeconfigHub,
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 		})
-		AfterAll(func() {
+		AfterAll(func(ctx SpecContext) {
 			// cleanup
-			_, err := utils.KubectlWithOutput("delete",
+			_, err := utils.KubectlWithOutput(ctx, "delete",
 				"ns", longNamespace,
 				"--kubeconfig="+kubeconfigHub,
 				"--ignore-not-found",
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			_, err = utils.KubectlWithOutput("delete",
+			_, err = utils.KubectlWithOutput(ctx, "delete",
 				"policy", case17PolicyReplicatedName,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub,
@@ -60,7 +60,7 @@ var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			_, err = utils.KubectlWithOutput("delete",
+			_, err = utils.KubectlWithOutput(ctx, "delete",
 				"placementrule", case17PolicyReplicatedPlr,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub,
@@ -68,7 +68,7 @@ var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			_, err = utils.KubectlWithOutput("delete",
+			_, err = utils.KubectlWithOutput(ctx, "delete",
 				"placementbinding", case17PolicyReplicatedPb,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub,
@@ -76,8 +76,8 @@ var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 		})
-		It("Should the error message is presented", func() {
-			output, err := utils.KubectlWithOutput("apply",
+		It("Should the error message is presented", func(ctx SpecContext) {
+			output, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", case17PolicyLongYaml,
 				"-n", longNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -85,7 +85,7 @@ var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
 			Expect(output).Should(ContainSubstring(combinedLengthErr))
 		})
 		It("Should replicated policy should not be validated", func(ctx SpecContext) {
-			_, err := utils.KubectlWithOutput("apply",
+			_, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", case17PolicyReplicatedYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -114,8 +114,8 @@ var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
 	})
 
 	Describe("The remediationAction field should not be unset in both root policy and policy templates", func() {
-		AfterAll(func() {
-			_, err := utils.KubectlWithOutput("delete",
+		AfterAll(func(ctx SpecContext) {
+			_, err := utils.KubectlWithOutput(ctx, "delete",
 				"policy", case17PolicyRemediationName,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub,
@@ -123,7 +123,7 @@ var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			_, err = utils.KubectlWithOutput("delete",
+			_, err = utils.KubectlWithOutput(ctx, "delete",
 				"policy", case17PolicyRootRemediationName,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub,
@@ -131,7 +131,7 @@ var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			_, err = utils.KubectlWithOutput("delete",
+			_, err = utils.KubectlWithOutput(ctx, "delete",
 				"policy", case17PolicyCfplcRemediationName,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub,
@@ -140,10 +140,10 @@ var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
 			Expect(err).ShouldNot(HaveOccurred())
 		})
 
-		It("Should return a validation error when creating policies", func() {
+		It("Should return a validation error when creating policies", func(ctx SpecContext) {
 			By("Applying a policy where both the remediationAction of the root policy " +
 				"and the configuration policy in the policy templates are unset")
-			output, err := utils.KubectlWithOutput("apply",
+			output, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", case17PolicyRemediationYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -151,10 +151,10 @@ var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
 			Expect(output).Should(ContainSubstring(remediationErr))
 		})
 
-		It("Should not return a validation error when creating policies", func() {
+		It("Should not return a validation error when creating policies", func(ctx SpecContext) {
 			By("Applying a policy where only the remediationAction of the " +
 				"root policy is set")
-			_, err := utils.KubectlWithOutput("apply",
+			_, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", case17PolicyRootRemediationYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -162,18 +162,18 @@ var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
 
 			By("Applying a policy where only the remediationAction of the " +
 				"configuration policy in the policy templates is set")
-			_, err = utils.KubectlWithOutput("apply",
+			_, err = utils.KubectlWithOutput(ctx, "apply",
 				"-f", case17PolicyCfplcRemediationYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ShouldNot(HaveOccurred())
 		})
 
-		It("Should return a validation error when updating policies", func() {
+		It("Should return a validation error when updating policies", func(ctx SpecContext) {
 			By("Patching a policy so that the remediationAction field of both " +
 				"the root policy and configuration policy is unset")
 
-			output, err := utils.KubectlWithOutput("patch", "policy",
+			output, err := utils.KubectlWithOutput(ctx, "patch", "policy",
 				case17PolicyRootRemediationName, "-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub,
 				"--type=json", "-p", "[{'op': 'remove', 'path': '/spec/remediationAction'}]",
@@ -183,10 +183,10 @@ var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
 			Expect(output).Should(ContainSubstring(remediationErr))
 		})
 
-		It("Should not return a validation error when updating policies", func() {
+		It("Should not return a validation error when updating policies", func(ctx SpecContext) {
 			By("Patching a policy so that only the remediationAction field of the root policy is unset")
 
-			_, err := utils.KubectlWithOutput("patch", "policy",
+			_, err := utils.KubectlWithOutput(ctx, "patch", "policy",
 				case17PolicyRootRemediationName, "-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub, "--type=json", "-p",
 				"[{'op': 'add', 'path': '/spec/remediationAction', 'value': 'inform'}]",

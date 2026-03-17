@@ -20,7 +20,7 @@ var _ = Describe("Test metrics appear locally", func() {
 
 	It("should report 0 for compliant root policy and replicated policies", func(ctx SpecContext) {
 		By("Creating " + case8PolicyYaml)
-		utils.Kubectl("apply",
+		utils.Kubectl(ctx, "apply",
 			"-f", case8PolicyYaml,
 			"-n", testNamespace,
 			"--kubeconfig="+kubeconfigHub)
@@ -64,19 +64,17 @@ var _ = Describe("Test metrics appear locally", func() {
 		}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
 		By("Checking metric endpoint for root policy status")
 		Eventually(func() interface{} {
-			return utils.GetMetrics("policy_governance_info", `policy=\"case8-test-policy\"`, `type=\"root\"`)
+			return utils.GetMetrics(ctx, "policy_governance_info", `policy=\"case8-test-policy\"`, `type=\"root\"`)
 		}, defaultTimeoutSeconds, 1).Should(Equal([]string{"0"}))
 		By("Checking metric endpoint for managed1 replicated policy status")
 		Eventually(func() interface{} {
-			return utils.GetMetrics(
-				"policy_governance_info", `policy=\"case8-test-policy\"`, `cluster_namespace=\"managed1\",`,
-			)
+			return utils.GetMetrics(ctx, "policy_governance_info",
+				`policy=\"case8-test-policy\"`, `cluster_namespace=\"managed1\",`)
 		}, defaultTimeoutSeconds, 1).Should(Equal([]string{"0"}))
 		By("Checking metric endpoint for managed2 replicated policy status")
 		Eventually(func() interface{} {
-			return utils.GetMetrics(
-				"policy_governance_info", `policy=\"case8-test-policy\"`, `cluster_namespace=\"managed2\",`,
-			)
+			return utils.GetMetrics(ctx, "policy_governance_info",
+				`policy=\"case8-test-policy\"`, `cluster_namespace=\"managed2\",`)
 		}, defaultTimeoutSeconds, 1).Should(Equal([]string{"0"}))
 	})
 	It("should report 1 for noncompliant root policy and replicated policies", func(ctx SpecContext) {
@@ -103,24 +101,22 @@ var _ = Describe("Test metrics appear locally", func() {
 		}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(yamlPlc.Object["status"]))
 		By("Checking metric endpoint for root policy status")
 		Eventually(func() interface{} {
-			return utils.GetMetrics("policy_governance_info", `policy=\"case8-test-policy\"`, `type=\"root\"`)
+			return utils.GetMetrics(ctx, "policy_governance_info", `policy=\"case8-test-policy\"`, `type=\"root\"`)
 		}, defaultTimeoutSeconds, 1).Should(Equal([]string{"1"}))
 		By("Checking metric endpoint for managed1 replicated policy status")
 		Eventually(func() interface{} {
-			return utils.GetMetrics(
-				"policy_governance_info", `policy=\"case8-test-policy\"`, `cluster_namespace=\"managed1\",`,
-			)
+			return utils.GetMetrics(ctx, "policy_governance_info",
+				`policy=\"case8-test-policy\"`, `cluster_namespace=\"managed1\",`)
 		}, defaultTimeoutSeconds, 1).Should(Equal([]string{"1"}))
 		By("Checking metric endpoint for managed2 replicated policy status")
 		Eventually(func() interface{} {
-			return utils.GetMetrics(
-				"policy_governance_info", `policy=\"case8-test-policy\"`, `cluster_namespace=\"managed2\",`,
-			)
+			return utils.GetMetrics(ctx, "policy_governance_info",
+				`policy=\"case8-test-policy\"`, `cluster_namespace=\"managed2\",`)
 		}, defaultTimeoutSeconds, 1).Should(Equal([]string{"1"}))
 	})
-	It("should not report metrics for policies after they are deleted", func() {
+	It("should not report metrics for policies after they are deleted", func(ctx SpecContext) {
 		By("Deleting the policy")
-		utils.Kubectl("delete",
+		utils.Kubectl(ctx, "delete",
 			"-f", case8PolicyYaml,
 			"-n", testNamespace,
 			"--kubeconfig="+kubeconfigHub)
@@ -128,19 +124,17 @@ var _ = Describe("Test metrics appear locally", func() {
 		utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 10)
 		By("Checking metric endpoint for root policy status")
 		Eventually(func() interface{} {
-			return utils.GetMetrics("policy_governance_info", `policy=\"case8-test-policy\"`, `type=\"root\"`)
+			return utils.GetMetrics(ctx, "policy_governance_info", `policy=\"case8-test-policy\"`, `type=\"root\"`)
 		}, defaultTimeoutSeconds, 1).Should(Equal([]string{}))
 		By("Checking metric endpoint for managed1 replicated policy status")
 		Eventually(func() interface{} {
-			return utils.GetMetrics(
-				"policy_governance_info", `policy=\"case8-test-policy\"`, `cluster_namespace=\"managed1\",`,
-			)
+			return utils.GetMetrics(ctx, "policy_governance_info",
+				`policy=\"case8-test-policy\"`, `cluster_namespace=\"managed1\",`)
 		}, defaultTimeoutSeconds, 1).Should(Equal([]string{}))
 		By("Checking metric endpoint for managed2 replicated policy status")
 		Eventually(func() interface{} {
-			return utils.GetMetrics(
-				"policy_governance_info", `policy=\"case8-test-policy\"`, `cluster_namespace=\"managed2\",`,
-			)
+			return utils.GetMetrics(ctx, "policy_governance_info",
+				`policy=\"case8-test-policy\"`, `cluster_namespace=\"managed2\",`)
 		}, defaultTimeoutSeconds, 1).Should(Equal([]string{}))
 	})
 })

@@ -93,7 +93,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 		ansiblelistlen = 0
 		By("Create policy/pb/plc in ns:" + testNamespace + " and then update pb/plc")
 		By("Creating " + case5PolicyName + " in user ns")
-		_, err := utils.KubectlWithOutput("apply",
+		_, err := utils.KubectlWithOutput(ctx, "apply",
 			"-f", case5PolicyYaml,
 			"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 		Expect(err).ShouldNot(HaveOccurred())
@@ -122,10 +122,8 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 
 	cleanupPolicyAutomation := func(ctx SpecContext) {
 		By("Removing config map")
-		_, err := utils.KubectlWithOutput(
-			"delete", "policyautomation", "-n", testNamespace, automationName, "--kubeconfig="+kubeconfigHub,
-			"--ignore-not-found",
-		)
+		_, err := utils.KubectlWithOutput(ctx, "delete", "policyautomation", "-n", testNamespace, automationName,
+			"--kubeconfig="+kubeconfigHub, "--ignore-not-found")
 		Expect(err).ShouldNot(HaveOccurred())
 		By("Ansiblejob should also be removed")
 		Eventually(func() interface{} {
@@ -171,7 +169,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 	Describe("Test PolicyAutomation spec.mode", Ordered, func() {
 		It("Test mode = disable", func(ctx SpecContext) {
 			By("Creating an policyAutomation with mode=disable")
-			_, err := utils.KubectlWithOutput("apply",
+			_, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", "../resources/case5_policy_automation/case5-policy-automation-disable.yaml",
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -256,7 +254,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
-				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+				_, err = utils.KubectlWithOutput(ctx, "get", "ansiblejobs", "-n",
 					testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -267,7 +265,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
-				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+				_, err = utils.KubectlWithOutput(ctx, "get", "ansiblejobs", "-n",
 					testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 				index := len(ansiblejobList.Items) - 1
@@ -336,7 +334,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
-				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+				_, err = utils.KubectlWithOutput(ctx, "get", "ansiblejobs", "-n",
 					testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -374,9 +372,8 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			}, 30, 1).Should(BeTrue())
 
 			By("Removing config map")
-			_, err = utils.KubectlWithOutput(
-				"delete", "policyautomation", "-n", testNamespace, automationName, "--kubeconfig="+kubeconfigHub,
-			)
+			_, err = utils.KubectlWithOutput(ctx, "delete", "policyautomation", "-n", testNamespace, automationName,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ShouldNot(HaveOccurred())
 			By("Ansiblejob should also be removed")
 			Eventually(func() interface{} {
@@ -392,7 +389,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 		// Create two events then two ansiblejobs for each event
 		It("Test mode = everyEvent without delayAfterRunSeconds", func(ctx SpecContext) {
 			By("Creating an policyAutomation with mode=everyEvent")
-			_, err := utils.KubectlWithOutput("apply",
+			_, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", "../resources/case5_policy_automation/case5-policy-automation-everyEvent.yaml",
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -443,7 +440,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
-				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+				_, err = utils.KubectlWithOutput(ctx, "get", "ansiblejobs", "-n",
 					testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -455,7 +452,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
-				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+				_, err = utils.KubectlWithOutput(ctx, "get", "ansiblejobs", "-n",
 					testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -562,7 +559,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
-				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+				_, err = utils.KubectlWithOutput(ctx, "get", "ansiblejobs", "-n",
 					testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -577,7 +574,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 		// Only got the second ansiblejobs after delayAfterRunSeconds period for the last two events
 		It("Test mode = everyEvent with delayAfterRunSeconds", func(ctx SpecContext) {
 			By("Creating an policyAutomation with mode=everyEvent")
-			_, err := utils.KubectlWithOutput("apply",
+			_, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", "../resources/case5_policy_automation/case5-policy-automation-everyEvent.yaml",
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -642,7 +639,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			By("checking the last AnsibleJob has managed3 in target_clsuter for" +
 				"the first event during delayAfterRunSeconds period")
 			Eventually(func() interface{} {
-				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+				_, err = utils.KubectlWithOutput(ctx, "get", "ansiblejobs", "-n",
 					testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -655,7 +652,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 
-				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+				_, err = utils.KubectlWithOutput(ctx, "get", "ansiblejobs", "-n",
 					testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 				// Save ansiblelistlen for next test
@@ -840,7 +837,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
-				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+				_, err = utils.KubectlWithOutput(ctx, "get", "ansiblejobs", "-n",
 					testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -852,7 +849,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 					ctx, metav1.ListOptions{},
 				)
 				Expect(err).ToNot(HaveOccurred())
-				_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+				_, err = utils.KubectlWithOutput(ctx, "get", "ansiblejobs", "-n",
 					testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -860,9 +857,8 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			}, 30, 1).Should(BeNumerically(">", ansiblelistlen))
 
 			By("Removing config map")
-			_, err = utils.KubectlWithOutput(
-				"delete", "policyautomation", "-n", testNamespace, automationName, "--kubeconfig="+kubeconfigHub,
-			)
+			_, err = utils.KubectlWithOutput(ctx, "delete", "policyautomation", "-n", testNamespace, automationName,
+				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ShouldNot(HaveOccurred())
 			By("Ansiblejob should also be removed")
 			Eventually(func() interface{} {
@@ -913,21 +909,14 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 				}
 
 				By("Creating an policyAutomation with mode=disable")
-				_, err := utils.KubectlWithOutput("apply",
+				_, err := utils.KubectlWithOutput(ctx, "apply",
 					"-f", "../resources/case5_policy_automation/case5-policy-automation-disable.yaml",
 					"-n", testNamespace)
 				Expect(err).ShouldNot(HaveOccurred())
 				By("Applying manual run annotation")
-				_, err = utils.KubectlWithOutput(
-					"annotate",
-					"policyautomation",
-					"-n",
-					testNamespace,
-					automationName,
-					"--overwrite",
-					"policy.open-cluster-management.io/rerun=true",
-					"--kubeconfig="+kubeconfigHub,
-				)
+				_, err = utils.KubectlWithOutput(ctx, "annotate", "policyautomation", "-n", testNamespace,
+					automationName, "--overwrite", "policy.open-cluster-management.io/rerun=true",
+					"--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 			It("Should only create one ansiblejob which include 3 noncompliant target_clusters", func(ctx SpecContext) {
@@ -936,7 +925,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 						ctx, metav1.ListOptions{},
 					)
 					Expect(err).ToNot(HaveOccurred())
-					_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+					_, err = utils.KubectlWithOutput(ctx, "get", "ansiblejobs", "-n",
 						testNamespace, "--kubeconfig="+kubeconfigHub)
 					Expect(err).ShouldNot(HaveOccurred())
 
@@ -947,7 +936,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 						ctx, metav1.ListOptions{},
 					)
 					Expect(err).ShouldNot(HaveOccurred())
-					_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+					_, err = utils.KubectlWithOutput(ctx, "get", "ansiblejobs", "-n",
 						testNamespace, "--kubeconfig="+kubeconfigHub)
 					Expect(err).ShouldNot(HaveOccurred())
 
@@ -993,16 +982,9 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 
 			It("Should create one ansible job when the policy is compliant", func(ctx SpecContext) {
 				By("Applying manual run annotation again")
-				_, err := utils.KubectlWithOutput(
-					"annotate",
-					"policyautomation",
-					"-n",
-					testNamespace,
-					automationName,
-					"--overwrite",
-					"policy.open-cluster-management.io/rerun=true",
-					"--kubeconfig="+kubeconfigHub,
-				)
+				_, err := utils.KubectlWithOutput(ctx, "annotate", "policyautomation", "-n", testNamespace,
+					automationName, "--overwrite", "policy.open-cluster-management.io/rerun=true",
+					"--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 				By("Should still create one more ansiblejob when policy is Compliant")
 				Eventually(func() interface{} {
@@ -1010,7 +992,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 						ctx, metav1.ListOptions{},
 					)
 					Expect(err).ToNot(HaveOccurred())
-					_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+					_, err = utils.KubectlWithOutput(ctx, "get", "ansiblejobs", "-n",
 						testNamespace, "--kubeconfig="+kubeconfigHub)
 					Expect(err).ShouldNot(HaveOccurred())
 
@@ -1021,7 +1003,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 						ctx, metav1.ListOptions{},
 					)
 					Expect(err).ToNot(HaveOccurred())
-					_, err = utils.KubectlWithOutput("get", "ansiblejobs", "-n",
+					_, err = utils.KubectlWithOutput(ctx, "get", "ansiblejobs", "-n",
 						testNamespace, "--kubeconfig="+kubeconfigHub)
 					Expect(err).ShouldNot(HaveOccurred())
 
@@ -1057,23 +1039,16 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 				Expect(err).ToNot(HaveOccurred())
 
 				By("Creating an policyAutomation with mode=disable")
-				_, err = utils.KubectlWithOutput("apply",
+				_, err = utils.KubectlWithOutput(ctx, "apply",
 					"-f", "../resources/case5_policy_automation/case5-policy-automation-disable.yaml",
 					"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 			It("Should no issue when policy set to disabled = true ", func(ctx SpecContext) {
 				By("Applying manual run annotation")
-				_, err := utils.KubectlWithOutput(
-					"annotate",
-					"policyautomation",
-					"-n",
-					testNamespace,
-					automationName,
-					"--overwrite",
-					"policy.open-cluster-management.io/rerun=true",
-					"--kubeconfig="+kubeconfigHub,
-				)
+				_, err := utils.KubectlWithOutput(ctx, "annotate", "policyautomation", "-n", testNamespace,
+					automationName, "--overwrite", "policy.open-cluster-management.io/rerun=true",
+					"--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				By("Change policy disabled to false")
@@ -1100,16 +1075,9 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 			})
 			It("Should create one more ansiblejob when the manual run is set again ", func(ctx SpecContext) {
 				By("Applying manual run annotation")
-				_, err := utils.KubectlWithOutput(
-					"annotate",
-					"policyautomation",
-					"-n",
-					testNamespace,
-					automationName,
-					"--overwrite",
-					"policy.open-cluster-management.io/rerun=true",
-					"--kubeconfig="+kubeconfigHub,
-				)
+				_, err := utils.KubectlWithOutput(ctx, "annotate", "policyautomation", "-n", testNamespace,
+					automationName, "--overwrite", "policy.open-cluster-management.io/rerun=true",
+					"--kubeconfig="+kubeconfigHub)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				By("The ansiblejob should be two")
@@ -1129,7 +1097,7 @@ var _ = Describe("Test policy automation", Label("policyautomation"), Ordered, f
 
 	AfterAll(func(ctx SpecContext) {
 		By("Removing policy")
-		_, err := utils.KubectlWithOutput("delete", "policy", "-n",
+		_, err := utils.KubectlWithOutput(ctx, "delete", "policy", "-n",
 			testNamespace, case5PolicyName, "--kubeconfig="+kubeconfigHub)
 		Expect(err).ToNot(HaveOccurred())
 		By("PolicyAutomation should also be removed")

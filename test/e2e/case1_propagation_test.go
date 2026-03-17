@@ -30,7 +30,7 @@ var _ = Describe("Test policy propagation", func() {
 	Describe("Test event emission when policy is disabled", Ordered, func() {
 		BeforeAll(func(ctx SpecContext) {
 			By("Creating the policy, placementrule, and placementbinding")
-			utils.Kubectl("apply", "-f", case1PolicyYaml, "-n", testNamespace, "--kubeconfig="+kubeconfigHub)
+			utils.Kubectl(ctx, "apply", "-f", case1PolicyYaml, "-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			plc := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, case1PolicyName, testNamespace, true, defaultTimeoutSeconds,
 			)
@@ -113,9 +113,9 @@ var _ = Describe("Test policy propagation", func() {
 	})
 
 	Describe("Create policy/pb/plc in ns:"+testNamespace+" and then update pb/plc", func() {
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case1PolicyYaml)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case1PolicyYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -434,8 +434,8 @@ var _ = Describe("Test policy propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
 		})
-		It("should clean up", func() {
-			utils.Kubectl("delete",
+		It("should clean up", func(ctx SpecContext) {
+			utils.Kubectl(ctx, "delete",
 				"-f", case1PolicyYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -445,9 +445,9 @@ var _ = Describe("Test policy propagation", func() {
 	})
 
 	Describe("Create policy/pb/plc in ns:"+testNamespace+" and then update policy", func() {
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case1PolicyYaml)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case1PolicyYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -518,9 +518,9 @@ var _ = Describe("Test policy propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
 		})
-		It("should be created in user ns", func() {
+		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case1PolicyYaml)
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", case1PolicyYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -548,9 +548,9 @@ var _ = Describe("Test policy propagation", func() {
 			}
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 1, true, defaultTimeoutSeconds)
 		})
-		It("should update test-policy to a different policy template", func() {
+		It("should update test-policy to a different policy template", func(ctx SpecContext) {
 			By("Creating ../resources/case1_propagation/case1-test-policy2.yaml")
-			utils.Kubectl("apply",
+			utils.Kubectl(ctx, "apply",
 				"-f", "../resources/case1_propagation/case1-test-policy2.yaml",
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
@@ -622,8 +622,8 @@ var _ = Describe("Test policy propagation", func() {
 				return plc.GetAnnotations()
 			}, defaultTimeoutSeconds, 1).Should(HaveKey("test.io/grc-prop-case1-annotation"))
 		})
-		It("should clean up", func() {
-			utils.Kubectl("delete",
+		It("should clean up", func(ctx SpecContext) {
+			utils.Kubectl(ctx, "delete",
 				"-f", "../resources/case1_propagation/case1-test-policy2.yaml",
 				"-n", testNamespace, "--kubeconfig="+kubeconfigHub)
 			opt := metav1.ListOptions{}
