@@ -105,3 +105,5 @@ dev-tls.key
 dev-ca.crt
 
 __debug_bin*
+
+report*.xml
