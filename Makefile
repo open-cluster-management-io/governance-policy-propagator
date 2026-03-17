@@ -79,19 +79,16 @@ lint:
 ############################################################
 # test section
 ############################################################
-KBVERSION = 3.12.0
-ENVTEST_K8S_VERSION = 1.26.x
+
+TEST_PKGS ?= ./controllers/...
 
 .PHONY: test
-test: test-dependencies
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test $(TESTARGS) `go list ./... | grep -v test/e2e`
+test: envtest kubebuilder gotestsum
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GOTESTSUM) $(GOTST_FMT) --junitfile report_unit.xml -- $(TESTARGS) $(TEST_PKGS)
 
 .PHONY: test-coverage
-test-coverage: TESTARGS = -json -cover -covermode=atomic -coverprofile=coverage_unit.out
+test-coverage: TESTARGS = -coverpkg=./... -covermode=atomic -coverprofile=coverage_unit.out
 test-coverage: test
-
-.PHONY: test-dependencies
-test-dependencies: envtest kubebuilder
 
 .PHONY: gosec-scan
 gosec-scan: GOSEC_ARGS=-exclude G201
@@ -155,6 +152,7 @@ cert-manager:
 	kubectl wait --for=condition=Ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=180s 
 
 webhook: cert-manager
+	-kubectl apply -f https://raw.githubusercontent.com/open-cluster-management-io/multicloud-operators-subscription/main/deploy/hub-common/apps.open-cluster-management.io_placementrules_crd.yaml
 	-kubectl create ns $(KIND_NAMESPACE)
 	sed -E 's,open-cluster-management(.svc|/|$$),$(KIND_NAMESPACE)\1,g' deploy/webhook.yaml | kubectl apply -f -
 
@@ -228,44 +226,61 @@ install-resources:
 	kubectl apply -f test/resources/case5_policy_automation/cluster-dns.yaml
 
 E2E_LABEL_FILTER = --label-filter="!webhook && !policyautomation"
+E2E_JSON = --json-report=report_e2e.json
+E2E_JUNIT = --junit-report=report_e2e.xml
+
 .PHONY: e2e-test
 e2e-test: e2e-dependencies
-	$(GINKGO) -v --fail-fast $(E2E_TEST_ARGS) $(E2E_LABEL_FILTER) test/e2e -- $(E2E_TEST_CODE_ARGS)
+	$(GINKGO) -v $(E2E_LABEL_FILTER) --output-dir=. $(E2E_JSON) $(E2E_JUNIT) test/e2e
 
 .PHONY: e2e-test-webhook
 e2e-test-webhook: E2E_LABEL_FILTER = --label-filter="webhook"
+e2e-test-webhook: E2E_JSON = --json-report=report_e2e_webhook.json
+e2e-test-webhook: E2E_JUNIT = --junit-report=report_e2e_webhook.xml
 e2e-test-webhook: e2e-test
 
 .PHONY: e2e-test-policyautomation
 e2e-test-policyautomation: E2E_LABEL_FILTER = --label-filter="policyautomation"
+e2e-test-policyautomation: E2E_JSON = --json-report=report_e2e_policyautomation.json
+e2e-test-policyautomation: E2E_JUNIT = --junit-report=report_e2e_policyautomation.xml
 e2e-test-policyautomation: e2e-test
 
 .PHONY: e2e-test-non-placement-rule
 e2e-test-non-placement-rule: E2E_LABEL_FILTER = --label-filter="non-placement-rule"
+e2e-test-non-placement-rule: E2E_JSON = --json-report=report_e2e_non-placement-rule.json
+e2e-test-non-placement-rule: E2E_JUNIT = --junit-report=report_e2e_non-placement-rule.xml
 e2e-test-non-placement-rule: e2e-test
 
 .PHONY: e2e-build-instrumented
 e2e-build-instrumented:
-	go test -covermode=atomic -coverpkg=$(shell cat go.mod | head -1 | cut -d ' ' -f 2)/... -c -tags e2e ./ -o build/_output/bin/$(IMG)-instrumented
+	go test -covermode=atomic -coverpkg=./... -c -tags e2e ./ -o build/_output/bin/$(IMG)-instrumented
 
-TEST_COVERAGE_OUT = coverage_e2e.out
+COVERAGE_E2E_OUT = coverage_e2e_basic.out
+
 .PHONY: e2e-run-instrumented
 e2e-run-instrumented: e2e-build-instrumented
-	WATCH_NAMESPACE="$(WATCH_NAMESPACE)" ./build/_output/bin/$(IMG)-instrumented -test.run "^TestRunMain$$" -test.coverprofile=$(TEST_COVERAGE_OUT) 2>&1 | tee ./build/_output/controller.log &
+	WATCH_NAMESPACE="$(WATCH_NAMESPACE)" ./build/_output/bin/$(IMG)-instrumented -test.run "^TestRunMain$$" -test.coverprofile=$(COVERAGE_E2E_OUT) 2>&1 | tee ./build/_output/controller.log &
 
 .PHONY: e2e-stop-instrumented
 e2e-stop-instrumented:
 	ps -ef | grep '$(IMG)' | grep -v grep | awk '{print $$2}' | xargs kill
 
 .PHONY: e2e-test-coverage
-e2e-test-coverage: E2E_TEST_ARGS = --json-report=report_e2e.json --output-dir=.
 e2e-test-coverage: e2e-run-instrumented e2e-test e2e-stop-instrumented
 
 .PHONY: e2e-test-coverage-policyautomation
-e2e-test-coverage-policyautomation: E2E_TEST_ARGS = --json-report=report_e2e_policyautomation.json --output-dir=.
 e2e-test-coverage-policyautomation: E2E_LABEL_FILTER = --label-filter="policyautomation"
-e2e-test-coverage-policyautomation: TEST_COVERAGE_OUT = coverage_e2e_policyautomation.out
+e2e-test-coverage-policyautomation: COVERAGE_E2E_OUT = coverage_e2e_policyautomation.out
+e2e-test-coverage-policyautomation: E2E_JSON = --json-report=report_e2e_policyautomation.json
+e2e-test-coverage-policyautomation: E2E_JUNIT = --junit-report=report_e2e_policyautomation.xml
 e2e-test-coverage-policyautomation: e2e-test-coverage
+
+.PHONY: e2e-test-coverage-non-placement-rule
+e2e-test-coverage-non-placement-rule: E2E_LABEL_FILTER = --label-filter="non-placement-rule"
+e2e-test-coverage-non-placement-rule: COVERAGE_E2E_OUT = coverage_e2e_non-placement-rule.out
+e2e-test-coverage-non-placement-rule: E2E_JSON = --json-report=report_e2e_non-placement-rule.json
+e2e-test-coverage-non-placement-rule: E2E_JUNIT = --junit-report=report_e2e_non-placement-rule.xml
+e2e-test-coverage-non-placement-rule: e2e-test-coverage
 
 .PHONY: e2e-debug
 e2e-debug:
@@ -277,13 +292,16 @@ e2e-debug:
 ############################################################
 # test coverage
 ############################################################
-COVERAGE_FILE = coverage.out
-
 .PHONY: coverage-merge
 coverage-merge: coverage-dependencies
-	@echo Merging the coverage reports into $(COVERAGE_FILE)
-	$(GOCOVMERGE) $(PWD)/coverage_* > $(COVERAGE_FILE)
+	@echo Merging the coverage reports into coverage.out
+	$(GOCOVMERGE) $(PWD)/coverage_* > coverage.out
+
+.PHONY: coverage-merge-e2e
+coverage-merge-e2e: coverage-dependencies
+	@echo Merging the e2e coverage reports into coverage_e2e.out
+	$(GOCOVMERGE) $(PWD)/coverage_e2e* > coverage_e2e.out
 
 .PHONY: coverage-verify
-coverage-verify:
+coverage-verify: coverage-merge-e2e
 	./build/common/scripts/coverage_calc.sh

@@ -43,21 +43,17 @@ jobs:
         make generate-operator-yaml
         git diff --exit-code
 
-    - name: Unit and Integration Tests
-      run: |
-        make test
-
     - name: Unit Test Coverage
-      if: ${{ github.event_name == 'pull_request' }}
       run: |
         make test-coverage
     
     - name: Upload Unit Test Coverage
-      if: ${{ github.event_name == 'pull_request' }}
       uses: actions/upload-artifact@v7
       with:
-        name: coverage_unit
-        path: coverage_unit.out
+        name: latest-coverage_unit
+        path: |
+          coverage_unit.out
+          report_unit.xml
 
   kind-tests:
     runs-on: ubuntu-latest
@@ -97,12 +93,10 @@ jobs:
         export GOPATH=$(go env GOPATH)
         KUBECONFIG=${PWD}/kubeconfig_hub make e2e-test-coverage
 
-    - name: Upload E2E Test Coverage
-      if: ${{ github.event_name == 'pull_request' && matrix.kind == 'latest'}}
-      uses: actions/upload-artifact@v7
-      with:
-        name: coverage_e2e
-        path: coverage_e2e.out
+    - name: Tests without PlacementRule
+      run: |
+        KUBECONFIG=${PWD}/kubeconfig_hub_e2e kubectl delete crd placementrules.apps.open-cluster-management.io
+        KUBECONFIG=${PWD}/kubeconfig_hub make e2e-test-coverage-non-placement-rule
 
     - name: Verify Deployment Configuration
       run: |
@@ -113,11 +107,15 @@ jobs:
     - name: E2E Tests for Webhook
       run: |
         KUBECONFIG=${PWD}/kubeconfig_hub make e2e-test-webhook
-    
-    - name: Tests without PlacementRule
-      run: |
-        KUBECONFIG=${PWD}/kubeconfig_hub_e2e kubectl delete crd placementrules.apps.open-cluster-management.io
-        KUBECONFIG=${PWD}/kubeconfig_hub make e2e-test-non-placement-rule
+
+    - name: Upload Test Info
+      if: ${{ !cancelled() }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: "${{matrix.kind}}-kind-tests"
+        path: |
+          coverage_*.out
+          report_*.xml
 
     - name: Debug
       if: ${{ failure() }}
@@ -164,12 +162,14 @@ jobs:
         export GOPATH=$(go env GOPATH)
         KUBECONFIG=${PWD}/kubeconfig_hub make e2e-test-coverage-policyautomation
 
-    - name: Upload PolicyAutomation Test Coverage
-      if: ${{ github.event_name == 'pull_request' && matrix.kind == 'latest'}}
+    - name: Upload Test Info
+      if: ${{ !cancelled() }}
       uses: actions/upload-artifact@v7
       with:
-        name: coverage_e2e_policyautomation
-        path: coverage_e2e_policyautomation.out
+        name: "${{matrix.kind}}-policyautomation-tests"
+        path: |
+          coverage_*.out
+          report_*.xml
 
     - name: Debug
       if: ${{ failure() }}
@@ -199,22 +199,39 @@ jobs:
       with:
         go-version: stable
 
-    - name: Download Unit Coverage Result
+    - name: Download Test Results
       uses: actions/download-artifact@v8
       with:
-        name: coverage_unit
-    
-    - name: Download E2E Coverage Result
-      uses: actions/download-artifact@v8
-      with:
-        name: coverage_e2e
-
-    - name: Download PolicyAutomation Coverage Result
-      uses: actions/download-artifact@v8
-      with:
-        name: coverage_e2e_policyautomation
+        merge-multiple: true
+        pattern: latest-*
     
     - name: Test Coverage Verification
       run: |
         make coverage-verify
         make gosec-scan
+
+    - name: Report unit coverage to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_UPLOAD_TOKEN }}
+        files: ./coverage_unit.out
+        flags: unit-tests
+        name: unit-tests
+        fail_ci_if_error: false
+        disable_search: true
+
+    - name: Report e2e coverage to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_UPLOAD_TOKEN }}
+        files: ./coverage_e2e.out
+        flags: e2e-tests
+        name: e2e-tests
+        fail_ci_if_error: false
+        disable_search: true
+
+    - name: Report overall coverage to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_UPLOAD_TOKEN }}
+        fail_ci_if_error: false
