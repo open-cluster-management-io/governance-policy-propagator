@@ -42,7 +42,7 @@ func placementDecisionMapper(log logr.Logger, c client.Client) handler.MapFunc {
 		var result []reconcile.Request
 		// loop through pb to find if current placement is used for policy set
 		for _, pb := range pbList.Items {
-			if pb.PlacementRef.APIGroup != clusterv1beta1.SchemeGroupVersion.Group ||
+			if pb.PlacementRef.APIGroup != clusterv1beta1.GroupVersion.Group ||
 				pb.PlacementRef.Kind != "Placement" || pb.PlacementRef.Name != placementName {
 				continue
 			}

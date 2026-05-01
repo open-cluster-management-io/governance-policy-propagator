@@ -201,7 +201,7 @@ func HasValidPlacementRef(pb *policiesv1.PlacementBinding) bool {
 	case "PlacementRule":
 		return pb.PlacementRef.APIGroup == appsv1.SchemeGroupVersion.Group
 	case "Placement":
-		return pb.PlacementRef.APIGroup == clusterv1beta1.SchemeGroupVersion.Group
+		return pb.PlacementRef.APIGroup == clusterv1beta1.GroupVersion.Group
 	default:
 		return false
 	}
@@ -370,7 +370,7 @@ func GetRootPolicyRequests(ctx context.Context, c client.Client,
 	namespace, placementRefName string, refKind PlacementRefKinds,
 ) ([]reconcile.Request, error) {
 	kindGroupMap := map[PlacementRefKinds]string{
-		Placement:     clusterv1beta1.SchemeGroupVersion.Group,
+		Placement:     clusterv1beta1.GroupVersion.Group,
 		PlacementRule: appsv1.SchemeGroupVersion.Group,
 	}
 
