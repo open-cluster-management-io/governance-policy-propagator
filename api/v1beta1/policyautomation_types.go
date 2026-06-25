@@ -46,6 +46,8 @@ type AutomationDef struct {
 
 	// JobTTL sets the time to live for the Kubernetes Job object after the Ansible job playbook run
 	// has finished.
+	//
+	// +kubebuilder:validation:Minimum=0
 	JobTTL *int `json:"jobTtl,omitempty"`
 
 	// The maximum number of violating cluster contexts that are provided to the Ansible job as
@@ -62,6 +64,8 @@ type PolicyAutomationSpec struct {
 	Mode       PolicyAutomationMode `json:"mode"`
 
 	// PolicyRef is the name of the policy that this automation resource is bound to.
+	//
+	// +kubebuilder:validation:MinLength=1
 	PolicyRef string `json:"policyRef"`
 
 	// EventHook specifies the compliance state that initiates automation. This must be set to

@@ -58,6 +58,7 @@ spec:
                     description: >-
                       JobTTL sets the time to live for the Kubernetes Job object after the Ansible job playbook run
                       has finished.
+                    minimum: 0
                     type: integer
                   name:
                     description: Name of the Ansible Template to run in Ansible Automation
@@ -110,6 +111,7 @@ spec:
               policyRef:
                 description: PolicyRef is the name of the policy that this automation
                   resource is bound to.
+                minLength: 1
                 type: string
               rescanAfter:
                 description: RescanAfter is reserved for future use and should not
