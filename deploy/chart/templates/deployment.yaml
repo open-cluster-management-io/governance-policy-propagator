@@ -1,0 +1,147 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- if .Values.podAnnotations }}
+  annotations:
+    {{- include "controller.workloadAnnotations" . | trim | nindent 4 }}
+  {{- end }}
+  labels:
+    name: {{ .Chart.Name }}
+    webhook-origin: {{ .Chart.Name }}
+    {{- if .Values.podLabels }}
+    {{- include "controller.workloadLabels" . | trim | nindent 4 }}
+    {{- end }}
+  name: {{ .Chart.Name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: {{ .Chart.Name }}
+      webhook-origin: {{ .Chart.Name }}
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: {{ .Chart.Name }}
+        {{- if .Values.podAnnotations }}
+        {{- include "controller.workloadAnnotations" . | trim | nindent 8 }}
+        {{- end }}
+      labels:
+        name: {{ .Chart.Name }}
+        webhook-origin: {{ .Chart.Name }}
+        {{- if .Values.podLabels }}
+        {{- include "controller.workloadLabels" . | trim | nindent 8 }}
+        {{- end }}
+    spec:
+      containers:
+        - args:
+            - --health-probe-bind-address={{ .Values.args.healthProbeBindAddress }}
+            - --metrics-bind-address={{ .Values.args.metricsBindAddress }}
+            {{- if .Values.args.secureMetrics }}
+            - --secure-metrics
+            {{- end }}
+            {{- if .Values.args.leaderElect }}
+            - --leader-elect
+            {{- end }}
+            {{- if not (and .Values.args.enableWebhooks) }}
+            - --enable-webhooks=false
+            {{- end }}
+            {{- if .Values.args.encryptionKeyRotation }}
+            - --encryption-key-rotation={{ .Values.args.encryptionKeyRotation }}
+            {{- end }}
+            {{- if .Values.args.keyRotationMaxConcurrency }}
+            - --key-rotation-max-concurrency={{ .Values.args.keyRotationMaxConcurrency }}
+            {{- end }}
+            {{- if .Values.args.policyMetricsMaxConcurrency }}
+            - --policy-metrics-max-concurrency={{ .Values.args.policyMetricsMaxConcurrency }}
+            {{- end }}
+            {{- if .Values.args.policyStatusMaxConcurrency }}
+            - --policy-status-max-concurrency={{ .Values.args.policyStatusMaxConcurrency }}
+            {{- end }}
+            {{- if .Values.args.rootPolicyMaxConcurrency }}
+            - --root-policy-max-concurrency={{ .Values.args.rootPolicyMaxConcurrency }}
+            {{- end }}
+            {{- if .Values.args.replicatedPolicyMaxConcurrency }}
+            - --replicated-policy-max-concurrency={{ .Values.args.replicatedPolicyMaxConcurrency }}
+            {{- end }}
+            {{- if .Values.args.disablePlacementRule }}
+            - --disable-placementrule
+            {{- end }}
+            {{- if .Values.args.templateFunctionDenylist }}
+            - --template-function-denylist={{ join "," .Values.args.templateFunctionDenylist }}
+            {{- end }}
+          command:
+            - governance-policy-propagator
+          env:
+            - name: WATCH_NAMESPACE
+              value: {{ .Values.env.watchNamespace | quote }}
+            {{- if .Values.env.controllerConfigQPS }}
+            - name: CONTROLLER_CONFIG_QPS
+              value: {{ .Values.env.controllerConfigQPS | quote }}
+            {{- end }}
+            {{- if .Values.env.controllerConfigBurst }}
+            - name: CONTROLLER_CONFIG_BURST
+              value: {{ .Values.env.controllerConfigBurst | quote }}
+            {{- end }}
+            {{- if .Values.env.disableReportMetrics }}
+            - name: DISABLE_REPORT_METRICS
+              value: {{ .Values.env.disableReportMetrics | quote }}
+            {{- end }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          name: {{ .Chart.Name }}
+          ports:
+            - containerPort: 8383
+              name: http
+              protocol: TCP
+            {{- if .Values.args.enableWebhooks }}
+            - containerPort: 9443
+              name: webhook-http
+              protocol: TCP
+            {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - mountPath: /tmp/hub-templates
+              name: hub-templates
+          {{- if .Values.args.enableWebhooks }}
+            - mountPath: /tmp/k8s-webhook-server/serving-certs
+              name: cert
+              readOnly: true
+          {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ .Chart.Name }}
+      volumes:
+        - emptyDir: {}
+          name: hub-templates
+      {{- if .Values.args.enableWebhooks }}
+        - name: cert
+          secret:
+            defaultMode: 420
+            secretName: propagator-webhook-server-cert
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
