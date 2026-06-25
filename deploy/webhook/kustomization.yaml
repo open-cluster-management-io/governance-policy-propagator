@@ -1,0 +1,12 @@
+resources:
+- validatingwebhookconfiguration.yaml
+- service.yaml
+- certificate.yaml
+- issuer.yaml
+
+patches:
+- path: webhook-patch.yaml
+  target:
+    group: admissionregistration.k8s.io
+    version: v1
+    kind: ValidatingWebhookConfiguration

@@ -1,0 +1,7 @@
+- op: replace
+  path: /metadata/name
+  value: propagator-webhook-validating-configuration
+- op: add
+  path: /metadata/annotations
+  value:
+    cert-manager.io/inject-ca-from: open-cluster-management/propagator-webhook-serving-cert
