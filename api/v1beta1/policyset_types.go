@@ -45,7 +45,7 @@ type PolicySetStatus struct {
 	// Compliant reports the observed status resulting from the compliance of the policies within.
 	Compliant policyv1.ComplianceState `json:"compliant,omitempty"`
 
-	// StatusMessge reports the current state while determining the compliance of the policy set.
+	// StatusMessage reports the current state while determining the compliance of the policy set.
 	StatusMessage string `json:"statusMessage,omitempty"`
 }
 

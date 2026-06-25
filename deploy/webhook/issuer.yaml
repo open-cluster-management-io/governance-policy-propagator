@@ -1,0 +1,8 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: propagator-webhook-selfsigned-issuer
+  namespace: open-cluster-management
+spec:
+  selfSigned: {}

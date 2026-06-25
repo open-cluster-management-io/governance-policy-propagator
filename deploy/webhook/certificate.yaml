@@ -1,0 +1,14 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: propagator-webhook-serving-cert
+  namespace: open-cluster-management
+spec:
+  dnsNames:
+    - propagator-webhook-service.open-cluster-management.svc
+    - propagator-webhook-service.open-cluster-management.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: propagator-webhook-selfsigned-issuer
+  secretName: propagator-webhook-server-cert

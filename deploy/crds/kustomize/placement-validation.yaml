@@ -1,0 +1,17 @@
+- op: add
+  path: /spec/versions/0/schema/openAPIV3Schema/properties/placementRef/oneOf
+  value:
+    - properties:
+        apiGroup:
+          enum:
+            - cluster.open-cluster-management.io
+        kind:
+          enum:
+            - Placement
+    - properties:
+        apiGroup:
+          enum:
+            - apps.open-cluster-management.io
+        kind:
+          enum:
+            - PlacementRule
