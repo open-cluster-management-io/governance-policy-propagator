@@ -12,6 +12,13 @@
         properties:
           kind:
             pattern: ^(?:(?:Certificate|Configuration)Policy)$
+- op: replace
+  path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/dependencies/items/required
+  value:
+    - apiVersion
+    - kind
+    - name
+    - compliance
 - op: add
   path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/policy-templates/items/properties/extraDependencies/items/oneOf
   value:
@@ -26,3 +33,10 @@
         properties:
           kind:
             pattern: ^(?:(?:Certificate|Configuration)Policy)$
+- op: replace
+  path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/policy-templates/items/properties/extraDependencies/items/required
+  value:
+    - apiVersion
+    - kind
+    - name
+    - compliance

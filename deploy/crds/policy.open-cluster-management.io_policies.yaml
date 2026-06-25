@@ -118,8 +118,10 @@ spec:
                       description: Namespace is the namespace of the object that the policy depends on (optional).
                       type: string
                   required:
-                  - compliance
+                  - apiVersion
+                  - kind
                   - name
+                  - compliance
                   type: object
                 type: array
               disabled:
@@ -201,8 +203,10 @@ spec:
                             description: Namespace is the namespace of the object that the policy depends on (optional).
                             type: string
                         required:
-                        - compliance
+                        - apiVersion
+                        - kind
                         - name
+                        - compliance
                         type: object
                       type: array
                     ignorePending:
