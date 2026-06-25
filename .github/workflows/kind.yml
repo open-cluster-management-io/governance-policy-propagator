@@ -43,6 +43,10 @@ jobs:
         make generate-operator-yaml
         git diff --exit-code
 
+    - name: Verify Helm chart
+      run: |
+        make validate-helm
+
     - name: Unit Test Coverage
       run: |
         make test-coverage

@@ -3,6 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
+    name: governance-policy-propagator
     webhook-origin: governance-policy-propagator
   name: governance-policy-propagator
 spec:
@@ -19,16 +20,15 @@ spec:
         name: governance-policy-propagator
         webhook-origin: governance-policy-propagator
     spec:
-      serviceAccountName: governance-policy-propagator
       containers:
         - name: governance-policy-propagator
           image: quay.io/open-cluster-management/governance-policy-propagator:latest
           command:
             - governance-policy-propagator
           args:
-            - "--health-probe-bind-address=:8081"
-            - "--metrics-bind-address=:8383"
-            - "--leader-elect"
+            - --health-probe-bind-address=:8081
+            - --metrics-bind-address=:8383
+            - --leader-elect
           ports:
             - containerPort: 8383
               protocol: TCP
@@ -38,19 +38,32 @@ spec:
               name: webhook-http
           imagePullPolicy: Always
           volumeMounts:
+          - mountPath: /tmp/hub-templates
+            name: hub-templates
           - mountPath: /tmp/k8s-webhook-server/serving-certs
             name: cert
             readOnly: true
           env:
             - name: WATCH_NAMESPACE
               value: ""
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-            - name: OPERATOR_NAME
-              value: "governance-policy-propagator"
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: governance-policy-propagator
       volumes:
+      - emptyDir: {}
+        name: hub-templates
       - name: cert
         secret:
           defaultMode: 420
