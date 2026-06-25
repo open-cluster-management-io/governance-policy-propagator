@@ -8,7 +8,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
-//+kubebuilder:rbac:groups=authorization.k8s.io,resources=tokenreviews,verbs=create
+//+kubebuilder:rbac:groups=authentication.k8s.io,resources=tokenreviews,verbs=create
 
 var (
 	hubTemplateActiveWatchesMetric = prometheus.NewGauge(

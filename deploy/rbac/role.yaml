@@ -52,7 +52,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - authorization.k8s.io
+  - authentication.k8s.io
   resources:
   - tokenreviews
   verbs:
