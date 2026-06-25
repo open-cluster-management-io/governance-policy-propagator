@@ -122,8 +122,11 @@ run:
 manifests: kustomize controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) crd rbac:roleName=governance-policy-propagator paths="./..." output:crd:artifacts:config=deploy/crds output:rbac:artifacts:config=deploy/rbac
 	mv deploy/crds/policy.open-cluster-management.io_policies.yaml deploy/crds/kustomize/policy.open-cluster-management.io_policies.yaml
-	@printf -- "---\n" > deploy/crds/policy.open-cluster-management.io_policies.yaml
-	$(KUSTOMIZE) build deploy/crds/kustomize >> deploy/crds/policy.open-cluster-management.io_policies.yaml
+	mv deploy/crds/policy.open-cluster-management.io_placementbindings.yaml deploy/crds/kustomize/policy.open-cluster-management.io_placementbindings.yaml
+	echo "---" > deploy/crds/policy.open-cluster-management.io_policies.yaml
+	echo "---" > deploy/crds/policy.open-cluster-management.io_placementbindings.yaml
+	set -o pipefail; $(KUSTOMIZE) build deploy/crds/kustomize | yq -c 'select(.metadata.name == "policies.policy.open-cluster-management.io")' >> deploy/crds/policy.open-cluster-management.io_policies.yaml
+	set -o pipefail; $(KUSTOMIZE) build deploy/crds/kustomize | yq -c 'select(.metadata.name == "placementbindings.policy.open-cluster-management.io")' >> deploy/crds/policy.open-cluster-management.io_placementbindings.yaml
 	$(SED) -i 's/ description: |-/ description: >-/g' deploy/crds/policy.open-cluster-management.io_*.yaml
 
 .PHONY: generate

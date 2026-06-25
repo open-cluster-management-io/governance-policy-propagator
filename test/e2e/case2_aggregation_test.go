@@ -37,16 +37,14 @@ var _ = Describe("Test policy status aggregation", func() {
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 10)
 		})
 
-		It("should create the faulty PlacementBinding in user ns", func(ctx SpecContext) {
+		It("should fail to create the faulty PlacementBinding in user ns", func(ctx SpecContext) {
 			By("Creating " + faultyPBName)
-			utils.Kubectl(ctx, "apply",
+			out, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", faultyPBYaml,
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
-			pb := utils.GetWithTimeout(
-				clientHubDynamic, gvrPlacementBinding, faultyPBName, testNamespace, true, defaultTimeoutSeconds,
-			)
-			Expect(pb).NotTo(BeNil())
+			Expect(err).To(HaveOccurred())
+			Expect(out).To(ContainSubstring("The PlacementBinding \"case2-faulty-placementbinding\" is invalid:"))
 		})
 		It("should be created in user ns", func(ctx SpecContext) {
 			By("Creating " + case2PolicyYaml)
