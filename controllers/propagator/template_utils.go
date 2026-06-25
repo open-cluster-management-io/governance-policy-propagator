@@ -329,7 +329,7 @@ func GetToken(
 		return "", err
 	}
 
-	tokenFile, err := os.CreateTemp("", fmt.Sprintf("token-%s.%s-*", namespace, saName))
+	tokenFile, err := os.CreateTemp("/tmp/hub-templates", fmt.Sprintf("token-%s.%s-*", namespace, saName))
 	if err != nil {
 		return "", err
 	}
