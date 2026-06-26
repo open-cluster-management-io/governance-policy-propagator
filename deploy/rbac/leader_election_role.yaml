@@ -18,6 +18,7 @@ rules:
   - delete
 - apiGroups:
   - ""
+  - events.k8s.io
   resources:
   - events
   verbs:
