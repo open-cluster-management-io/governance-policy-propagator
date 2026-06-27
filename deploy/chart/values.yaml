@@ -1,0 +1,57 @@
+# Default values for governance-policy-propagator.
+
+# Controller command-line flags.
+args:
+  healthProbeBindAddress: ":8081"
+  metricsBindAddress: ":8383"
+  secureMetrics: false
+  leaderElect: true
+  enableWebhooks: true
+  encryptionKeyRotation: null
+  keyRotationMaxConcurrency: null
+  policyMetricsMaxConcurrency: null
+  policyStatusMaxConcurrency: null
+  rootPolicyMaxConcurrency: null
+  replicatedPolicyMaxConcurrency: null
+  disablePlacementRule: false
+  templateFunctionDenylist: []
+
+# Controller environment variables
+env:
+  watchNamespace: ""
+  # Optional
+  controllerConfigQPS: ""
+  controllerConfigBurst: ""
+  disableReportMetrics: ""
+
+image:
+  repository: quay.io/open-cluster-management/governance-policy-propagator
+  tag: latest
+  pullPolicy: Always
+imagePullSecrets: []
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+webhook:
+  failurePolicy: Ignore
