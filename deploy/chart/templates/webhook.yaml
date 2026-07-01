@@ -1,0 +1,67 @@
+{{- if .Values.args.enableWebhooks }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: propagator-webhook-service
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
+spec:
+  ports:
+    - port: 443
+      protocol: TCP
+      targetPort: 9443
+  selector:
+    webhook-origin: {{ .Chart.Name }}
+    {{- if .Values.podLabels }}
+    {{- include "controller.workloadLabels" . | trim | nindent 4 }}
+    {{- end }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: propagator-webhook-serving-cert
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
+spec:
+  dnsNames:
+    - {{ printf "propagator-webhook-service.%s.svc" .Release.Namespace }}
+    - {{ printf "propagator-webhook-service.%s.svc.cluster.local" .Release.Namespace }}
+  issuerRef:
+    kind: Issuer
+    name: propagator-webhook-selfsigned-issuer
+  secretName: propagator-webhook-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: propagator-webhook-selfsigned-issuer
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
+spec:
+  selfSigned: {}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Values.namespace | default .Release.Namespace }}/propagator-webhook-serving-cert
+  name: propagator-webhook-validating-configuration
+webhooks:
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: propagator-webhook-service
+        namespace: {{ .Values.namespace | default .Release.Namespace }}
+        path: /validate-policy-open-cluster-management-io-v1-policy
+    failurePolicy: {{ .Values.webhook.failurePolicy }}
+    name: policy.open-cluster-management.io.webhook
+    rules:
+      - apiGroups:
+          - policy.open-cluster-management.io
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - policies
+    sideEffects: None
+{{- end }}

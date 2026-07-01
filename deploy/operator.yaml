@@ -1,8 +1,8 @@
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: governance-policy-propagator
-  namespace: open-cluster-management
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -23,6 +23,7 @@ rules:
   - delete
 - apiGroups:
   - ""
+  - events.k8s.io
   resources:
   - events
   verbs:
@@ -34,18 +35,6 @@ kind: ClusterRole
 metadata:
   name: governance-policy-propagator
 rules:
-- apiGroups:
-  - ""
-  resources:
-  - events
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
 - apiGroups:
   - ""
   resourceNames:
@@ -65,6 +54,19 @@ rules:
   verbs:
   - create
 - apiGroups:
+  - ""
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - '*'
   resources:
   - '*'
@@ -81,9 +83,15 @@ rules:
   - list
   - watch
 - apiGroups:
-  - authorization.k8s.io
+  - authentication.k8s.io
   resources:
   - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
   verbs:
   - create
 - apiGroups:
@@ -181,6 +189,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
+    name: governance-policy-propagator
     webhook-origin: governance-policy-propagator
   name: governance-policy-propagator
 spec:
@@ -207,12 +216,6 @@ spec:
         env:
         - name: WATCH_NAMESPACE
           value: ""
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
-        - name: OPERATOR_NAME
-          value: governance-policy-propagator
         image: quay.io/open-cluster-management/governance-policy-propagator:latest
         imagePullPolicy: Always
         name: governance-policy-propagator
@@ -223,12 +226,30 @@ spec:
         - containerPort: 9443
           name: webhook-http
           protocol: TCP
+        resources:
+          requests:
+            cpu: 25m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
         volumeMounts:
+        - mountPath: /tmp/hub-templates
+          name: hub-templates
         - mountPath: /tmp/k8s-webhook-server/serving-certs
           name: cert
           readOnly: true
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       serviceAccountName: governance-policy-propagator
       volumes:
+      - emptyDir: {}
+        name: hub-templates
       - name: cert
         secret:
           defaultMode: 420

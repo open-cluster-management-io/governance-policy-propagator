@@ -1,20 +1,25 @@
-name: GoPostSubmit
+name: Post-Submit
 
 on:
   push:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   verify:
-    name: images
+    name: Build and push image
     runs-on: ubuntu-latest
     steps:
-      - name: checkout code
+      - name: Checkout code
         uses: actions/checkout@v6
-      - name: images
+
+      - name: Build image
         run: make build-images
-      - name: push
+
+      - name: Push image
         run: |
           echo ${{ secrets.DOCKER_PASSWORD }} | docker login quay.io --username ${{ secrets.DOCKER_USER }} --password-stdin
           docker push quay.io/open-cluster-management/governance-policy-propagator:latest

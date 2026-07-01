@@ -1,0 +1,67 @@
+name: Release
+
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+env:
+  TAG: ${{ github.ref_name }}
+  REPOSITORY: ${{ github.repository }}
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup environment variables
+        run: |
+          REPO_NAME="${REPOSITORY#*/}"
+
+          echo "SEMANTIC_TAG=${TAG#v}" | tee -a ${GITHUB_ENV}
+          echo "REPO_NAME=${REPO_NAME}" | tee -a ${GITHUB_ENV}
+          echo "IMAGE_PATH=quay.io/open-cluster-management/${REPO_NAME}:${TAG}" | tee -a ${GITHUB_ENV}
+
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Package Helm chart
+        run: |
+          yq -i '.image.tag = strenv(TAG)' deploy/chart/values.yaml
+          yq -i '.image.pullPolicy = "IfNotPresent"' deploy/chart/values.yaml
+          ocm_version=$(go list -m -f '{{ .Version }}' open-cluster-management.io/api | cut -d '.' -f 1-2)
+          ocm_version=${ocm_version} yq -i '.ocm_version = strenv(ocm_version)' deploy/chart/values.yaml
+
+          helm package deploy/chart \
+            --version "${SEMANTIC_TAG }" \
+            --app-version "${TAG}" \
+            --destination .
+          echo "CHART_PACKAGE=${REPO_NAME}-${SEMANTIC_TAG}.tgz" >> ${GITHUB_ENV}
+
+      - name: Build images
+        run: |
+          make build-images
+
+      - name: Push image
+        env:
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          DOCKER_USER: ${{ secrets.DOCKER_USER }}
+        run: |
+          echo "${DOCKER_PASSWORD}" | docker login quay.io --username "${DOCKER_USER}" --password-stdin
+          docker push "${IMAGE_PATH}"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: ${{ env.TAG }}
+          draft: true
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            # ${{ env.REPO_NAME }} ${{ env.TAG }}
+            - The released image is ${{ env.IMAGE_PATH }}
+          files: ${{ env.CHART_PACKAGE }}
