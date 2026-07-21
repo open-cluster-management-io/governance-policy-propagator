@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -476,9 +477,20 @@ func (r *ReplicatedPolicyReconciler) isSingleClusterInDecisions(
 				subjectFound = true
 			}
 		case policiesv1.PolicySetKind:
-			if common.IsPolicyInPolicySet(ctx, r.Client, policyName, subject.Name, pb.GetNamespace()) {
-				subjectFound = true
+			policySet, err := common.GetPolicySet(ctx, r.Client, pb.GetNamespace(), subject.Name)
+			if err != nil {
+				return false, err
 			}
+
+			if !common.IsPolicyInPolicySet(policySet, policyName) {
+				continue
+			}
+
+			if slices.Contains(common.ExcludedClustersForPolicy(policySet, policyName), clusterName) {
+				continue
+			}
+
+			subjectFound = true
 		}
 
 		if subjectFound {

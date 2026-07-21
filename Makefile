@@ -80,7 +80,7 @@ lint:
 # test section
 ############################################################
 
-TEST_PKGS ?= ./controllers/...
+TEST_PKGS ?= ./controllers/... ./api/...
 
 .PHONY: test
 test: envtest kubebuilder gotestsum

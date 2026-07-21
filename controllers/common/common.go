@@ -7,10 +7,12 @@
 package common
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -409,4 +411,154 @@ func LogConstructor(controllerName string, kind string, req *reconcile.Request) 
 	}
 
 	return log
+}
+
+// GetPolicySet fetches a PolicySet, returning nil when it is not found.
+func GetPolicySet(
+	ctx context.Context, c client.Client, namespace, policySetName string,
+) (*policiesv1beta1.PolicySet, error) {
+	policySet := &policiesv1beta1.PolicySet{}
+
+	err := c.Get(ctx, types.NamespacedName{
+		Namespace: namespace,
+		Name:      policySetName,
+	}, policySet)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil, nil
+		}
+
+		return nil, fmt.Errorf("failed to get PolicySet '%s': %w", policySetName, err)
+	}
+
+	return policySet, nil
+}
+
+// IsPolicyInPolicySet reports whether a policy is listed in a PolicySet spec
+func IsPolicyInPolicySet(policySet *policiesv1beta1.PolicySet, policyName string) bool {
+	if policySet == nil || policyName == "" {
+		return false
+	}
+
+	return slices.Contains(policySet.Spec.Policies, policiesv1beta1.NonEmptyString(policyName))
+}
+
+// ExcludedClustersForPolicy returns excluded cluster names for policyName in the PolicySet.
+func ExcludedClustersForPolicy(
+	policySet *policiesv1beta1.PolicySet, policyName string,
+) []string {
+	if policySet == nil || len(policySet.Spec.Exclusions) == 0 {
+		return nil
+	}
+
+	var clusterNames []string
+
+	for _, exclusion := range policySet.Spec.Exclusions {
+		if string(exclusion.PolicyName) != policyName {
+			continue
+		}
+
+		for _, clusterName := range exclusion.ClusterNames {
+			clusterNames = append(clusterNames, string(clusterName))
+		}
+	}
+
+	if len(clusterNames) == 0 {
+		return nil
+	}
+
+	slices.Sort(clusterNames)
+
+	return slices.Compact(clusterNames)
+}
+
+// FilterExcludedClusters returns a copy of clusters with excluded names removed.
+func FilterExcludedClusters(clusters []string, excluded []string) []string {
+	return slices.DeleteFunc(slices.Clone(clusters), func(cluster string) bool {
+		return slices.Contains(excluded, cluster)
+	})
+}
+
+// buildPolicyExclusionsStatus returns root policy placement status exclusions for policyName
+// in the given PolicySet.
+func buildPolicyExclusionsStatus(
+	policySet *policiesv1beta1.PolicySet, policyName string,
+) []policiesv1.PolicyExclusion {
+	excludedClusters := ExcludedClustersForPolicy(policySet, policyName)
+	if len(excludedClusters) == 0 {
+		return nil
+	}
+
+	placementExclusions := make([]policiesv1.PolicyExclusion, len(excludedClusters))
+	for i, clusterName := range excludedClusters {
+		placementExclusions[i] = policiesv1.PolicyExclusion{
+			ClusterName: clusterName,
+		}
+	}
+
+	slices.SortFunc(placementExclusions, func(a, b policiesv1.PolicyExclusion) int {
+		return cmp.Compare(a.ClusterName, b.ClusterName)
+	})
+
+	return placementExclusions
+}
+
+// computeRemainingBindings reports placement bindings that still place a policy on clusters that
+// are excluded on a PolicySet path but remain in the effective decision set.
+func computeRemainingBindings(
+	rootPolicy *policiesv1.Policy,
+	placements []*policiesv1.Placement,
+	decisions DecisionSet,
+) map[string][]policiesv1.RemainingBinding {
+	if rootPolicy.Spec.Disabled || len(decisions) == 0 {
+		return nil
+	}
+
+	excludedByCluster := map[string][]string{}
+
+	for _, placement := range placements {
+		if placement == nil || placement.PolicySet == "" {
+			continue
+		}
+
+		bindingName := placement.PlacementBinding
+
+		for _, exclusion := range placement.Exclusions {
+			clusterName := exclusion.ClusterName
+			excludedByCluster[clusterName] = append(excludedByCluster[clusterName], bindingName)
+		}
+	}
+
+	result := make(map[string][]policiesv1.RemainingBinding)
+
+	for clusterName, bindingNames := range decisions {
+		excludingBindings := excludedByCluster[clusterName]
+		if len(excludingBindings) == 0 {
+			continue
+		}
+
+		remaining := slices.DeleteFunc(slices.Clone(bindingNames), func(bindingName string) bool {
+			return slices.Contains(excludingBindings, bindingName)
+		})
+		if len(remaining) == 0 {
+			continue
+		}
+
+		remainingBindings := make([]policiesv1.RemainingBinding, len(remaining))
+		for i, bindingName := range remaining {
+			remainingBindings[i] = policiesv1.RemainingBinding{PlacementBinding: bindingName}
+		}
+
+		slices.SortFunc(remainingBindings, func(a, b policiesv1.RemainingBinding) int {
+			return cmp.Compare(a.PlacementBinding, b.PlacementBinding)
+		})
+
+		result[clusterName] = remainingBindings
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+
+	return result
 }

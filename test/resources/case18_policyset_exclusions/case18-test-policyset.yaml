@@ -1,0 +1,63 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: case18-test-policy
+spec:
+  remediationAction: inform
+  disabled: false
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policies.open-cluster-management.io/v1alpha1
+        kind: FakePolicy
+        metadata:
+          name: case18-test-policy-fakepolicy
+        spec:
+          severity: low
+          namespaceSelector:
+            include: ["default"]
+            exclude: ["kube-system"]
+          remediationAction: inform
+          imageRegistry: quay.io
+---
+apiVersion: policy.open-cluster-management.io/v1beta1
+kind: PolicySet
+metadata:
+  name: case18-test-policyset
+spec:
+  policies:
+  - case18-test-policy
+  exclusions:
+  - policyName: case18-test-policy
+    reason: incident mitigation
+    clusterNames:
+    - managed2
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: case18-test-policyset-pb
+placementRef:
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+  name: case18-test-policyset-plm
+subjects:
+- apiGroup: policy.open-cluster-management.io
+  kind: PolicySet
+  name: case18-test-policyset
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: case18-test-policyset-plm
+spec:
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions: []
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: PlacementDecision
+metadata:
+  name: case18-test-policyset-plm-decision
+  labels:
+    cluster.open-cluster-management.io/placement: case18-test-policyset-plm
