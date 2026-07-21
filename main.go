@@ -435,6 +435,11 @@ func main() {
 			log.Error(err, "unable to create webhook", "webhook", "Policy")
 			os.Exit(1)
 		}
+
+		if err = (&policyv1beta1.PolicySet{}).SetupWebhookWithManager(mgr); err != nil {
+			log.Error(err, "unable to create webhook", "webhook", "PolicySet")
+			os.Exit(1)
+		}
 	}
 
 	//+kubebuilder:scaffold:builder

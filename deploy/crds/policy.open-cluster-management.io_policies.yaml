@@ -306,6 +306,15 @@ spec:
                             type: string
                         type: object
                       type: array
+                    exclusions:
+                      description: Exclusions lists managed clusters where the policy is excluded from propagation.
+                      items:
+                        description: PolicyExclusion reports a managed cluster excluded from propagation by a policy set exclusion.
+                        properties:
+                          clusterName:
+                            type: string
+                        type: object
+                      type: array
                     placement:
                       description: >-
                         Placement is the name of the Placement resource, from the cluster.open-cluster-management.io
@@ -349,6 +358,16 @@ spec:
                       - Pending
                       - NonCompliant
                       type: string
+                    remainingBindings:
+                      items:
+                        description: >-
+                          RemainingBinding reports a placement binding that still places the policy on a managed cluster
+                          when the policy is excluded on a policy set.
+                        properties:
+                          placementBinding:
+                            type: string
+                        type: object
+                      type: array
                   type: object
                 type: array
             type: object

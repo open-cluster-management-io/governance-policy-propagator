@@ -24,3 +24,23 @@ webhooks:
     resources:
     - policies
   sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: propagator-webhook-service
+      namespace: open-cluster-management
+      path: /validate-policy-open-cluster-management-io-v1beta1-policyset
+  failurePolicy: Ignore
+  name: policyset.open-cluster-management.io.webhook
+  rules:
+  - apiGroups:
+    - policy.open-cluster-management.io
+    apiVersions:
+    - v1beta1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - policysets
+  sideEffects: None

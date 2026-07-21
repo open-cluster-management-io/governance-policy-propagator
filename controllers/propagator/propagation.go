@@ -68,7 +68,7 @@ func (r *RootPolicyReconciler) cleanUpOrphanedRplPolicies(
 	allDecisions common.DecisionSet,
 ) {
 	for _, cluster := range originalCPCS {
-		if allDecisions[cluster.ClusterName] {
+		if len(allDecisions[cluster.ClusterName]) > 0 {
 			continue
 		}
 

@@ -1,0 +1,92 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: case18-multi-policy
+spec:
+  remediationAction: inform
+  disabled: false
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policies.open-cluster-management.io/v1alpha1
+        kind: FakePolicy
+        metadata:
+          name: case18-multi-policy-fakepolicy
+        spec:
+          severity: low
+          namespaceSelector:
+            include: ["default"]
+            exclude: ["kube-system"]
+          remediationAction: inform
+          imageRegistry: quay.io
+---
+apiVersion: policy.open-cluster-management.io/v1beta1
+kind: PolicySet
+metadata:
+  name: case18-multi-policyset
+spec:
+  policies:
+  - case18-multi-policy
+  exclusions:
+  - policyName: case18-multi-policy
+    clusterNames:
+    - managed2
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: case18-multi-policy-direct-pb
+placementRef:
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+  name: case18-multi-policy-direct-plm
+subjects:
+- apiGroup: policy.open-cluster-management.io
+  kind: Policy
+  name: case18-multi-policy
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: case18-multi-policy-direct-plm
+spec:
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions: []
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: PlacementDecision
+metadata:
+  name: case18-multi-policy-direct-plm-decision
+  labels:
+    cluster.open-cluster-management.io/placement: case18-multi-policy-direct-plm
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: case18-multi-policyset-pb
+placementRef:
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+  name: case18-multi-policyset-plm
+subjects:
+- apiGroup: policy.open-cluster-management.io
+  kind: PolicySet
+  name: case18-multi-policyset
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: case18-multi-policyset-plm
+spec:
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions: []
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: PlacementDecision
+metadata:
+  name: case18-multi-policyset-plm-decision
+  labels:
+    cluster.open-cluster-management.io/placement: case18-multi-policyset-plm

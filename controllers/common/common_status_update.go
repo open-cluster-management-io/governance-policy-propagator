@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -15,7 +16,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
-	policiesv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
 )
 
 // RootStatusUpdate updates the root policy status with bound decisions, placements, and cluster status.
@@ -27,7 +27,7 @@ func RootStatusUpdate(ctx context.Context, c client.Client, rootPolicy *policies
 		return nil, err
 	}
 
-	cpcs, cpcsErr := CalculatePerClusterStatus(ctx, c, rootPolicy, decisions)
+	cpcs, cpcsErr := CalculatePerClusterStatus(ctx, c, rootPolicy, placements, decisions)
 	if cpcsErr != nil {
 		// If there is a new replicated policy, then its lookup is expected to fail - it hasn't been created yet.
 		log.Error(cpcsErr, "Failed to get at least one replicated policy, but that may be expected. Ignoring.")
@@ -90,10 +90,16 @@ func GetPolicyPlacementDecisions(ctx context.Context, c client.Client,
 			if _, exists := policySetSubjects[subject.Name]; !exists {
 				policySetSubjects[subject.Name] = struct{}{}
 
-				if IsPolicyInPolicySet(ctx, c, instance.GetName(), subject.Name, pb.GetNamespace()) {
+				policySet, err := GetPolicySet(ctx, c, pb.GetNamespace(), subject.Name)
+				if err != nil {
+					return nil, nil, err
+				}
+
+				if IsPolicyInPolicySet(policySet, instance.GetName()) {
 					placements = append(placements, &policiesv1.Placement{
 						PlacementBinding: pb.GetName(),
 						PolicySet:        subject.Name,
+						Exclusions:       buildPolicyExclusionsStatus(policySet, instance.GetName()),
 					})
 				}
 			}
@@ -154,7 +160,22 @@ func GetPolicyPlacementDecisions(ctx context.Context, c client.Client,
 	return clusterDecisions, placements, err
 }
 
-type DecisionSet map[string]bool
+type DecisionSet map[string][]string
+
+func (d DecisionSet) addBinding(clusterName, bindingName string) {
+	if slices.Contains(d[clusterName], bindingName) {
+		return
+	}
+
+	d[clusterName] = append(d[clusterName], bindingName)
+}
+
+func sortDecisionSet(decisions DecisionSet) {
+	for clusterName, bindings := range decisions {
+		sort.Strings(bindings)
+		decisions[clusterName] = bindings
+	}
+}
 
 // GetClusterDecisions identifies all managed clusters which should have a replicated policy using the root policy
 // This returns unique decisions and placements that are NOT under Restricted subset.
@@ -165,11 +186,9 @@ func GetClusterDecisions(
 	ctx context.Context,
 	c client.Client,
 	rootPolicy *policiesv1.Policy,
-) (
-	[]*policiesv1.Placement, DecisionSet, error,
-) {
+) ([]*policiesv1.Placement, DecisionSet, error) {
 	log := log.WithValues("policyName", rootPolicy.GetName(), "policyNamespace", rootPolicy.GetNamespace())
-	decisions := make(map[string]bool)
+	decisions := make(DecisionSet)
 
 	pbList := &policiesv1.PlacementBindingList{}
 
@@ -200,7 +219,7 @@ func GetClusterDecisions(
 
 		// Decisions are all unique
 		for _, clusterName := range plcDecisions {
-			decisions[clusterName] = true
+			decisions.addBinding(clusterName, pb.GetName())
 		}
 
 		placements = append(placements, plcPlacements...)
@@ -226,17 +245,19 @@ func GetClusterDecisions(
 
 		// Decisions are all unique
 		for _, clusterName := range plcDecisions {
-			if _, ok := decisions[clusterName]; ok {
+			if len(decisions[clusterName]) > 0 {
 				foundInDecisions = true
 			}
 
-			decisions[clusterName] = true
+			decisions.addBinding(clusterName, pb.GetName())
 		}
 
 		if foundInDecisions {
 			placements = append(placements, plcPlacements...)
 		}
 	}
+
+	sortDecisionSet(decisions)
 
 	log.V(2).Info("Sorting placements", "RootPolicyName", rootPolicy.Name, "Namespace", rootPolicy.Namespace)
 	sort.SliceStable(placements, func(i, j int) bool {
@@ -258,17 +279,29 @@ func CalculatePerClusterStatus(
 	ctx context.Context,
 	c client.Client,
 	rootPolicy *policiesv1.Policy,
+	placements []*policiesv1.Placement,
 	decisions DecisionSet,
 ) ([]*policiesv1.CompliancePerClusterStatus, error) {
 	if rootPolicy.Spec.Disabled {
 		return nil, nil
 	}
 
+	remainingBindings := computeRemainingBindings(rootPolicy, placements, decisions)
+
 	status := make([]*policiesv1.CompliancePerClusterStatus, 0, len(decisions))
 	var lookupErr error // save until end, to attempt all lookups
 
 	// Update the status based on the processed decisions
 	for clusterName := range decisions {
+		clusterStatus := &policiesv1.CompliancePerClusterStatus{
+			ClusterName:      clusterName,
+			ClusterNamespace: clusterName,
+		}
+
+		if bindings, ok := remainingBindings[clusterName]; ok {
+			clusterStatus.RemainingBindings = bindings
+		}
+
 		replicatedPolicy := &policiesv1.Policy{}
 		key := types.NamespacedName{
 			Namespace: clusterName, Name: rootPolicy.Namespace + "." + rootPolicy.Name,
@@ -277,10 +310,7 @@ func CalculatePerClusterStatus(
 		err := c.Get(ctx, key, replicatedPolicy)
 		if err != nil {
 			if k8serrors.IsNotFound(err) {
-				status = append(status, &policiesv1.CompliancePerClusterStatus{
-					ClusterName:      clusterName,
-					ClusterNamespace: clusterName,
-				})
+				status = append(status, clusterStatus)
 
 				continue
 			}
@@ -288,11 +318,8 @@ func CalculatePerClusterStatus(
 			lookupErr = err
 		}
 
-		status = append(status, &policiesv1.CompliancePerClusterStatus{
-			ComplianceState:  replicatedPolicy.Status.ComplianceState,
-			ClusterName:      clusterName,
-			ClusterNamespace: clusterName,
-		})
+		clusterStatus.ComplianceState = replicatedPolicy.Status.ComplianceState
+		status = append(status, clusterStatus)
 	}
 
 	sort.Slice(status, func(i, j int) bool {
@@ -300,30 +327,6 @@ func CalculatePerClusterStatus(
 	})
 
 	return status, lookupErr
-}
-
-func IsPolicyInPolicySet(ctx context.Context, c client.Client, policyName, policySetName, namespace string) bool {
-	log := log.WithValues("policyName", policyName, "policySetName", policySetName, "policyNamespace", namespace)
-
-	policySet := policiesv1beta1.PolicySet{}
-	setNN := types.NamespacedName{
-		Name:      policySetName,
-		Namespace: namespace,
-	}
-
-	if err := c.Get(ctx, setNN, &policySet); err != nil {
-		log.Error(err, "Failed to get the policyset")
-
-		return false
-	}
-
-	for _, plc := range policySet.Spec.Policies {
-		if string(plc) == policyName {
-			return true
-		}
-	}
-
-	return false
 }
 
 // CalculateRootCompliance uses the input per-cluster statuses to determine what a root policy's

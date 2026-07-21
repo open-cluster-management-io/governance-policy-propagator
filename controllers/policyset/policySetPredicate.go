@@ -21,6 +21,9 @@ var policySetPredicateFuncs = predicate.Funcs{
 		return !equality.Semantic.DeepEqual(
 			policySetObjNew.Spec.Policies,
 			policySetObjOld.Spec.Policies,
+		) || !equality.Semantic.DeepEqual(
+			policySetObjNew.Spec.Exclusions,
+			policySetObjOld.Spec.Exclusions,
 		)
 	},
 	CreateFunc: func(_ event.CreateEvent) bool {

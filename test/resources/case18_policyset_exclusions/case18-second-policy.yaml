@@ -1,0 +1,32 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: case18-second-policy
+spec:
+  remediationAction: inform
+  disabled: false
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policies.open-cluster-management.io/v1alpha1
+        kind: FakePolicy
+        metadata:
+          name: case18-second-policy-fakepolicy
+        spec:
+          severity: low
+          namespaceSelector:
+            include: ["default"]
+          remediationAction: inform
+          imageRegistry: quay.io
+---
+apiVersion: policy.open-cluster-management.io/v1beta1
+kind: PolicySet
+metadata:
+  name: case18-test-policyset
+spec:
+  policies:
+  - case18-test-policy
+  - case18-second-policy
+  exclusions:
+  - policyName: case18-test-policy
+    clusterNames:
+    - managed2
