@@ -126,8 +126,9 @@ func (e *handlerForBinding) getAllReplicatedPoliciesForBinding(
 
 	clusterList := &clusterv1.ManagedClusterList{}
 	if err := e.c.List(ctx, clusterList); err != nil {
-		log.Error(err, "Failed to list managed clusters for deleted binding")
-		return nil
+		log.Error(err, "Failed to list managed clusters for deleted binding, falling back to placement decisions")
+		// Fallback to using placement decisions if available
+		return common.GetRepPoliciesInPlacementBinding(ctx, e.c, pBinding)
 	}
 
 	result := make([]reconcile.Request, 0, len(rootPolicyRequest)*len(clusterList.Items))
