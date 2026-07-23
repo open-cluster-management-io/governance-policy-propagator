@@ -3,7 +3,9 @@ package propagator
 import (
 	"context"
 
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -75,7 +77,18 @@ func (e *handlerForBinding) Update(ctx context.Context,
 func (e *handlerForBinding) Delete(ctx context.Context,
 	evt event.DeleteEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
-	e.mapAndEnqueue(ctx, q, evt.Object)
+	pBinding := evt.Object.(*policiesv1.PlacementBinding)
+
+	if !common.IsForPolicyOrPolicySet(pBinding) {
+		return
+	}
+
+	// Reconcile across all clusters since the referenced Placement may also be deleted.
+	reqs := e.getAllReplicatedPoliciesForBinding(ctx, pBinding)
+
+	for _, req := range reqs {
+		q.Add(req)
+	}
 }
 
 // Generic implements EventHandler.
@@ -104,4 +117,29 @@ func (e *handlerForBinding) getMappedReplicatedPolicy(ctx context.Context,
 	}
 
 	return common.GetRepPoliciesInPlacementBinding(ctx, e.c, pBinding)
+}
+
+func (e *handlerForBinding) getAllReplicatedPoliciesForBinding(
+	ctx context.Context, pBinding *policiesv1.PlacementBinding,
+) []reconcile.Request {
+	rootPolicyRequest := common.GetPoliciesInPlacementBinding(ctx, e.c, pBinding)
+
+	clusterList := &clusterv1.ManagedClusterList{}
+	if err := e.c.List(ctx, clusterList); err != nil {
+		log.Error(err, "Failed to list managed clusters for deleted binding")
+		return nil
+	}
+
+	result := make([]reconcile.Request, 0, len(rootPolicyRequest)*len(clusterList.Items))
+
+	for _, rp := range rootPolicyRequest {
+		for _, cluster := range clusterList.Items {
+			result = append(result, reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      rp.Namespace + "." + rp.Name,
+				Namespace: cluster.Name,
+			}})
+		}
+	}
+
+	return result
 }
