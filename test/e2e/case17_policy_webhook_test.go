@@ -90,6 +90,7 @@ var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
 				"-n", testNamespace,
 				"--kubeconfig="+kubeconfigHub)
 			Expect(err).ShouldNot(HaveOccurred())
+
 			plr := utils.GetWithTimeout(
 				clientHubDynamic, gvrPlacementRule, case17PolicyReplicatedName+"-plr",
 				testNamespace, true, defaultTimeoutSeconds,
@@ -105,6 +106,7 @@ var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
 				"." + case17PolicyReplicatedName)).Should(BeNumerically(">", 63))
 
 			By("Replicated policy should be created")
+
 			plc := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, testNamespace+"."+case17PolicyReplicatedName,
 				"managed1", true, defaultTimeoutSeconds,
@@ -143,6 +145,7 @@ var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
 		It("Should return a validation error when creating policies", func(ctx SpecContext) {
 			By("Applying a policy where both the remediationAction of the root policy " +
 				"and the configuration policy in the policy templates are unset")
+
 			output, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", case17PolicyRemediationYaml,
 				"-n", testNamespace,
@@ -154,6 +157,7 @@ var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
 		It("Should not return a validation error when creating policies", func(ctx SpecContext) {
 			By("Applying a policy where only the remediationAction of the " +
 				"root policy is set")
+
 			_, err := utils.KubectlWithOutput(ctx, "apply",
 				"-f", case17PolicyRootRemediationYaml,
 				"-n", testNamespace,
@@ -162,6 +166,7 @@ var _ = Describe("Test policy webhook", Label("webhook"), Ordered, func() {
 
 			By("Applying a policy where only the remediationAction of the " +
 				"configuration policy in the policy templates is set")
+
 			_, err = utils.KubectlWithOutput(ctx, "apply",
 				"-f", case17PolicyCfplcRemediationYaml,
 				"-n", testNamespace,

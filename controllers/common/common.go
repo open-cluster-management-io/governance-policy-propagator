@@ -1,6 +1,8 @@
 // Copyright (c) 2020 Red Hat, Inc.
 // Copyright Contributors to the Open Cluster Management project
 
+// Package common provides shared helpers for policy controllers.
+//
 // +kubebuilder:skip
 package common
 
@@ -291,7 +293,7 @@ func LabelsForRootPolicy(plc *policiesv1.Policy) map[string]string {
 	return map[string]string{RootPolicyLabel: FullNameForPolicy(plc)}
 }
 
-// fullNameForPolicy returns the fully qualified name for given policy
+// FullNameForPolicy returns the fully qualified name for given policy
 // full qualified name: ${namespace}.${name}
 func FullNameForPolicy(plc *policiesv1.Policy) string {
 	return plc.GetNamespace() + "." + plc.GetName()
@@ -325,7 +327,7 @@ func GetRepPoliciesInPlacementBinding(
 }
 
 // TypeConverter is a helper function to converter type struct a to b
-func TypeConverter(a, b interface{}) error {
+func TypeConverter(a, b any) error {
 	js, err := json.Marshal(a)
 	if err != nil {
 		return err
@@ -334,7 +336,7 @@ func TypeConverter(a, b interface{}) error {
 	return json.Unmarshal(js, b)
 }
 
-// Select objects that are deleted or created
+// GetAffectedObjs selects objects that are deleted or created
 func GetAffectedObjs[T comparable](oldObjs []T, newObjs []T) []T {
 	table := make(map[T]int)
 

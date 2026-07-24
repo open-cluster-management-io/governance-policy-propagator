@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	// #nosec G101
-	EncryptionKeySecret   = "policy-encryption-key"
+	// EncryptionKeySecret is the Secret name for the policy encryption key.
+	EncryptionKeySecret   = "policy-encryption-key" // #nosec G101
 	IVAnnotation          = "policy.open-cluster-management.io/encryption-iv"
 	LastRotatedAnnotation = "policy.open-cluster-management.io/last-rotated"
 )

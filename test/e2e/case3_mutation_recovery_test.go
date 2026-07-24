@@ -31,6 +31,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 		)
 		Expect(plc).NotTo(BeNil())
 		By("Patching test-policy-plr with decision of cluster managed1 and managed2")
+
 		plr := utils.GetWithTimeout(
 			clientHubDynamic, gvrPlacementRule, case3PolicyName+"-plr", testNamespace, true, defaultTimeoutSeconds,
 		)
@@ -39,8 +40,11 @@ var _ = Describe("Test unexpected policy mutation", func() {
 			ctx, plr, metav1.UpdateOptions{},
 		)
 		Expect(err).ToNot(HaveOccurred())
+
 		opt := metav1.ListOptions{LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case3PolicyName}
+
 		By("Patching both replicated policy status to compliant")
+
 		replicatedPlcList := utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 2, true, defaultTimeoutSeconds)
 		for _, replicatedPlc := range replicatedPlcList.Items {
 			replicatedPlc.Object["status"] = &policiesv1.PolicyStatus{
@@ -51,9 +55,11 @@ var _ = Describe("Test unexpected policy mutation", func() {
 			)
 			Expect(err).ToNot(HaveOccurred())
 		}
+
 		By("Checking the status of root policy")
+
 		yamlPlc := utils.ParseYaml("../resources/case3_mutation_recovery/managed-both-status-compliant.yaml")
-		Eventually(func() interface{} {
+		Eventually(func() any {
 			rootPlc := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, case3PolicyName, testNamespace, true, defaultTimeoutSeconds,
 			)
@@ -67,6 +73,7 @@ var _ = Describe("Test unexpected policy mutation", func() {
 			"-n", testNamespace,
 			"--ignore-not-found",
 			"--kubeconfig="+kubeconfigHub)
+
 		opt := metav1.ListOptions{}
 		utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, true, defaultTimeoutSeconds)
 	})
@@ -75,67 +82,72 @@ var _ = Describe("Test unexpected policy mutation", func() {
 		utils.Kubectl(ctx, "delete", "policy", "-n", "managed1", "--all", "--kubeconfig="+kubeconfigHub)
 		utils.Kubectl(ctx, "delete", "policy", "-n", "managed2", "--all", "--kubeconfig="+kubeconfigHub)
 		By("Checking number of policy left in all ns")
+
 		opt := metav1.ListOptions{}
 		utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 3, true, defaultTimeoutSeconds)
 	})
 	It("Should recover replicated policy when modified field disabled", func(ctx SpecContext) {
 		By("Modifiying policy in cluster ns managed2")
+
 		plc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds,
 		)
 		Expect(plc).ToNot(BeNil())
-		plc.Object["spec"].(map[string]interface{})["disabled"] = true
+		plc.Object["spec"].(map[string]any)["disabled"] = true
 		plc, err := clientHubDynamic.Resource(gvrPolicy).Namespace("managed2").Update(
 			ctx, plc, metav1.UpdateOptions{},
 		)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(plc.Object["spec"].(map[string]interface{})["disabled"]).To(BeTrue())
+		Expect(plc.Object["spec"].(map[string]any)["disabled"]).To(BeTrue())
 		By("Get policy in cluster ns managed2 again")
-		Eventually(func() interface{} {
+		Eventually(func() any {
 			plc = utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds,
 			)
 
-			return plc.Object["spec"].(map[string]interface{})["disabled"]
+			return plc.Object["spec"].(map[string]any)["disabled"]
 		}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual(false))
 	})
 	It("Should recover replicated policy when modified field remediationAction", func(ctx SpecContext) {
 		By("Modifiying policy in cluster ns managed2")
+
 		plc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds,
 		)
 		Expect(plc).ToNot(BeNil())
-		plc.Object["spec"].(map[string]interface{})["remediationAction"] = "enforce"
+		plc.Object["spec"].(map[string]any)["remediationAction"] = "enforce"
 		plc, err := clientHubDynamic.Resource(gvrPolicy).Namespace("managed2").Update(
 			ctx, plc, metav1.UpdateOptions{},
 		)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(plc.Object["spec"].(map[string]interface{})["remediationAction"]).To(Equal("enforce"))
+		Expect(plc.Object["spec"].(map[string]any)["remediationAction"]).To(Equal("enforce"))
 		By("Getting policy in cluster ns managed2 again")
-		Eventually(func() interface{} {
+		Eventually(func() any {
 			plc = utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds,
 			)
 
-			return plc.Object["spec"].(map[string]interface{})["remediationAction"]
+			return plc.Object["spec"].(map[string]any)["remediationAction"]
 		}, defaultTimeoutSeconds, 1).Should(utils.SemanticEqual("inform"))
 	})
 	It("Should recover replicated policy when modified field policy-templates", func(ctx SpecContext) {
 		By("Modifiying policy in cluster ns managed2")
+
 		plc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds,
 		)
 		Expect(plc).ToNot(BeNil())
-		plc.Object["spec"].(map[string]interface{})["policy-templates"] = []*policiesv1.PolicyTemplate{}
+		plc.Object["spec"].(map[string]any)["policy-templates"] = []*policiesv1.PolicyTemplate{}
 		plc, err := clientHubDynamic.Resource(gvrPolicy).Namespace("managed2").Update(
 			ctx, plc, metav1.UpdateOptions{},
 		)
 		Expect(err).ToNot(HaveOccurred())
 		By("Getting policy in cluster ns managed2 again")
+
 		rootPlc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, case3PolicyName, testNamespace, true, defaultTimeoutSeconds,
 		)
-		Eventually(func() interface{} {
+		Eventually(func() any {
 			plc = utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds,
 			)
@@ -145,14 +157,17 @@ var _ = Describe("Test unexpected policy mutation", func() {
 	})
 	It("Should remove labels added to replicated policies", func(ctx SpecContext) {
 		By("Adding a label to the replicated policy in ns managed2")
+
 		plc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds,
 		)
 		Expect(plc).ToNot(BeNil())
+
 		labels := plc.GetLabels()
 		if labels == nil {
 			labels = make(map[string]string)
 		}
+
 		labels["test.io/grc-prop-case3-label"] = "caterpie"
 		err := unstructured.SetNestedStringMap(plc.Object, labels, "metadata", "labels")
 		Expect(err).ToNot(HaveOccurred())
@@ -172,14 +187,17 @@ var _ = Describe("Test unexpected policy mutation", func() {
 	})
 	It("Should remove annotations added to replicated policies", func(ctx SpecContext) {
 		By("Adding an annotation to the replicated policy in ns managed2")
+
 		plc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, testNamespace+"."+case3PolicyName, "managed2", true, defaultTimeoutSeconds,
 		)
 		Expect(plc).ToNot(BeNil())
+
 		annos := plc.GetAnnotations()
 		if annos == nil {
 			annos = make(map[string]string)
 		}
+
 		annos["test.io/grc-prop-case3-annotation"] = "weedle"
 		err := unstructured.SetNestedStringMap(plc.Object, annos, "metadata", "annotations")
 		Expect(err).ToNot(HaveOccurred())

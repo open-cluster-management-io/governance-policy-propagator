@@ -39,8 +39,9 @@ func (r *Policy) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
+// PolicyCustomValidator validates Policy create and update requests.
+//
 // +kubebuilder:webhook:path=/validate-policy-open-cluster-management-io-v1-policy,mutating=false,failurePolicy=Ignore,sideEffects=None,groups=policy.open-cluster-management.io,resources=policies,verbs=create;update,versions=v1,name=policy.open-cluster-management.io.webhook,admissionReviewVersions=v1,serviceName=propagator-webhook-service,serviceNamespace=open-cluster-management
-
 // +kubebuilder:object:generate=false
 type PolicyCustomValidator struct{}
 

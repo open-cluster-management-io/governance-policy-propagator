@@ -29,7 +29,7 @@ import (
 
 const (
 	ControllerName = "policy-encryption-keys"
-	// This is used for when an administrator prefers to manually generate the encryption keys
+	// DisableRotationAnnotation is used for when an administrator prefers to manually generate the encryption keys
 	// instead of letting the Policy Propagator handle it.
 	DisableRotationAnnotation = "policy.open-cluster-management.io/disable-rotation"
 )

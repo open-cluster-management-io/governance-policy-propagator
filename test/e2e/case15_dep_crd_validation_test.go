@@ -19,7 +19,7 @@ var _ = Describe("Test CRD validation", func() {
 	}
 
 	addDependency := func(pol *unstructured.Unstructured, name, ns, kind string) *unstructured.Unstructured {
-		deps := []interface{}{map[string]interface{}{
+		deps := []any{map[string]any{
 			"apiVersion": "policy.open-cluster-management.io/v1",
 			"kind":       kind,
 			"name":       name,
@@ -38,8 +38,8 @@ var _ = Describe("Test CRD validation", func() {
 		Expect(found).To(BeTrue())
 		Expect(err).ToNot(HaveOccurred())
 
-		tmpl0 := templates[0].(map[string]interface{})
-		tmpl0["extraDependencies"] = []interface{}{map[string]interface{}{
+		tmpl0 := templates[0].(map[string]any)
+		tmpl0["extraDependencies"] = []any{map[string]any{
 			"apiVersion": "policy.open-cluster-management.io/v1",
 			"kind":       kind,
 			"name":       name,
@@ -76,7 +76,6 @@ var _ = Describe("Test CRD validation", func() {
 		}
 
 		for kind, tc := range tests {
-
 			It("checks creating a policy with a "+kind+" dependency with a namespace", func(ctx SpecContext) {
 				pol := addDependency(basicPolicy(), "foo", "default", kind)
 				_, err := policyClient().Create(ctx, pol, v1.CreateOptions{})
@@ -103,7 +102,6 @@ var _ = Describe("Test CRD validation", func() {
 		}
 
 		for kind, tc := range tests {
-
 			It("checks creating a policy with a "+kind+" extraDependency with a namespace", func(ctx SpecContext) {
 				pol := addExtraDependency(basicPolicy(), "foo", "default", kind)
 				_, err := policyClient().Create(ctx, pol, v1.CreateOptions{})

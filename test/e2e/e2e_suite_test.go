@@ -74,6 +74,7 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	ctrllog.SetLogger(GinkgoLogr)
 
 	By("Setup Hub client")
+
 	gvrPolicy = schema.GroupVersionResource{
 		Group: "policy.open-cluster-management.io", Version: "v1", Resource: "policies",
 	}
@@ -119,9 +120,11 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 
 	k8sConfig, err := LoadConfig("", "", "")
 	Expect(err).ToNot(HaveOccurred())
+
 	clientToken = k8sConfig.BearerToken
 
 	By("Create Namespace if needed")
+
 	namespaces := clientHub.CoreV1().Namespaces()
 	if _, err := namespaces.Get(
 		ctx, testNamespace, metav1.GetOptions{},
@@ -132,11 +135,13 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 			},
 		}, metav1.CreateOptions{})).NotTo(BeNil())
 	}
+
 	Expect(namespaces.Get(ctx, testNamespace, metav1.GetOptions{})).NotTo(BeNil())
 })
 
 var _ = AfterSuite(func(ctx SpecContext) {
 	By("Collecting workqueue_adds_total metrics")
+
 	wqAddsLines, err := utils.MetricsLines(ctx, "workqueue_adds_total")
 	if err != nil {
 		GinkgoWriter.Println("Error getting workqueue_adds_total metrics: ", err)
@@ -145,6 +150,7 @@ var _ = AfterSuite(func(ctx SpecContext) {
 	GinkgoWriter.Println(wqAddsLines)
 
 	By("Collecting controller_runtime_reconcile_total metrics")
+
 	ctrlReconcileTotalLines, err := utils.MetricsLines(ctx, "controller_runtime_reconcile_total")
 	if err != nil {
 		GinkgoWriter.Println("Error getting controller_runtime_reconcile_total metrics: ", err)
@@ -153,6 +159,7 @@ var _ = AfterSuite(func(ctx SpecContext) {
 	GinkgoWriter.Println(ctrlReconcileTotalLines)
 
 	By("Collecting controller_runtime_reconcile_time_seconds_sum metrics")
+
 	ctrlReconcileTimeLines, err := utils.MetricsLines(ctx, "controller_runtime_reconcile_time_seconds_sum")
 	if err != nil {
 		GinkgoWriter.Println("Error getting controller_runtime_reconcile_time_seconds_sum metrics: ", err)
