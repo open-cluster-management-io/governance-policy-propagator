@@ -59,6 +59,8 @@ spec:
                 description: Policies is a list of policy names that are contained
                   within the policy set.
                 items:
+                  description: NonEmptyString is a string that must contain at least
+                    one character.
                   minLength: 1
                   type: string
                 type: array

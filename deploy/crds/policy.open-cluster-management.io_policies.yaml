@@ -72,7 +72,7 @@ spec:
                   compliance that should be fulfilled before applying the policies to the managed clusters.
                 items:
                   description: >-
-                    Each PolicyDependency defines an object reference which must be in a certain compliance
+                    PolicyDependency defines an object reference which must be in a certain compliance
                     state before the policy should be created.
                   oneOf:
                   - properties:
@@ -157,7 +157,7 @@ spec:
                         clusters.
                       items:
                         description: >-
-                          Each PolicyDependency defines an object reference which must be in a certain compliance
+                          PolicyDependency defines an object reference which must be in a certain compliance
                           state before the policy should be created.
                         oneOf:
                         - properties:
