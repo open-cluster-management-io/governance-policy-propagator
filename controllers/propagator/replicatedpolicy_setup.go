@@ -74,6 +74,7 @@ func replicatedPolicyPredicates(resourceVersions *sync.Map) predicate.Funcs {
 			}
 
 			key := e.Object.GetNamespace() + "/" + e.Object.GetName()
+
 			version, loaded := safeReadLoad(resourceVersions, key)
 			defer version.RUnlock()
 
@@ -86,6 +87,7 @@ func replicatedPolicyPredicates(resourceVersions *sync.Map) predicate.Funcs {
 			}
 
 			key := e.Object.GetNamespace() + "/" + e.Object.GetName()
+
 			version, loaded := safeReadLoad(resourceVersions, key)
 			defer version.RUnlock()
 
@@ -101,6 +103,7 @@ func replicatedPolicyPredicates(resourceVersions *sync.Map) predicate.Funcs {
 			}
 
 			key := e.ObjectNew.GetNamespace() + "/" + e.ObjectNew.GetName()
+
 			version, loaded := safeReadLoad(resourceVersions, key)
 			defer version.RUnlock()
 

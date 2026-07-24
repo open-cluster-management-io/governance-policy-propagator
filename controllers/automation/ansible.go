@@ -23,7 +23,7 @@ import (
 const (
 	PolicyAutomationLabel      string = "policy.open-cluster-management.io/policyautomation-name"
 	PolicyAutomationGeneration string = "policy.open-cluster-management.io/policyautomation-generation"
-	// policyautomation-ResouceVersion
+	// PolicyAutomationResouceV is the policyautomation-ResouceVersion annotation key.
 	PolicyAutomationResouceV string = "policy.open-cluster-management.io/policyautomation-resource-version"
 )
 
@@ -32,7 +32,7 @@ var ansibleJobRes = schema.GroupVersionResource{
 	Resource: "ansiblejobs",
 }
 
-// Check any ansiblejob is made by input genteration number
+// MatchPAGeneration checks whether any ansiblejob is made by input generation number.
 // Returning "true" means the policy automation already created ansiblejob with the generation
 func MatchPAGeneration(ctx context.Context, log logr.Logger, policyAutomation *policyv1beta1.PolicyAutomation,
 	dynamicClient dynamic.Interface, generation int64,
@@ -60,7 +60,7 @@ func MatchPAGeneration(ctx context.Context, log logr.Logger, policyAutomation *p
 	return false, nil
 }
 
-// Check any ansiblejob is made by current resourceVersion number
+// MatchPAResourceV checks whether any ansiblejob is made by current resourceVersion number.
 // Returning "true" means the policy automation already created ansiblejob with this resourceVersion
 func MatchPAResourceV(ctx context.Context, log logr.Logger, policyAutomation *policyv1beta1.PolicyAutomation,
 	dynamicClient dynamic.Interface, resourceVersion string,
@@ -91,26 +91,26 @@ func CreateAnsibleJob(ctx context.Context, policyAutomation *policyv1beta1.Polic
 	dynamicClient dynamic.Interface, mode string, violationContext policyv1beta1.ViolationContext,
 ) error {
 	ansibleJob := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "tower.ansible.com/v1alpha1",
 			"kind":       "AnsibleJob",
-			"metadata": map[string]interface{}{
-				"annotations": map[string]interface{}{
+			"metadata": map[string]any{
+				"annotations": map[string]any{
 					PolicyAutomationGeneration: strconv.
 						FormatInt(policyAutomation.GetGeneration(), 10),
 					PolicyAutomationResouceV: policyAutomation.GetResourceVersion(),
 				},
 			},
-			"spec": map[string]interface{}{
+			"spec": map[string]any{
 				"job_template_name": policyAutomation.Spec.Automation.Name,
 				"tower_auth_secret": policyAutomation.Spec.Automation.TowerSecret,
-				"extra_vars":        map[string]interface{}{},
+				"extra_vars":        map[string]any{},
 				"job_ttl":           86400, // default TTL is 24 hours
 			},
 		},
 	}
 
-	mapExtraVars := map[string]interface{}{}
+	mapExtraVars := map[string]any{}
 	if policyAutomation.Spec.Automation.ExtraVars != nil {
 		// This is to translate the runtime.RawExtension to a map[string]interface{}
 		err := json.Unmarshal(policyAutomation.Spec.Automation.ExtraVars.Raw, &mapExtraVars)
@@ -146,10 +146,10 @@ func CreateAnsibleJob(ctx context.Context, policyAutomation *policyv1beta1.Polic
 	}
 	ansibleJob.SetLabels(label)
 
-	ansibleJob.Object["spec"].(map[string]interface{})["extra_vars"] = mapExtraVars
+	ansibleJob.Object["spec"].(map[string]any)["extra_vars"] = mapExtraVars
 
 	if policyAutomation.Spec.Automation.JobTTL != nil {
-		ansibleJob.Object["spec"].(map[string]interface{})["job_ttl"] = *policyAutomation.Spec.Automation.JobTTL
+		ansibleJob.Object["spec"].(map[string]any)["job_ttl"] = *policyAutomation.Spec.Automation.JobTTL
 	}
 
 	ansibleJobRes := schema.GroupVersionResource{

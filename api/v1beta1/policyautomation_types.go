@@ -12,7 +12,7 @@ import (
 
 const DefaultPolicyViolationsLimit = 1000
 
-// Mode specifies how often automation is initiated. The supported values are "once", "everyEvent",
+// PolicyAutomationMode specifies how often automation is initiated. The supported values are "once", "everyEvent",
 // and "disabled".
 //
 // +kubebuilder:validation:Enum={once,everyEvent,disabled}

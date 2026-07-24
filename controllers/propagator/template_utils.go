@@ -552,9 +552,7 @@ func (t *TemplateResolvers) initResolver(
 		referenceCount: &atomic.Uint32{},
 	}
 
-	t.wg.Add(1)
-
-	go func() {
+	t.wg.Go(func() {
 		err := dynamicWatcher.Start(resolverCtx)
 
 		// Start is blocking so regardless of the reason it stopped, canceled must be set to true.
@@ -569,8 +567,7 @@ func (t *TemplateResolvers) initResolver(
 		}
 
 		resolverCtxCancel()
-		t.wg.Done()
-	}()
+	})
 
 	<-dynamicWatcher.Started()
 

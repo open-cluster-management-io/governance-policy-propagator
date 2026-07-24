@@ -6,6 +6,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -380,13 +381,7 @@ func complianceInRelevantClusters(
 
 // helper function to check whether a cluster is in a list of clusters
 func clusterInList(list []string, cluster string) bool {
-	for _, item := range list {
-		if item == cluster {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(list, cluster)
 }
 
 // Helper function to convert policy placement to policyset placement

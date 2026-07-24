@@ -25,7 +25,7 @@ var _ = Describe("Test unexpect policy handling", Label("non-placement-rule"), f
 			"--kubeconfig="+kubeconfigHub)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(out).Should(ContainSubstring(case4PolicyName + " created"))
-		Eventually(func() interface{} {
+		Eventually(func() any {
 			return utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, case4PolicyName, "managed1", false, defaultTimeoutSeconds,
 			)
@@ -40,7 +40,7 @@ var _ = Describe("Test unexpect policy handling", Label("non-placement-rule"), f
 			"--kubeconfig="+kubeconfigHub)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(out).Should(ContainSubstring("policy-propagator-test.case4-test-policy created"))
-		Eventually(func() interface{} {
+		Eventually(func() any {
 			return utils.GetWithTimeout(
 				clientHubDynamic,
 				gvrPolicy,
@@ -61,6 +61,7 @@ var _ = Describe("Test unexpect policy handling", Label("non-placement-rule"), f
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(out).Should(ContainSubstring("policy-propagator-test.case4-test-policy created"))
 		utils.Pause(2)
+
 		plc := utils.GetWithTimeout(
 			clientHubDynamic, gvrPolicy, "policy-propagator-test.case4-test-policy",
 			"leaf-hub1", true, defaultTimeoutSeconds,

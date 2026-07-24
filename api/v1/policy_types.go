@@ -50,7 +50,7 @@ const (
 	Pending      ComplianceState = "Pending"
 )
 
-// Each PolicyDependency defines an object reference which must be in a certain compliance
+// PolicyDependency defines an object reference which must be in a certain compliance
 // state before the policy should be created.
 type PolicyDependency struct {
 	metav1.TypeMeta `json:",inline"`
