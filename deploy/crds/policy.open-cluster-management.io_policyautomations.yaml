@@ -97,7 +97,7 @@ spec:
                 type: string
               mode:
                 description: >-
-                  Mode specifies how often automation is initiated. The supported values are "once", "everyEvent",
+                  PolicyAutomationMode specifies how often automation is initiated. The supported values are "once", "everyEvent",
                   and "disabled".
                 enum:
                 - once
