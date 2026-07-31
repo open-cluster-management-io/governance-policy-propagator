@@ -6,6 +6,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -133,7 +134,7 @@ func (r *PolicySetReconciler) processPolicySet(
 
 		childPlc := &policyv1.Policy{}
 
-		err := r.Client.Get(ctx, childNamespacedName, childPlc)
+		err := r.Get(ctx, childNamespacedName, childPlc)
 		if err != nil {
 			// policy does not exist, log error message and generate event
 			var errMessage string
@@ -186,7 +187,7 @@ func (r *PolicySetReconciler) processPolicySet(
 
 				pb := &policyv1.PlacementBinding{}
 
-				err := r.Client.Get(ctx, pbNamespacedName, pb)
+				err := r.Get(ctx, pbNamespacedName, pb)
 				if err != nil {
 					if errors.IsNotFound(err) {
 						log.V(1).Info("The placement binding was not found", "placementBinding", pbName)
@@ -378,13 +379,7 @@ func complianceInRelevantClusters(
 
 // helper function to check whether a cluster is in a list of clusters
 func clusterInList(list []string, cluster string) bool {
-	for _, item := range list {
-		if item == cluster {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(list, cluster)
 }
 
 // Helper function to convert policy placement to policyset placement

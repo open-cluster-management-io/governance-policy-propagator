@@ -42,7 +42,7 @@ func (e *handlerForBinding) Update(ctx context.Context,
 	//nolint:forcetypeassert
 	oldObj := evt.ObjectOld.(*policiesv1.PlacementBinding)
 
-	if !(common.IsForPolicyOrPolicySet(newObj) || common.IsForPolicyOrPolicySet(oldObj)) {
+	if !common.IsForPolicyOrPolicySet(newObj) && !common.IsForPolicyOrPolicySet(oldObj) {
 		return
 	}
 

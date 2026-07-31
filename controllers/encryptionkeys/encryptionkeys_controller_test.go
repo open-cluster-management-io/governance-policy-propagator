@@ -219,7 +219,7 @@ func assertTriggerUpdate(ctx context.Context, r *EncryptionKeysReconciler) {
 	for _, policy := range policyList.Items {
 		annotation := policy.Annotations[propagator.TriggerUpdateAnnotation]
 
-		if policy.ObjectMeta.Name == "policy-one" || policy.ObjectMeta.Name == "policy-four" {
+		if policy.Name == "policy-one" || policy.Name == "policy-four" {
 			expectedPrefix := fmt.Sprintf("rotate-key-%s-", clusterName)
 			Expect(strings.HasPrefix(annotation, expectedPrefix)).To(BeTrue())
 		} else {

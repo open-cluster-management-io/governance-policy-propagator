@@ -9,7 +9,7 @@ import (
 	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 )
 
-// +kubebuilder:validation:MinLength=1
+// NonEmptyString +kubebuilder:validation:MinLength=1
 type NonEmptyString string
 
 // PolicySetSpec defines the group of policies to be included in the policy set.

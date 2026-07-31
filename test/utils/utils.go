@@ -185,6 +185,7 @@ func ListWithTimeout(
 
 	Eventually(func() error {
 		var err error
+
 		list, err = clientHubDynamic.Resource(gvr).List(context.TODO(), opts)
 		if err != nil {
 			return err
@@ -225,6 +226,7 @@ func ListWithTimeoutByNamespace(
 
 	Eventually(func() error {
 		var err error
+
 		list, err = clientHubDynamic.Resource(gvr).Namespace(ns).List(context.TODO(), opts)
 		if err != nil {
 			return err
@@ -248,7 +250,10 @@ func ListWithTimeoutByNamespace(
 func Kubectl(args ...string) {
 	GinkgoHelper()
 
-	cmd := exec.Command("kubectl", args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "kubectl", args...)
 
 	var stderr bytes.Buffer
 
@@ -267,7 +272,10 @@ func Kubectl(args ...string) {
 
 // KubectlWithOutput execute kubectl cli and return output and error
 func KubectlWithOutput(args ...string) (string, error) {
-	kubectlCmd := exec.Command("kubectl", args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	kubectlCmd := exec.CommandContext(ctx, "kubectl", args...)
 
 	output, err := kubectlCmd.CombinedOutput()
 	if err != nil {
@@ -293,6 +301,9 @@ func GetMetrics(metricPatterns ...string) []string {
 		return []string{err.Error()}
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	var cmd *exec.Cmd
 
 	metricFilter := " | grep " + strings.Join(metricPatterns, " | grep ")
@@ -302,9 +313,9 @@ func GetMetrics(metricPatterns ...string) []string {
 	propPodName := strings.Split(propPodInfo, " ")[0]
 	if propPodName == "No" {
 		// A missing pod could mean the controller is running locally
-		cmd = exec.Command("bash", "-c", metricsCmd)
+		cmd = exec.CommandContext(ctx, "bash", "-c", metricsCmd)
 	} else {
-		cmd = exec.Command("kubectl", "exec", "-n=open-cluster-management", propPodName, "-c",
+		cmd = exec.CommandContext(ctx, "kubectl", "exec", "-n=open-cluster-management", propPodName, "-c",
 			"governance-policy-propagator", "--", "bash", "-c", metricsCmd)
 	}
 
@@ -367,6 +378,9 @@ func MetricsLines(pattern string) (string, error) {
 		return "", err
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	var cmd *exec.Cmd
 
 	metricsCmd := fmt.Sprintf(`curl localhost:8383/metrics | grep %q`, pattern)
@@ -375,9 +389,9 @@ func MetricsLines(pattern string) (string, error) {
 	propPodName := strings.Split(propPodInfo, " ")[0]
 	if propPodName == "No" {
 		// A missing pod could mean the controller is running locally
-		cmd = exec.Command("bash", "-c", metricsCmd)
+		cmd = exec.CommandContext(ctx, "bash", "-c", metricsCmd)
 	} else {
-		cmd = exec.Command("kubectl", "exec", "-n=open-cluster-management", propPodName, "-c",
+		cmd = exec.CommandContext(ctx, "kubectl", "exec", "-n=open-cluster-management", propPodName, "-c",
 			"governance-policy-propagator", "--", "bash", "-c", metricsCmd)
 	}
 

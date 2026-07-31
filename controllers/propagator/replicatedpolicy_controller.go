@@ -372,7 +372,6 @@ func (r *ReplicatedPolicyReconciler) cleanUpReplicated(ctx context.Context, repl
 	defer version.Unlock()
 
 	deleteErr := r.Delete(ctx, replicatedPolicy)
-
 	if deleteErr != nil {
 		if k8serrors.IsNotFound(deleteErr) {
 			version.resourceVersion = "deleted"

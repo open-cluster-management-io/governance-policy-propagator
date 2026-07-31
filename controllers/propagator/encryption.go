@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	// #nosec G101
+	// EncryptionKeySecret #nosec G101
 	EncryptionKeySecret   = "policy-encryption-key"
 	IVAnnotation          = "policy.open-cluster-management.io/encryption-iv"
 	LastRotatedAnnotation = "policy.open-cluster-management.io/last-rotated"

@@ -12,7 +12,7 @@ import (
 
 const DefaultPolicyViolationsLimit = 1000
 
-// Mode specifies how often automation is initiated. The supported values are "once", "everyEvent",
+// PolicyAutomationMode Mode specifies how often automation is initiated. The supported values are "once", "everyEvent",
 // and "disabled".
 //
 // +kubebuilder:validation:Enum={once,everyEvent,disabled}
@@ -37,7 +37,7 @@ type AutomationDef struct {
 	// ExtraVars is passed to the Ansible job at execution time and is a known Ansible entity.
 	//
 	// +kubebuilder:pruning:PreserveUnknownFields
-	ExtraVars *runtime.RawExtension `json:"extra_vars,omitempty"`
+	ExtraVars *runtime.RawExtension `json:"extraVars,omitempty"`
 
 	// TowerSecret is the name of the secret that contains the Ansible Automation Platform credential.
 	//
@@ -145,9 +145,9 @@ type ReplicatedDetailsPerTemplate struct {
 
 // ReplicatedPolicyStatus defines the replicated policy status.
 type ReplicatedPolicyStatus struct {
-	ComplianceState  policyv1.ComplianceState       `json:"compliant"`         // used by replicated policy
-	ViolationMessage string                         `json:"violation_message"` // used by replicated policy
-	Details          []ReplicatedDetailsPerTemplate `json:"details"`           // used by replicated policy
+	ComplianceState  policyv1.ComplianceState       `json:"compliant"`        // used by replicated policy
+	ViolationMessage string                         `json:"violationMessage"` // used by replicated policy
+	Details          []ReplicatedDetailsPerTemplate `json:"details"`          // used by replicated policy
 }
 
 // ViolationContext defines the noncompliant replicated policy information that is sent to the

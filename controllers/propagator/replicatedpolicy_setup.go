@@ -74,6 +74,7 @@ func replicatedPolicyPredicates(resourceVersions *sync.Map) predicate.Funcs {
 			}
 
 			key := e.Object.GetNamespace() + "/" + e.Object.GetName()
+
 			version, loaded := safeReadLoad(resourceVersions, key)
 			defer version.RUnlock()
 
@@ -86,6 +87,7 @@ func replicatedPolicyPredicates(resourceVersions *sync.Map) predicate.Funcs {
 			}
 
 			key := e.Object.GetNamespace() + "/" + e.Object.GetName()
+
 			version, loaded := safeReadLoad(resourceVersions, key)
 			defer version.RUnlock()
 
@@ -96,11 +98,12 @@ func replicatedPolicyPredicates(resourceVersions *sync.Map) predicate.Funcs {
 			_, oldIsReplicated := e.ObjectOld.GetLabels()[common.RootPolicyLabel]
 
 			// if neither has the label, it is not a replicated policy
-			if !(oldIsReplicated || newIsReplicated) {
+			if !oldIsReplicated && !newIsReplicated {
 				return false
 			}
 
 			key := e.ObjectNew.GetNamespace() + "/" + e.ObjectNew.GetName()
+
 			version, loaded := safeReadLoad(resourceVersions, key)
 			defer version.RUnlock()
 
