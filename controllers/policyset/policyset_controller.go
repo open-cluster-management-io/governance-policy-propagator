@@ -95,6 +95,38 @@ func (r *PolicySetReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 	return reconcile.Result{}, nil
 }
 
+// SetupWithManager sets up the controller with the Manager.
+func (r *PolicySetReconciler) SetupWithManager(mgr ctrl.Manager, plrsEnabled bool) error {
+	log := ctrl.Log.WithName(ControllerName)
+
+	ctrlBldr := ctrl.NewControllerManagedBy(mgr).
+		Named(ControllerName).
+		For(
+			&policyv1beta1.PolicySet{},
+			builder.WithPredicates(policySetPredicateFuncs)).
+		Watches(
+			&policyv1.Policy{},
+			handler.EnqueueRequestsFromMapFunc(policyMapper(log, mgr.GetClient())),
+			builder.WithPredicates(policyPredicateFuncs)).
+		Watches(
+			&policyv1.PlacementBinding{},
+			handler.EnqueueRequestsFromMapFunc(placementBindingMapper(log, mgr.GetClient())),
+			builder.WithPredicates(pbPredicateFuncs)).
+		Watches(
+			&clusterv1beta1.PlacementDecision{},
+			handler.EnqueueRequestsFromMapFunc(placementDecisionMapper(log, mgr.GetClient()))).
+		WithLogConstructor(func(req *reconcile.Request) logr.Logger {
+			return common.LogConstructor(ControllerName, "PolicySet", req)
+		})
+
+	if plrsEnabled {
+		ctrlBldr = ctrlBldr.Watches(&appsv1.PlacementRule{},
+			handler.EnqueueRequestsFromMapFunc(placementRuleMapper(log, mgr.GetClient())))
+	}
+
+	return ctrlBldr.Complete(r)
+}
+
 // processPolicySet compares the status of a policyset to its desired state and determines whether an update is needed
 func (r *PolicySetReconciler) processPolicySet(
 	ctx context.Context, log logr.Logger, plcSet *policyv1beta1.PolicySet,
@@ -308,38 +340,6 @@ func showCompliance(compliancesFound []string, unknown []string, pending []strin
 	}
 
 	return false
-}
-
-// SetupWithManager sets up the controller with the Manager.
-func (r *PolicySetReconciler) SetupWithManager(mgr ctrl.Manager, plrsEnabled bool) error {
-	log := ctrl.Log.WithName(ControllerName)
-
-	ctrlBldr := ctrl.NewControllerManagedBy(mgr).
-		Named(ControllerName).
-		For(
-			&policyv1beta1.PolicySet{},
-			builder.WithPredicates(policySetPredicateFuncs)).
-		Watches(
-			&policyv1.Policy{},
-			handler.EnqueueRequestsFromMapFunc(policyMapper(log, mgr.GetClient())),
-			builder.WithPredicates(policyPredicateFuncs)).
-		Watches(
-			&policyv1.PlacementBinding{},
-			handler.EnqueueRequestsFromMapFunc(placementBindingMapper(log, mgr.GetClient())),
-			builder.WithPredicates(pbPredicateFuncs)).
-		Watches(
-			&clusterv1beta1.PlacementDecision{},
-			handler.EnqueueRequestsFromMapFunc(placementDecisionMapper(log, mgr.GetClient()))).
-		WithLogConstructor(func(req *reconcile.Request) logr.Logger {
-			return common.LogConstructor(ControllerName, "PolicySet", req)
-		})
-
-	if plrsEnabled {
-		ctrlBldr = ctrlBldr.Watches(&appsv1.PlacementRule{},
-			handler.EnqueueRequestsFromMapFunc(placementRuleMapper(log, mgr.GetClient())))
-	}
-
-	return ctrlBldr.Complete(r)
 }
 
 // Helper function to filter out compliance statuses that are not in scope
