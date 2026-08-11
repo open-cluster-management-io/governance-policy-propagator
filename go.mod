@@ -9,6 +9,8 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/onsi/ginkgo/v2 v2.32.0
 	github.com/onsi/gomega v1.42.1
+	github.com/openshift/api v0.0.0-20260624175654-50c3975e874f
+	github.com/openshift/controller-runtime-common v0.0.0-20260428152732-64ee174f5e2e
 	github.com/prometheus/client_golang v1.24.1
 	github.com/spf13/pflag v1.0.10
 	github.com/stolostron/go-log-utils v0.1.5
@@ -17,9 +19,10 @@ require (
 	k8s.io/api v0.35.7
 	k8s.io/apimachinery v0.35.7
 	k8s.io/client-go v0.35.7
-	k8s.io/klog/v2 v2.130.1
+	k8s.io/klog/v2 v2.140.0
 	open-cluster-management.io/api v1.3.0
 	open-cluster-management.io/multicloud-operators-subscription v0.16.0
+	open-cluster-management.io/sdk-go v1.3.0
 	sigs.k8s.io/controller-runtime v0.23.3
 )
 
@@ -70,6 +73,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/openshift/library-go v0.0.0-20260213153706-03f1709971c5 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.70.1 // indirect
@@ -115,8 +119,8 @@ require (
 	k8s.io/apiserver v0.35.7 // indirect
 	k8s.io/component-base v0.35.7 // indirect
 	k8s.io/klog v1.0.0 // indirect
-	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912 // indirect
-	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4 // indirect
+	k8s.io/kube-openapi v0.0.0-20260519202549-bbf5c5577288 // indirect
+	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.31.4 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect

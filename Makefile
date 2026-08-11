@@ -80,7 +80,7 @@ lint:
 # test section
 ############################################################
 
-TEST_PKGS ?= ./controllers/... ./api/...
+TEST_PKGS ?= . ./controllers/... ./api/...
 
 .PHONY: test
 test: envtest kubebuilder gotestsum
@@ -99,7 +99,7 @@ gosec-scan: GOSEC_ARGS=-exclude G201
 
 .PHONY: build
 build:
-	CGO_ENABLED=1 go build -o build/_output/bin/$(IMG) main.go
+	CGO_ENABLED=1 go build -o build/_output/bin/$(IMG) .
 
 ############################################################
 # images section
@@ -112,7 +112,7 @@ build-images:
 
 .PHONY: run
 run:
-	WATCH_NAMESPACE="$(WATCH_NAMESPACE)" go run main.go --leader-elect=false --enable-webhooks=false --log-level=2
+	WATCH_NAMESPACE="$(WATCH_NAMESPACE)" go run . --leader-elect=false --enable-webhooks=false --log-level=2
 
 ############################################################
 # Generate manifests

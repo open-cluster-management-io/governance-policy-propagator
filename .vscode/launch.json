@@ -6,7 +6,7 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/main.go",
+            "program": "${workspaceFolder}",
             "args": [
                 "--leader-elect=false",
                 "--log-level=4",

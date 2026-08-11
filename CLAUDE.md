@@ -70,7 +70,7 @@ make kind-bootstrap-cluster-dev
 # Run controller locally (webhooks disabled by default)
 make run
 # Or with custom settings:
-WATCH_NAMESPACE="" go run main.go --leader-elect=false --enable-webhooks=false --log-level=2
+WATCH_NAMESPACE="" go run . --leader-elect=false --enable-webhooks=false --log-level=2
 ```
 
 **Option 2: Run in Kind cluster**
