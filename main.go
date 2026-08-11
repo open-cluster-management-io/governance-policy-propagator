@@ -4,6 +4,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/zapr"
+	configv1 "github.com/openshift/api/config/v1"
 	"github.com/spf13/pflag"
 	"github.com/stolostron/go-log-utils/zaputil"
 	templates "github.com/stolostron/go-template-utils/v7/pkg/templates"
@@ -41,6 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	//+kubebuilder:scaffold:imports
 	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
@@ -81,6 +84,11 @@ func init() {
 	utilruntime.Must(clusterv1beta1.Install(scheme))
 	utilruntime.Must(appsv1.AddToScheme(scheme))
 
+	// Only register the two openshift resources this controller might use,
+	// rather than `configv1.Install(scheme)`, which would pull in ~24 kinds.
+	scheme.AddKnownTypes(configv1.GroupVersion, &configv1.APIServer{}, &configv1.APIServerList{})
+	metav1.AddToGroupVersion(scheme, configv1.GroupVersion)
+
 	//+kubebuilder:scaffold:scheme
 	utilruntime.Must(policyv1.AddToScheme(scheme))
 	utilruntime.Must(policyv1beta1.AddToScheme(scheme))
@@ -112,6 +120,8 @@ func main() {
 		enableWebhooks              bool
 		disablePlacementRule        bool
 		templateFunctionDenyList    []string
+		tlsMinVersion               string
+		tlsCipherSuites             string
 	)
 
 	pflag.StringVar(&metricsAddr, "metrics-bind-address", ":8383", "The address the metric endpoint binds to.")
@@ -167,6 +177,12 @@ func main() {
 		"Disable watches for PlacementRules.")
 	pflag.StringSliceVar(&templateFunctionDenyList, "template-function-denylist", []string{},
 		"Comma-separated list of additional template functions to deny")
+	pflag.StringVar(&tlsMinVersion, "tls-min-version", "",
+		"The minimum TLS version for the metrics and webhook servers (e.g. VersionTLS12). "+
+			"Overrides the OpenShift APIServer TLS security profile, if any is detected.")
+	pflag.StringVar(&tlsCipherSuites, "tls-cipher-suites", "",
+		"A comma-separated list of IANA TLS cipher suite names for the metrics and webhook "+
+			"servers. Overrides the OpenShift APIServer TLS security profile, if any is detected.")
 
 	pflag.Parse()
 
@@ -235,6 +251,13 @@ func main() {
 		}
 	}
 
+	controllerCtx := ctrl.SetupSignalHandler()
+
+	tlsOptsFunc, watchAPIServer, initialTLSProfileSpec := resolveEffectiveTLSConfig(
+		controllerCtx, cfg, tlsMinVersion, tlsCipherSuites,
+	)
+	tlsOverrideActive := tlsMinVersion != "" || tlsCipherSuites != ""
+
 	metricsOptions := server.Options{
 		BindAddress: metricsAddr,
 	}
@@ -243,6 +266,7 @@ func main() {
 		metricsOptions.FilterProvider = filters.WithAuthenticationAndAuthorization
 		metricsOptions.SecureServing = true
 		metricsOptions.CertDir = "/var/run/metrics-cert"
+		metricsOptions.TLSOpts = []func(*tls.Config){tlsOptsFunc}
 	}
 
 	// Set default manager options
@@ -285,6 +309,13 @@ func main() {
 		},
 	}
 
+	if enableWebhooks {
+		options.WebhookServer = webhook.NewServer(webhook.Options{
+			Port:    9443,
+			TLSOpts: []func(*tls.Config){tlsOptsFunc},
+		})
+	}
+
 	if strings.Contains(namespace, ",") {
 		for ns := range strings.SplitSeq(namespace, ",") {
 			options.Cache.DefaultNamespaces[ns] = cache.Config{}
@@ -299,7 +330,12 @@ func main() {
 
 	log.Info("Registering components")
 
-	controllerCtx := ctrl.SetupSignalHandler()
+	if watchAPIServer && !tlsOverrideActive {
+		if err = setupAPIServerTLSWatcher(mgr, initialTLSProfileSpec); err != nil {
+			log.Error(err, "Unable to create controller", "controller", "tls-profile-watcher")
+			os.Exit(1)
+		}
+	}
 
 	// This is used to trigger reconciles when a related policy set changes due to a dependency on a policy set.
 	dynamicWatcherReconciler, dynamicWatcherSource := k8sdepwatches.NewControllerRuntimeSource()
