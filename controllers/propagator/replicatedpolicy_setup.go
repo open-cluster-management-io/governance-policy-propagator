@@ -1,6 +1,7 @@
 package propagator
 
 import (
+	"strings"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -91,7 +92,7 @@ func replicatedPolicyPredicates(resourceVersions *sync.Map) predicate.Funcs {
 			version, loaded := safeReadLoad(resourceVersions, key)
 			defer version.RUnlock()
 
-			return !loaded || version.resourceVersion != "deleted"
+			return !loaded || !strings.HasPrefix(version.resourceVersion, "deleted")
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			_, newIsReplicated := e.ObjectNew.GetLabels()[common.RootPolicyLabel]
