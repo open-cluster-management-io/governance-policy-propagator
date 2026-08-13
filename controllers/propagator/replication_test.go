@@ -3,6 +3,7 @@ package propagator
 import (
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
@@ -314,4 +315,49 @@ func TestGetPolicySetDependencies(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCachedReplicatedPolicyIsStale(t *testing.T) {
+	const key = "managed1/default.policy-one"
+
+	t.Run("missing key is not stale", func(t *testing.T) {
+		versions := &sync.Map{}
+
+		if cachedReplicatedPolicyIsStale(versions, key, "12345") {
+			t.Fatal("expected missing ResourceVersions entry to not be stale")
+		}
+	})
+
+	t.Run("deleted marker matching the cached resourceVersion is stale", func(t *testing.T) {
+		versions := &sync.Map{}
+		version := safeWriteLoad(versions, key)
+		version.resourceVersion = "deleted-12345"
+		version.Unlock()
+
+		if !cachedReplicatedPolicyIsStale(versions, key, "12345") {
+			t.Fatal("expected matching ResourceVersions deleted marker to be stale")
+		}
+	})
+
+	t.Run("deleted marker for a different resourceVersion is not stale", func(t *testing.T) {
+		versions := &sync.Map{}
+		version := safeWriteLoad(versions, key)
+		version.resourceVersion = "deleted-12345"
+		version.Unlock()
+
+		if cachedReplicatedPolicyIsStale(versions, key, "67890") {
+			t.Fatal("expected a recreated object with a new resourceVersion to not be stale")
+		}
+	})
+
+	t.Run("concrete resourceVersion is not stale", func(t *testing.T) {
+		versions := &sync.Map{}
+		version := safeWriteLoad(versions, key)
+		version.resourceVersion = "12345"
+		version.Unlock()
+
+		if cachedReplicatedPolicyIsStale(versions, key, "12345") {
+			t.Fatal("expected concrete resourceVersion to not be stale")
+		}
+	})
 }

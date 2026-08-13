@@ -45,8 +45,10 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 		hubTemplateActiveWatchesMetric.Set(float64(watchCount))
 	}()
 
+	staleCache := false
 	replicatedExists := true
 	replicatedPolicy := &policiesv1.Policy{}
+	rsrcVersKey := request.Namespace + "/" + request.Name
 
 	if err := r.Get(ctx, request.NamespacedName, replicatedPolicy); err != nil {
 		if !k8serrors.IsNotFound(err) {
@@ -55,6 +57,12 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 			return reconcile.Result{}, err
 		}
 
+		replicatedExists = false
+	} else if cachedReplicatedPolicyIsStale(r.ResourceVersions, rsrcVersKey, replicatedPolicy.GetResourceVersion()) {
+		// The policy we got from the cache is the same one we deleted
+		log.V(1).Info("Cached replicated policy is stale after delete; treating as missing")
+
+		staleCache = true
 		replicatedExists = false
 	}
 
@@ -78,8 +86,6 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 		return reconcile.Result{}, nil
 	}
 
-	rsrcVersKey := request.Namespace + "/" + request.Name
-
 	// Fetch the Root Policy instance
 	rootPolicy := &policiesv1.Policy{}
 	rootNN := types.NamespacedName{Namespace: rootNS, Name: rootName}
@@ -92,15 +98,9 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 		}
 
 		if !replicatedExists {
-			version := safeWriteLoad(r.ResourceVersions, rsrcVersKey)
-			defer version.Unlock()
-
-			// Store this to ensure the cache matches a known possible state for this situation
-			version.resourceVersion = "deleted"
-
 			log.V(1).Info("Root policy and replicated policy already missing")
 
-			return reconcile.Result{}, nil
+			return r.recordDeleted(rsrcVersKey, staleCache)
 		}
 
 		inClusterNS, err := common.IsInClusterNamespace(ctx, r.Client, request.Namespace)
@@ -131,27 +131,21 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 	}
 
 	if rootPolicy.Spec.Disabled {
-		if replicatedExists {
-			if err := r.cleanUpReplicated(ctx, replicatedPolicy); err != nil {
-				if !k8serrors.IsNotFound(err) {
-					log.Error(err, "Failed to delete the disabled replicated policy, requeueing")
+		if !replicatedExists {
+			log.V(1).Info("Root policy is disabled, and replicated policy is gone")
 
-					return reconcile.Result{}, err
-				}
-			}
-
-			log.Info("Disabled replicated policy deleted")
-
-			return reconcile.Result{}, nil
+			return r.recordDeleted(rsrcVersKey, staleCache)
 		}
 
-		version := safeWriteLoad(r.ResourceVersions, rsrcVersKey)
-		defer version.Unlock()
+		if err := r.cleanUpReplicated(ctx, replicatedPolicy); err != nil {
+			if !k8serrors.IsNotFound(err) {
+				log.Error(err, "Failed to delete the disabled replicated policy, requeueing")
 
-		// Store this to ensure the cache matches a known possible state for this situation
-		version.resourceVersion = "deleted"
+				return reconcile.Result{}, err
+			}
+		}
 
-		log.V(1).Info("Root policy is disabled, and replicated policy correctly not found.")
+		log.Info("Disabled replicated policy deleted")
 
 		return reconcile.Result{}, nil
 	}
@@ -166,40 +160,34 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 
 	// an empty decision means the policy should not be replicated
 	if decision.Cluster == "" {
-		if replicatedExists {
-			inClusterNS, err := common.IsInClusterNamespace(ctx, r.Client, request.Namespace)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
+		if !replicatedExists {
+			log.V(1).Info("Replicated policy should not exist on this managed cluster, and does not")
 
-			if !inClusterNS {
-				// "Hosted mode" scenario: this cluster is hosting another cluster, which is syncing
-				// this policy to a cluster namespace that this propagator doesn't know about.
-				log.V(1).Info("Found a possible replicated policy for a hosted cluster, skipping it")
+			return r.recordDeleted(rsrcVersKey, staleCache)
+		}
 
-				return reconcile.Result{}, nil
-			}
+		inClusterNS, err := common.IsInClusterNamespace(ctx, r.Client, request.Namespace)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
 
-			if err := r.cleanUpReplicated(ctx, replicatedPolicy); err != nil {
-				if !k8serrors.IsNotFound(err) {
-					log.Error(err, "Failed to remove the replicated policy for this managed cluster, requeueing")
-
-					return reconcile.Result{}, err
-				}
-			}
-
-			log.Info("Removed replicated policy from managed cluster")
+		if !inClusterNS {
+			// "Hosted mode" scenario: this cluster is hosting another cluster, which is syncing
+			// this policy to a cluster namespace that this propagator doesn't know about.
+			log.V(1).Info("Found a possible replicated policy for a hosted cluster, skipping it")
 
 			return reconcile.Result{}, nil
 		}
 
-		version := safeWriteLoad(r.ResourceVersions, rsrcVersKey)
-		defer version.Unlock()
+		if err := r.cleanUpReplicated(ctx, replicatedPolicy); err != nil {
+			if !k8serrors.IsNotFound(err) {
+				log.Error(err, "Failed to remove the replicated policy for this managed cluster, requeueing")
 
-		// Store this to ensure the cache matches a known possible state for this situation
-		version.resourceVersion = "deleted"
+				return reconcile.Result{}, err
+			}
+		}
 
-		log.V(1).Info("Replicated policy should not exist on this managed cluster, and does not.")
+		log.Info("Removed replicated policy from managed cluster")
 
 		return reconcile.Result{}, nil
 	}
@@ -283,7 +271,15 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 		defer version.Unlock()
 
 		err = r.Create(ctx, desiredReplicatedPolicy)
-		if err != nil {
+		if k8serrors.IsAlreadyExists(err) {
+			// Another actor may have recreated the policy while ResourceVersions still said
+			// "deleted". Clear the marker so the next reconcile can trust a cache hit.
+			version.resourceVersion = ""
+
+			log.Info("Replicated policy already exists, requeueing")
+
+			return reconcile.Result{}, err
+		} else if err != nil {
 			log.Error(err, "Failed to create the replicated policy, requeueing")
 
 			return reconcile.Result{}, err
@@ -345,6 +341,8 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 	return reconcile.Result{}, returnErr
 }
 
+// cleanUpReplicated removes the replicated policy, its dynamic watches, and any cached template
+// resolvers. It records the deletion in ResourceVersions, so callers don't need to separately.
 func (r *ReplicatedPolicyReconciler) cleanUpReplicated(ctx context.Context, replicatedPolicy *policiesv1.Policy) error {
 	gvk := replicatedPolicy.GroupVersionKind()
 
@@ -372,13 +370,16 @@ func (r *ReplicatedPolicyReconciler) cleanUpReplicated(ctx context.Context, repl
 	version := safeWriteLoad(r.ResourceVersions, rsrcVersKey)
 	defer version.Unlock()
 
+	// Record the deleted resourceVersion so stale cache hits can be accurately identified
+	deletedMarker := "deleted-" + replicatedPolicy.GetResourceVersion()
+
 	deleteErr := r.Delete(ctx, replicatedPolicy)
 	if deleteErr != nil {
 		if k8serrors.IsNotFound(deleteErr) {
-			version.resourceVersion = "deleted"
+			version.resourceVersion = deletedMarker
 		}
 	} else {
-		version.resourceVersion = "deleted"
+		version.resourceVersion = deletedMarker
 	}
 
 	return errors.Join(watcherErr, deleteErr)
@@ -550,4 +551,31 @@ func (r *ReplicatedPolicyReconciler) isSingleClusterInDecisions(
 	}
 
 	return false, nil
+}
+
+// cachedReplicatedPolicyIsStale returns true if the saved resourceVersion indicates the given
+// version was deleted, and the resource from the controller-runtime cache is just stale.
+func cachedReplicatedPolicyIsStale(resourceVersions *sync.Map, key, cachedResourceVersion string) bool {
+	version, loaded := safeReadLoad(resourceVersions, key)
+	defer version.RUnlock()
+
+	return loaded && version.resourceVersion == "deleted-"+cachedResourceVersion
+}
+
+// recordDeleted ensures that the ResourceVersions cache has a "deleted" record for the given key.
+// If the controller-runtime cache was stale (`staleCache`), then the existing value with the
+// specific resourceVersion deleted is preserved.
+func (r *ReplicatedPolicyReconciler) recordDeleted(key string, staleCache bool) (ctrl.Result, error) {
+	if staleCache {
+		// Don't overwrite the cached `deleted-<rv>` value
+		return reconcile.Result{}, nil
+	}
+
+	version := safeWriteLoad(r.ResourceVersions, key)
+	defer version.Unlock()
+
+	// Store this to ensure the cache matches a known possible state for this situation
+	version.resourceVersion = "deleted"
+
+	return reconcile.Result{}, nil
 }
