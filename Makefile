@@ -76,6 +76,10 @@ fmt:
 .PHONY: lint
 lint:
 
+.PHONY: validate-helm
+validate-helm:
+	./build/validate-helm.sh
+
 ############################################################
 # test section
 ############################################################
@@ -127,6 +131,13 @@ manifests: kustomize controller-gen ## Generate WebhookConfiguration, ClusterRol
 	( echo "---" && $(KUSTOMIZE) build deploy/crds/kustomize ) | yq -c -s '"deploy/crds/" + .spec.group + "_" + .spec.names.plural + ".yaml"'
 	$(KUSTOMIZE) build deploy/webhook > deploy/webhook.yaml
 	$(SED) -i 's/ description: |-/ description: >-/g' deploy/crds/policy.open-cluster-management.io_*.yaml
+	# Copy generated resources to Helm chart directory
+	rm -f deploy/chart/crds/policy.open-cluster-management.io_*.yaml
+	cp deploy/crds/policy.open-cluster-management.io_*.yaml deploy/chart/crds/
+	$(KUSTOMIZE) build deploy/rbac >/dev/null
+	$(KUSTOMIZE) build deploy/rbac | yq -s '"deploy/chart/templates/" + (.kind | downcase) + ".yaml"'
+	$(SED) -i 's/  name: governance-policy-propagator/  name: {{ .Chart.Name }}/' deploy/chart/templates/clusterrole.yaml
+	$(SED) -i 's/  name: governance-policy-propagator-leader-election-role/  name: {{ printf "%s-leader-election-role" .Chart.Name }}\n  namespace: {{ .Values.namespace | default .Release.Namespace }}/' deploy/chart/templates/role.yaml
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -134,7 +145,8 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 
 .PHONY: generate-operator-yaml
 generate-operator-yaml: kustomize manifests
-	$(KUSTOMIZE) build deploy/manager > deploy/operator.yaml
+	@echo "---" > deploy/operator.yaml
+	$(KUSTOMIZE) build deploy/manager >> deploy/operator.yaml
 
 ############################################################
 # e2e test section
@@ -214,8 +226,7 @@ install-resources:
 	kubectl create ns managed6
 	@echo deploying roles and service account
 	kubectl apply -k deploy/rbac -n $(KIND_NAMESPACE)
-	sed 's/namespace: open-cluster-management/namespace: $(KIND_NAMESPACE)/' deploy/manager/service-account.yaml | \
-	  kubectl apply -f -
+	kubectl apply -f deploy/manager/service-account.yaml -n $(KIND_NAMESPACE)
 	@echo creating cluster resources
 	kubectl apply -f test/resources/local-cluster.yaml
 	kubectl apply -f test/resources/managed1-cluster.yaml
@@ -261,6 +272,7 @@ COVERAGE_E2E_OUT = coverage_e2e_basic.out
 
 .PHONY: e2e-run-instrumented
 e2e-run-instrumented: e2e-build-instrumented
+	mkdir -p /tmp/hub-templates
 	WATCH_NAMESPACE="$(WATCH_NAMESPACE)" ./build/_output/bin/$(IMG)-instrumented -test.run "^TestRunMain$$" -test.coverprofile=$(COVERAGE_E2E_OUT) 2>&1 | tee ./build/_output/controller.log &
 
 .PHONY: e2e-stop-instrumented

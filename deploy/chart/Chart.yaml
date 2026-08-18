@@ -1,0 +1,11 @@
+apiVersion: v2
+name: governance-policy-propagator
+description: >-
+  The Governance Policy Propagator is a policy framework hub controller and is
+  part of the Open Cluster Management project. It syncs policies defined in user namespaces
+  with managed cluster namespaces according to the managed cluster placement
+  configurations to which each policy is bound.
+type: application
+version: 0.0.0
+appVersion: v0.0.0
+icon: https://raw.githubusercontent.com/open-cluster-management-io/open-cluster-management-io.github.io/main/assets/icons/logo.svg

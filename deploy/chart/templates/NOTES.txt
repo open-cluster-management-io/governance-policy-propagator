@@ -1,0 +1,26 @@
+The governance-policy-propagator controller has been installed in namespace {{ .Values.namespace | default .Release.Namespace }}.
+
+This chart is version v{{ .Chart.Version }}, aligned with Open Cluster Management {{ .Values.ocm_version }}.
+
+{{- if .Values.args.enableWebhooks }}
+
+Webhook resources were installed. cert-manager must be running in the cluster to issue the serving certificate.
+{{- else }}
+
+Webhook installation is disabled. Policy validation webhooks will not run. NOTE: When enabling, cert-manager must be installed.
+{{- end }}
+
+Prerequisites not installed by this chart:
+  - OCM hub CRDs (ManagedCluster, Placement, PlacementDecision)
+  - cert-manager (required when webhook is enabled)
+
+Verify the deployment:
+
+  kubectl get deployment {{ .Chart.Name }} -n {{ .Values.namespace | default .Release.Namespace }}
+
+Next steps:
+
+  - Ensure the governance-policy-addon-controller is also running in the same {{ .Values.namespace | default .Release.Namespace }} namespace.
+  - Deploy the policy framework and policy controllers to managed clusters using `clusteradm addon enable`.
+  - View the documentation at https://open-cluster-management.io/docs/getting-started/integration/policy-controllers/
+  - Create your first Policy!
