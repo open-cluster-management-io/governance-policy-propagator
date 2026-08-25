@@ -16,9 +16,9 @@ import (
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 )
 
-func placementRuleMapper(log logr.Logger, c client.Client) handler.MapFunc {
+func placementRuleMapper(l logr.Logger, c client.Client) handler.MapFunc {
 	return func(ctx context.Context, object client.Object) []reconcile.Request {
-		log = log.WithValues("placementRuleName", object.GetName(), "namespace", object.GetNamespace())
+		log := l.WithValues("placementRuleName", object.GetName(), "namespace", object.GetNamespace())
 
 		log.V(2).Info("Reconcile Request for PlacementRule")
 

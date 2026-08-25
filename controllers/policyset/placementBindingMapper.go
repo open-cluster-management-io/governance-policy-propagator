@@ -15,13 +15,13 @@ import (
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 )
 
-func placementBindingMapper(log logr.Logger, _ client.Client) handler.MapFunc {
+func placementBindingMapper(l logr.Logger, _ client.Client) handler.MapFunc {
 	return func(_ context.Context, obj client.Object) []reconcile.Request {
 		//nolint:forcetypeassert
 		object := obj.(*policiesv1.PlacementBinding)
 		var result []reconcile.Request
 
-		log = log.WithValues("placementBindingName", object.GetName(), "namespace", object.GetNamespace())
+		log := l.WithValues("placementBindingName", object.GetName(), "namespace", object.GetNamespace())
 
 		log.V(2).Info("Reconcile request for a PlacementBinding")
 

@@ -39,9 +39,9 @@ func policyStatusPredicate() predicate.Funcs {
 }
 
 // mapBindingToPolicies maps a placementBinding to all the Policies in its policies list.
-func mapBindingToPolicies(log logr.Logger, c client.Client) handler.MapFunc {
+func mapBindingToPolicies(l logr.Logger, c client.Client) handler.MapFunc {
 	return func(ctx context.Context, object client.Object) []reconcile.Request {
-		log = log.WithValues(
+		log := l.WithValues(
 			"placementBinding", object.GetName(),
 			"namespace", object.GetNamespace())
 
@@ -60,9 +60,9 @@ func mapBindingToPolicies(log logr.Logger, c client.Client) handler.MapFunc {
 }
 
 // mapRuleToPolicies maps a PlacementRule to all the Policies in its policies list.
-func mapRuleToPolicies(log logr.Logger, c client.Client) handler.MapFunc {
+func mapRuleToPolicies(l logr.Logger, c client.Client) handler.MapFunc {
 	return func(ctx context.Context, object client.Object) []reconcile.Request {
-		log = log.WithValues(
+		log := l.WithValues(
 			"placementRule", object.GetName(),
 			"namespace", object.GetNamespace())
 
@@ -83,9 +83,9 @@ func mapRuleToPolicies(log logr.Logger, c client.Client) handler.MapFunc {
 }
 
 // mapDecisionToPolicies maps a PlacementDecision to all the Policies in its policies list.
-func mapDecisionToPolicies(log logr.Logger, c client.Client) handler.MapFunc {
+func mapDecisionToPolicies(l logr.Logger, c client.Client) handler.MapFunc {
 	return func(ctx context.Context, object client.Object) []reconcile.Request {
-		log = log.WithValues(
+		log := l.WithValues(
 			"placementDecision", object.GetName(),
 			"namespace", object.GetNamespace())
 
