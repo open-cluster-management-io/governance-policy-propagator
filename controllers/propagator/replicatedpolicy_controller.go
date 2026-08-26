@@ -79,9 +79,11 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 
 		cleanUpErr := r.cleanUpReplicated(ctx, replicatedPolicy)
 		if cleanUpErr != nil && !k8serrors.IsNotFound(cleanUpErr) {
-			log.Error(err, "Failed to delete the invalid replicated policy, requeueing")
+			combined := errors.Join(err, cleanUpErr)
 
-			return reconcile.Result{}, err
+			log.Error(combined, "Failed to delete the invalid replicated policy, requeueing")
+
+			return reconcile.Result{}, combined
 		}
 
 		log.Info("Invalid replicated policy deleted")
