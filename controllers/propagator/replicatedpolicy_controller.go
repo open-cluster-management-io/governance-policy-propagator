@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -22,6 +23,8 @@ import (
 )
 
 var _ reconcile.Reconciler = &ReplicatedPolicyReconciler{}
+
+const requeueTombstone = time.Second * 5
 
 type ReplicatedPolicyReconciler struct {
 	Propagator
@@ -71,7 +74,7 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 		if !replicatedExists {
 			log.Error(err, "Invalid replicated policy sent for reconcile, rejecting")
 
-			return reconcile.Result{}, nil
+			return r.recordDeleted(rsrcVersKey, staleCache)
 		}
 
 		cleanUpErr := r.cleanUpReplicated(ctx, replicatedPolicy)
@@ -83,7 +86,7 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 
 		log.Info("Invalid replicated policy deleted")
 
-		return reconcile.Result{}, nil
+		return reconcile.Result{RequeueAfter: requeueTombstone}, nil
 	}
 
 	// Fetch the Root Policy instance
@@ -127,7 +130,7 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 
 		log.Info("Orphaned replicated policy deleted")
 
-		return reconcile.Result{}, nil
+		return reconcile.Result{RequeueAfter: requeueTombstone}, nil
 	}
 
 	if rootPolicy.Spec.Disabled {
@@ -147,7 +150,7 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 
 		log.Info("Disabled replicated policy deleted")
 
-		return reconcile.Result{}, nil
+		return reconcile.Result{RequeueAfter: requeueTombstone}, nil
 	}
 
 	// calculate the decision for this specific cluster
@@ -189,7 +192,7 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 
 		log.Info("Removed replicated policy from managed cluster")
 
-		return reconcile.Result{}, nil
+		return reconcile.Result{RequeueAfter: requeueTombstone}, nil
 	}
 
 	log.WithValues("cluster", decision.Cluster)
@@ -343,6 +346,8 @@ func (r *ReplicatedPolicyReconciler) Reconcile(ctx context.Context, request ctrl
 
 // cleanUpReplicated removes the replicated policy, its dynamic watches, and any cached template
 // resolvers. It records the deletion in ResourceVersions, so callers don't need to separately.
+// However, callers should set a requeue for the reconcile, to eventually clear the tombstone in
+// ResourceVersions after the controller-runtime cache is updated.
 func (r *ReplicatedPolicyReconciler) cleanUpReplicated(ctx context.Context, replicatedPolicy *policiesv1.Policy) error {
 	gvk := replicatedPolicy.GroupVersionKind()
 
@@ -562,20 +567,22 @@ func cachedReplicatedPolicyIsStale(resourceVersions *sync.Map, key, cachedResour
 	return loaded && version.resourceVersion == "deleted-"+cachedResourceVersion
 }
 
-// recordDeleted ensures that the ResourceVersions cache has a "deleted" record for the given key.
-// If the controller-runtime cache was stale (`staleCache`), then the existing value with the
-// specific resourceVersion deleted is preserved.
+// recordDeleted clears the ResourceVersions cache entry for the given key once the replicated
+// policy is confirmed gone with a fresh cache read. If the controller-runtime cache was stale
+// (`staleCache`), then the existing value with the specific resourceVersion deleted is preserved,
+// since a later reconcile still needs it to recognize that stale read.
+//
+//nolint:unparam
 func (r *ReplicatedPolicyReconciler) recordDeleted(key string, staleCache bool) (ctrl.Result, error) {
 	if staleCache {
 		// Don't overwrite the cached `deleted-<rv>` value
-		return reconcile.Result{}, nil
+		return reconcile.Result{RequeueAfter: requeueTombstone}, nil
 	}
 
-	version := safeWriteLoad(r.ResourceVersions, key)
-	defer version.Unlock()
-
-	// Store this to ensure the cache matches a known possible state for this situation
-	version.resourceVersion = "deleted"
+	// The cache is fresh and confirms the replicated policy is gone, so there is nothing left to
+	// track for this key. Removing it (rather than leaving a "deleted" marker behind) is what
+	// keeps this map bounded by the number of currently-existing replicated policies.
+	r.ResourceVersions.Delete(key)
 
 	return reconcile.Result{}, nil
 }
