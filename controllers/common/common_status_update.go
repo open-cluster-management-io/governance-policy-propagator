@@ -307,7 +307,10 @@ func CalculatePerClusterStatus(
 			Namespace: clusterName, Name: rootPolicy.Namespace + "." + rootPolicy.Name,
 		}
 
-		err := c.Get(ctx, key, replicatedPolicy)
+		// We only need to **read** one field from the Policy, so we can avoid the expensive
+		// DeepCopy here. But BE CAREFUL not to change anything on this policy: it is the live
+		// object in the controller-runtime cache.
+		err := c.Get(ctx, key, replicatedPolicy, client.UnsafeDisableDeepCopy)
 		if err != nil {
 			if k8serrors.IsNotFound(err) {
 				status = append(status, clusterStatus)
