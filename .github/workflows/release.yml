@@ -26,7 +26,7 @@ jobs:
           echo "IMAGE_PATH=quay.io/open-cluster-management/${REPO_NAME}:${TAG}" | tee -a ${GITHUB_ENV}
 
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Package Helm chart
         run: |
@@ -54,7 +54,7 @@ jobs:
           docker push "${IMAGE_PATH}"
 
       - name: Publish release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.TAG }}
           name: ${{ env.TAG }}
