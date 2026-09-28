@@ -9,6 +9,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	policiesv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
@@ -70,10 +71,17 @@ func (r *ReplicatedPolicyReconciler) buildReplicatedPolicy(ctx context.Context,
 		}
 	}
 
+	cluster := &clusterv1.ManagedCluster{}
+
+	if err := r.Get(ctx, types.NamespacedName{Name: clusterName}, cluster); err != nil {
+		return nil, err
+	}
+
 	// Extra labels on replicated policies
 	labels[common.ClusterNameLabel] = clusterName
 	labels[common.ClusterNamespaceLabel] = clusterName
 	labels[common.RootPolicyLabel] = replicatedName
+	labels[common.ClusterUIDLabel] = string(cluster.UID)
 
 	replicated.SetLabels(labels)
 

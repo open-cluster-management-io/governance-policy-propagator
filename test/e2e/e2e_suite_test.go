@@ -51,6 +51,7 @@ var (
 	gvrSecret             schema.GroupVersionResource
 	gvrAnsibleJob         schema.GroupVersionResource
 	gvrNamespace          schema.GroupVersionResource
+	gvrManagedCluster     schema.GroupVersionResource
 	defaultTimeoutSeconds int
 	defaultImageRegistry  string
 	clientToken           string
@@ -104,6 +105,9 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	}
 	gvrNamespace = schema.GroupVersionResource{
 		Group: "", Version: "v1", Resource: "namespaces",
+	}
+	gvrManagedCluster = schema.GroupVersionResource{
+		Group: "cluster.open-cluster-management.io", Version: "v1", Resource: "managedclusters",
 	}
 	clientHub = NewKubeClient("", kubeconfigHub, "")
 	clientHubDynamic = NewKubeClientDynamic("", kubeconfigHub, "")

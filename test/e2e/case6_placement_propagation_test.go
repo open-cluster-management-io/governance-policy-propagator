@@ -48,10 +48,15 @@ var _ = Describe("Test policy propagation", func() {
 			)
 			Expect(err).ToNot(HaveOccurred())
 
+			mc := utils.GetClusterLevelWithTimeout(
+				clientHubDynamic, gvrManagedCluster, "managed1", true, defaultTimeoutSeconds,
+			)
+
 			plc := utils.GetWithTimeout(
 				clientHubDynamic, gvrPolicy, testNamespace+"."+case6PolicyName, "managed1", true, defaultTimeoutSeconds,
 			)
 			Expect(plc).ToNot(BeNil())
+			Expect(plc.GetLabels()).To(HaveKeyWithValue(common.ClusterUIDLabel, string(mc.GetUID())))
 
 			opt := metav1.ListOptions{
 				LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case6PolicyName,

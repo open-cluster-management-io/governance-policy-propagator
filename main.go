@@ -287,10 +287,12 @@ func main() {
 				&clusterv1.ManagedCluster{}: {
 					Transform: func(obj any) (any, error) {
 						cluster := obj.(*clusterv1.ManagedCluster)
-						// All that ManagedCluster objects are used for is to check their existence to see if a
-						// namespace is a cluster namespace.
-						guttedCluster := &clusterv1.ManagedCluster{}
-						guttedCluster.SetName(cluster.Name)
+						// ManagedCluster objects are used to check if a namespace is a cluster namespace,
+						// and the UIDs are used to prevent "stale" clusters from incorrectly updating status.
+						guttedCluster := &clusterv1.ManagedCluster{ObjectMeta: metav1.ObjectMeta{
+							Name: cluster.Name,
+							UID:  cluster.UID,
+						}}
 
 						return guttedCluster, nil
 					},

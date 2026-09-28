@@ -36,6 +36,7 @@ const (
 	ClusterNameLabel      string = APIGroup + "/cluster-name"
 	ClusterNamespaceLabel string = APIGroup + "/cluster-namespace"
 	RootPolicyLabel       string = APIGroup + "/root-policy"
+	ClusterUIDLabel       string = APIGroup + "/cluster-uid"
 )
 
 var (
