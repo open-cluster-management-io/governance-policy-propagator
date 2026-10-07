@@ -36,7 +36,7 @@ jobs:
           ocm_version=${ocm_version} yq -i '.ocm_version = strenv(ocm_version)' deploy/chart/values.yaml
 
           helm package deploy/chart \
-            --version "${SEMANTIC_TAG }" \
+            --version "${SEMANTIC_TAG}" \
             --app-version "${TAG}" \
             --destination .
           echo "CHART_PACKAGE=${REPO_NAME}-${SEMANTIC_TAG}.tgz" >> ${GITHUB_ENV}
