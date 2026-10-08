@@ -5,7 +5,7 @@ permissions:
 
 on:
   release:
-    types: [published]
+    types: [released]
 
 jobs:
   upload:
@@ -18,6 +18,34 @@ jobs:
           RELEASE_VERSION=${GITHUB_REF#refs/tags/}
           echo "SEMANTIC_RELEASE_VERSION=${RELEASE_VERSION#v}" | tee -a ${GITHUB_ENV}
           echo "REPO_NAME=${GITHUB_REPOSITORY#*/}" | tee -a ${GITHUB_ENV}
+
+      - name: Ensure Helm chart availability
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          max_tries=10
+          release_name=${GITHUB_REF#refs/tags/}
+          chart_name="${REPO_NAME}-${SEMANTIC_RELEASE_VERSION}.tgz"
+          echo "Checking for chart ${chart_name} in release ${release_name}"
+          echo "* Waiting up to ${max_tries} minutes"
+          for i in {1..10}; do
+            if asset_json=$(gh release view "${release_name}" --repo "${GITHUB_REPOSITORY}" --json assets); then
+              chart_status=$(echo "${asset_json}" | jq -r '
+                .assets[] | select(.name == "'"${chart_name}"'") | .state // ""')
+              if [[ ${chart_status} == "uploaded" ]]; then
+                echo "✅ Chart uploaded to release"
+                exit 0
+              fi
+            fi
+            if [[ ${i} -eq ${max_tries} ]]; then
+              echo "❌ Failed to get chart from release (attempt ${i} of ${max_tries})"
+              echo "Asset JSON:"
+              echo "${asset_json}"
+              exit 1
+            fi
+            echo "* Chart not available. Retrying (attempt ${i} of ${max_tries})"
+            sleep 60
+          done
 
       - name: Upload Helm chart to OCM chart repo
         uses: actions/github-script@v9
