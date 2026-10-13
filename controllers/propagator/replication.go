@@ -2,6 +2,7 @@ package propagator
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
@@ -9,6 +10,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	policiesv1beta1 "open-cluster-management.io/governance-policy-propagator/api/v1beta1"
@@ -41,6 +43,16 @@ func (r *ReplicatedPolicyReconciler) buildReplicatedPolicy(ctx context.Context,
 	root *policiesv1.Policy, clusterDec clusterDecision,
 ) (*policiesv1.Policy, error) {
 	clusterName := clusterDec.Cluster
+
+	managedCluster := &clusterv1.ManagedCluster{}
+	if err := r.Get(ctx, types.NamespacedName{Name: clusterName}, managedCluster); err != nil {
+		return nil, fmt.Errorf("failed to get target ManagedCluster %q: %w", clusterName, err)
+	}
+
+	if managedCluster.UID == "" {
+		return nil, fmt.Errorf("target ManagedCluster %q has an empty UID", clusterName)
+	}
+
 	replicatedName := common.FullNameForPolicy(root)
 
 	// Create the copy this way to avoid copying the root policy's status which can be quite large in large
@@ -94,6 +106,8 @@ func (r *ReplicatedPolicyReconciler) buildReplicatedPolicy(ctx context.Context,
 
 	// Always set IgnoreExtraneous to avoid ArgoCD managing the replicated policy.
 	annotations[argoCDCompareOptionsAnnotation] = "IgnoreExtraneous"
+	// This marker is internal to the hub replica. Override any value copied from root metadata.
+	annotations[policiesv1.ManagedClusterUIDAnnotation] = string(managedCluster.UID)
 
 	replicated.SetAnnotations(annotations)
 
