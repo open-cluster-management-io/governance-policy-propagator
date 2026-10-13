@@ -8,6 +8,9 @@ import (
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
+// ManagedClusterUIDAnnotation identifies the ManagedCluster instance the Policy was created for.
+const ManagedClusterUIDAnnotation = "policy.open-cluster-management.io/managed-cluster-uid"
+
 // RemediationAction specifies the remediation of the policy. The parameter values are "enforce" and
 // "inform".
 //

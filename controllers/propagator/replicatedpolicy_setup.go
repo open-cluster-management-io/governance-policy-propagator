@@ -1,15 +1,19 @@
 package propagator
 
 import (
+	"context"
 	"strings"
 	"sync"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/equality"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	appsv1 "open-cluster-management.io/multicloud-operators-subscription/pkg/apis/apps/placementrule/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -20,7 +24,10 @@ import (
 	"open-cluster-management.io/governance-policy-propagator/controllers/common"
 )
 
-const ReplicatedPolicyControllerName = "replicated-policy"
+const (
+	ReplicatedPolicyControllerName     = "replicated-policy"
+	managedClusterPolicyControllerName = "managed-cluster-policy-refresh"
+)
 
 func (r *ReplicatedPolicyReconciler) SetupWithManager(
 	mgr ctrl.Manager,
@@ -60,7 +67,83 @@ func (r *ReplicatedPolicyReconciler) SetupWithManager(
 			HandlerForRule(mgr.GetClient()))
 	}
 
-	return ctrlBldr.Complete(r)
+	if err := ctrlBldr.Complete(r); err != nil {
+		return err
+	}
+
+	return ctrl.NewControllerManagedBy(mgr).
+		Named(managedClusterPolicyControllerName).
+		For(
+			&clusterv1.ManagedCluster{},
+			builder.WithPredicates(managedClusterLifecycleChanges()),
+		).
+		WithLogConstructor(func(req *reconcile.Request) logr.Logger {
+			return common.LogConstructor(managedClusterPolicyControllerName, "ManagedCluster", req)
+		}).
+		Complete(&ManagedClusterPolicyReconciler{
+			Client:                  mgr.GetClient(),
+			ReplicatedPolicyUpdates: r.ReplicatedPolicyUpdates, // the channel for the `updateSrc` Source
+		})
+}
+
+// ManagedClusterPolicyReconciler enqueues replicated Policies when their target ManagedCluster
+// is created, deleted, or has its UID changed. This requires an entire Reconciler as opposed to
+// another watch and mapper because it needs to retry if its List call fails, and mappers do not
+// allow for errors to be returned to facilitate that.
+type ManagedClusterPolicyReconciler struct {
+	client.Client
+	ReplicatedPolicyUpdates chan event.GenericEvent
+}
+
+var _ reconcile.Reconciler = &ManagedClusterPolicyReconciler{}
+
+func (r *ManagedClusterPolicyReconciler) Reconcile(
+	ctx context.Context, request ctrl.Request,
+) (ctrl.Result, error) {
+	log := ctrl.LoggerFrom(ctx)
+
+	policyList := &policiesv1.PolicyList{}
+	if err := r.List(ctx, policyList, &client.ListOptions{Namespace: request.Name}); err != nil {
+		log.Error(err, "Failed to list replicated policies for ManagedCluster lifecycle event",
+			"managedCluster", request.Name)
+
+		return ctrl.Result{}, err
+	}
+
+	for i := range policyList.Items {
+		policy := &policyList.Items[i]
+		if _, isReplicated := policy.GetLabels()[common.RootPolicyLabel]; !isReplicated {
+			continue
+		}
+
+		simpleObj := &common.GuttedObject{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       policiesv1.Kind,
+				APIVersion: policiesv1.GroupVersion.String(),
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      policy.GetName(),
+				Namespace: policy.GetNamespace(),
+			},
+		}
+
+		r.ReplicatedPolicyUpdates <- event.GenericEvent{Object: simpleObj}
+	}
+
+	return ctrl.Result{}, nil
+}
+
+// managedClusterLifecycleChanges triggers reconciliation when a ManagedCluster is created,
+// deleted, or its UID changes. A ManagedCluster UID is normally immutable, but the update case
+// also covers unusual API implementations that replace it in place.
+func managedClusterLifecycleChanges() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc: func(event.CreateEvent) bool { return true },
+		DeleteFunc: func(event.DeleteEvent) bool { return true },
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			return e.ObjectOld.GetUID() != e.ObjectNew.GetUID()
+		},
+	}
 }
 
 // replicatedPolicyPredicates triggers reconciliation if the policy is a replicated policy, and is

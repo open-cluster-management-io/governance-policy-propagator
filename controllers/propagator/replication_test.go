@@ -9,6 +9,8 @@ import (
 	k8sdepwatches "github.com/stolostron/kubernetes-dependency-watches/client"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeClient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -119,6 +121,125 @@ func TestEquivalentReplicatedPolicies(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuildReplicatedPolicyStampsManagedClusterUID(t *testing.T) {
+	copyMetadata := false
+
+	tests := []struct {
+		name                   string
+		copyPolicyMetadata     *bool
+		wantUserAnnotationCopy bool
+	}{
+		{
+			name:                   "default metadata copying",
+			wantUserAnnotationCopy: true,
+		},
+		{
+			name:                   "copyPolicyMetadata false",
+			copyPolicyMetadata:     &copyMetadata,
+			wantUserAnnotationCopy: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			rootPolicy := fakeBasicPolicy("root-policy", "policies")
+			rootPolicy.SetAnnotations(map[string]string{
+				policiesv1.ManagedClusterUIDAnnotation: "stale-root-value",
+				"example.com/root-only":                "value",
+			})
+			rootPolicy.Spec.CopyPolicyMetadata = test.copyPolicyMetadata
+
+			managedCluster := &clusterv1.ManagedCluster{
+				ObjectMeta: v1.ObjectMeta{
+					Name: "managed-cluster",
+					UID:  types.UID("current-managed-cluster-uid"),
+				},
+			}
+			r := newReplicationTestReconciler(t, managedCluster)
+
+			replicatedPolicy, err := r.buildReplicatedPolicy(t.Context(), rootPolicy, clusterDecision{
+				Cluster: "managed-cluster",
+			})
+			if err != nil {
+				t.Fatalf("buildReplicatedPolicy returned an unexpected error: %v", err)
+			}
+
+			got := replicatedPolicy.GetAnnotations()[policiesv1.ManagedClusterUIDAnnotation]
+			if got != string(managedCluster.UID) {
+				t.Errorf("UID annotation = %q, want %q", got, managedCluster.UID)
+			}
+
+			_, gotUserAnnotation := replicatedPolicy.GetAnnotations()["example.com/root-only"]
+			if gotUserAnnotation != test.wantUserAnnotationCopy {
+				t.Errorf("root-only annotation copied = %t, want %t",
+					gotUserAnnotation, test.wantUserAnnotationCopy)
+			}
+
+			if got := rootPolicy.GetAnnotations()[policiesv1.ManagedClusterUIDAnnotation]; got != "stale-root-value" {
+				t.Errorf("root Policy annotation was mutated to %q", got)
+			}
+		})
+	}
+}
+
+func TestBuildReplicatedPolicyRequiresManagedClusterUID(t *testing.T) {
+	tests := []struct {
+		name           string
+		managedCluster *clusterv1.ManagedCluster
+		wantError      string
+	}{
+		{
+			name:      "missing ManagedCluster",
+			wantError: "failed to get target ManagedCluster",
+		},
+		{
+			name: "empty UID",
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: v1.ObjectMeta{Name: "managed-cluster"},
+			},
+			wantError: "empty UID",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var objects []client.Object
+			if test.managedCluster != nil {
+				objects = append(objects, test.managedCluster)
+			}
+
+			r := newReplicationTestReconciler(t, objects...)
+
+			_, err := r.buildReplicatedPolicy(t.Context(), fakeBasicPolicy("root-policy", "policies"),
+				clusterDecision{Cluster: "managed-cluster"})
+			if err == nil {
+				t.Fatal("buildReplicatedPolicy returned no error without a usable ManagedCluster UID")
+			}
+
+			if !strings.Contains(err.Error(), test.wantError) {
+				t.Errorf("error = %q, want it to contain %q", err, test.wantError)
+			}
+		})
+	}
+}
+
+func newReplicationTestReconciler(t *testing.T, objects ...client.Object) *ReplicatedPolicyReconciler {
+	t.Helper()
+
+	fakeScheme := k8sruntime.NewScheme()
+	if err := policiesv1.AddToScheme(fakeScheme); err != nil {
+		t.Fatalf("Failed to add policy scheme: %v", err)
+	}
+
+	if err := clusterv1.Install(fakeScheme); err != nil {
+		t.Fatalf("Failed to add ManagedCluster scheme: %v", err)
+	}
+
+	fake := fakeClient.NewClientBuilder().WithScheme(fakeScheme).WithObjects(objects...).Build()
+
+	return &ReplicatedPolicyReconciler{Propagator: Propagator{Client: fake}}
 }
 
 func TestCanonicalizeDependencies(t *testing.T) {

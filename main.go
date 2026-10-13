@@ -290,7 +290,9 @@ func main() {
 						// All that ManagedCluster objects are used for is to check their existence to see if a
 						// namespace is a cluster namespace.
 						guttedCluster := &clusterv1.ManagedCluster{}
+
 						guttedCluster.SetName(cluster.Name)
+						guttedCluster.SetUID(cluster.UID)
 
 						return guttedCluster, nil
 					},

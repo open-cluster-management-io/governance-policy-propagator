@@ -147,6 +147,21 @@ var _ = Describe("Test policy propagation", func() {
 			)
 			Expect(plc).ToNot(BeNil())
 
+			By("Checking the replica has the current ManagedCluster UID")
+
+			managedCluster := utils.GetClusterLevelWithTimeout(
+				clientHubDynamic, gvrManagedCluster, "managed1", true, defaultTimeoutSeconds,
+			)
+			Expect(managedCluster).ToNot(BeNil())
+			Eventually(func() string {
+				replicatedPolicy := utils.GetWithTimeout(
+					clientHubDynamic, gvrPolicy, testNamespace+"."+case1PolicyName,
+					"managed1", true, defaultTimeoutSeconds,
+				)
+
+				return replicatedPolicy.GetAnnotations()[policiesv1.ManagedClusterUIDAnnotation]
+			}, defaultTimeoutSeconds, 1).Should(Equal(string(managedCluster.GetUID())))
+
 			opt := metav1.ListOptions{
 				LabelSelector: common.RootPolicyLabel + "=" + testNamespace + "." + case1PolicyName,
 			}

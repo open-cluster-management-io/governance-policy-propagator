@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	policiesv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	"open-cluster-management.io/governance-policy-propagator/controllers/common"
@@ -641,6 +642,90 @@ var _ = Describe("Test policy propagation", func() {
 				"test6-extra", true, defaultTimeoutSeconds)
 			Expect(pol).NotTo(BeNil())
 		})
+		It("should restamp an existing replica after the ManagedCluster is recreated", func(ctx SpecContext) {
+			By("Recording the ManagedCluster and existing replica identities")
+
+			managedCluster := utils.GetClusterLevelWithTimeout(
+				clientHubDynamic, gvrManagedCluster, "test6-extra", true, defaultTimeoutSeconds,
+			)
+			oldManagedClusterUID := managedCluster.GetUID()
+			var replicatedPolicy *unstructured.Unstructured
+
+			Eventually(func() string {
+				replicatedPolicy = utils.GetWithTimeout(
+					clientHubDynamic, gvrPolicy, testNamespace+"."+case6PolicyName,
+					"test6-extra", true, defaultTimeoutSeconds,
+				)
+
+				return replicatedPolicy.GetAnnotations()[policiesv1.ManagedClusterUIDAnnotation]
+			}, defaultTimeoutSeconds, 1).Should(Equal(string(oldManagedClusterUID)))
+
+			oldReplicatedPolicyUID := replicatedPolicy.GetUID()
+
+			By("Clearing finalizers and deleting the ManagedCluster")
+
+			managedClusterInterface := clientHubDynamic.Resource(gvrManagedCluster)
+
+			Eventually(func(g Gomega) {
+				currentManagedCluster, err := managedClusterInterface.Get(ctx, "test6-extra", metav1.GetOptions{})
+				g.Expect(err).ToNot(HaveOccurred())
+
+				currentManagedCluster.SetFinalizers(nil)
+				updatedManagedCluster, err := managedClusterInterface.Update(
+					ctx, currentManagedCluster, metav1.UpdateOptions{},
+				)
+				g.Expect(err).ToNot(HaveOccurred())
+
+				uid := updatedManagedCluster.GetUID()
+				resourceVersion := updatedManagedCluster.GetResourceVersion()
+
+				// The precondition requires that the finalizers weren't re-added to the resource
+				err = managedClusterInterface.Delete(ctx, "test6-extra", metav1.DeleteOptions{
+					Preconditions: &metav1.Preconditions{UID: &uid, ResourceVersion: &resourceVersion},
+				})
+				g.Expect(err).ToNot(HaveOccurred())
+			}, defaultTimeoutSeconds, 1).Should(Succeed())
+
+			Expect(utils.GetClusterLevelWithTimeout(
+				clientHubDynamic, gvrManagedCluster, "test6-extra", false, defaultTimeoutSeconds,
+			)).To(BeNil())
+
+			By("Verifying the namespace and replica remain in place")
+
+			namespace := utils.GetClusterLevelWithTimeout(
+				clientHubDynamic, gvrNamespace, "test6-extra", true, defaultTimeoutSeconds,
+			)
+			Expect(namespace.GetDeletionTimestamp()).To(BeNil())
+
+			replicatedPolicy = utils.GetWithTimeout(
+				clientHubDynamic, gvrPolicy, testNamespace+"."+case6PolicyName,
+				"test6-extra", true, defaultTimeoutSeconds,
+			)
+			Expect(replicatedPolicy.GetUID()).To(Equal(oldReplicatedPolicyUID))
+
+			By("Recreating the ManagedCluster with the same name")
+
+			finalizerRemoved = false
+
+			utils.Kubectl(ctx, "apply", "-f", "../resources/case6_placement_propagation/extra-cluster.yaml",
+				"--kubeconfig="+kubeconfigHub)
+
+			newManagedCluster := utils.GetClusterLevelWithTimeout(
+				clientHubDynamic, gvrManagedCluster, "test6-extra", true, defaultTimeoutSeconds,
+			)
+			Expect(newManagedCluster.GetUID()).ToNot(Equal(oldManagedClusterUID))
+
+			By("Verifying the existing replica is restamped without being recreated")
+			Eventually(func() string {
+				replicatedPolicy = utils.GetWithTimeout(
+					clientHubDynamic, gvrPolicy, testNamespace+"."+case6PolicyName,
+					"test6-extra", true, defaultTimeoutSeconds,
+				)
+
+				return replicatedPolicy.GetAnnotations()[policiesv1.ManagedClusterUIDAnnotation]
+			}, defaultTimeoutSeconds, 1).Should(Equal(string(newManagedCluster.GetUID())))
+			Expect(replicatedPolicy.GetUID()).To(Equal(oldReplicatedPolicyUID))
+		})
 		AfterAll(func(ctx SpecContext) {
 			utils.Kubectl(ctx, "delete",
 				"-f", case6PolicyYaml,
@@ -652,8 +737,8 @@ var _ = Describe("Test policy propagation", func() {
 			utils.ListWithTimeout(clientHubDynamic, gvrPolicy, opt, 0, false, 10)
 
 			if !finalizerRemoved {
-				utils.Kubectl(ctx, "patch", "namespace", "test6-extra", "--type=json",
-					`-p=[{"op":"remove","path":"/metadata/finalizers"}]`, "--kubeconfig="+kubeconfigHub)
+				utils.Kubectl(ctx, "patch", "namespace", "test6-extra", "--type=merge",
+					`-p={"metadata":{"finalizers":[]}}`, "--kubeconfig="+kubeconfigHub)
 			}
 
 			utils.Kubectl(ctx, "delete", "namespace", "test6-extra", "--ignore-not-found",
