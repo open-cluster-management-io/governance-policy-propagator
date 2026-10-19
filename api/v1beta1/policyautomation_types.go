@@ -127,10 +127,6 @@ type PolicyAutomationList struct {
 	Items           []PolicyAutomation `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&PolicyAutomation{}, &PolicyAutomationList{})
-}
-
 ////////////////////////////////////////////////
 // Context sent to AnsibleJobs via extra_vars //
 ////////////////////////////////////////////////
