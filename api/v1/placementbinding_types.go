@@ -110,7 +110,3 @@ type PlacementBindingList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []PlacementBinding `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&PlacementBinding{}, &PlacementBindingList{})
-}

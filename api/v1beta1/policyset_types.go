@@ -111,7 +111,3 @@ type PolicySetList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []PolicySet `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&PolicySet{}, &PolicySetList{})
-}
