@@ -122,6 +122,34 @@ func TestResolveEffectiveTLSConfigInvalidFlagFallsBackToGoDefaults(t *testing.T)
 	Expect(applyToConfig(tlsOptsFunc)).To(Equal(&tls.Config{})) //nolint:gosec // test-only
 }
 
+func TestTLSProfileAppliesGroups(t *testing.T) {
+	t.Helper()
+	RegisterFailHandler(Fail)
+
+	profile := *configv1.TLSProfiles[configv1.TLSProfileModernType]
+	tlsConfigFunc, _ := openshifttls.NewTLSConfigFromProfile(profile)
+
+	Expect(applyToConfig(tlsConfigFunc).CurvePreferences).To(Equal([]tls.CurveID{
+		tls.X25519MLKEM768,
+		tls.X25519,
+		tls.CurveP256,
+		tls.CurveP384,
+	}))
+}
+
+func TestTLSProfileWithoutGroupsLeavesCurvePreferencesUnset(t *testing.T) {
+	t.Helper()
+	RegisterFailHandler(Fail)
+
+	profile := *configv1.TLSProfiles[configv1.TLSProfileModernType]
+	profile.Groups = nil
+	tlsConfigFunc, _ := openshifttls.NewTLSConfigFromProfile(profile)
+
+	config := applyToConfig(tlsConfigFunc)
+
+	Expect(config.CurvePreferences).To(BeNil())
+}
+
 // TestReadAPIServerTLSProfileSpecWithoutOpenShiftCRD runs against a real API server (envtest) with
 // no CRDs installed, proving the "not an OpenShift cluster" fallback works against real
 // client-go/controller-runtime discovery behavior. A fake client can't exercise this: it resolves
